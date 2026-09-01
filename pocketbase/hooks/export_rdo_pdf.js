@@ -61,8 +61,7 @@ routerAdd('GET', '/api/epa/export/rdo/{id}', (c) => {
     photoCards = `<p style="border:1px solid #9ca3af;padding:12px;text-align:center;font-size:11px;grid-column:1/-1;">Sem registros fotográficos adicionados.</p>`
   }
 
-  const logoUrl =
-    'https://dagtlwojkqyivnjgveda.supabase.co/storage/v1/object/public/message-attachments/9fd27c13-4b57-4495-a17d-d514629fc46c/logo-epa-f4060.png'
+  const logoUrl = '/og-image.png'
 
   const dateStr = rdo.getString('report_date') ? rdo.getString('report_date').slice(0, 10) : '—'
 
@@ -93,23 +92,24 @@ routerAdd('GET', '/api/epa/export/rdo/{id}', (c) => {
         left: 0;
         right: 0;
         height: 18mm;
-        border-bottom: 2px solid #064e3b;
+        border-bottom: 2px solid #086B63;
         display: flex;
         align-items: center;
         justify-content: space-between;
       }
       .page-header img {
-        height: 42px;
-        width: auto;
+        height: 44px;
+        max-width: 170px;
+        object-fit: contain;
       }
       .page-header .doc-id {
         text-align: right;
         font-size: 9px;
-        color: #064e3b;
+        color: #086B63;
         font-weight: bold;
       }
       .main-title {
-        background: #064e3b;
+        background: #086B63;
         color: #ffffff;
         text-align: center;
         padding: 8px;
@@ -131,7 +131,7 @@ routerAdd('GET', '/api/epa/export/rdo/{id}', (c) => {
         display: block;
         font-size: 8px;
         text-transform: uppercase;
-        color: #064e3b;
+        color: #086B63;
         margin-bottom: 2px;
       }
       .section-block {
@@ -140,8 +140,8 @@ routerAdd('GET', '/api/epa/export/rdo/{id}', (c) => {
       }
       .section-block h3 {
         margin: 0;
-        background: #e6f4ea;
-        color: #064e3b;
+        background: #e6f5f3;
+        color: #086B63;
         border: 1px solid #8cb8b3;
         padding: 5px 8px;
         font-size: 10px;
@@ -159,8 +159,8 @@ routerAdd('GET', '/api/epa/export/rdo/{id}', (c) => {
         border-collapse: collapse;
       }
       th {
-        background: #e6f4ea;
-        color: #064e3b;
+        background: #e6f5f3;
+        color: #086B63;
         border: 1px solid #9ca3af;
         padding: 6px;
         font-size: 9px;

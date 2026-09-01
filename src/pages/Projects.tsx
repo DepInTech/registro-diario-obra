@@ -162,7 +162,7 @@ function ProjectDetail({
         Voltar aos projetos
       </button>
       <section className="epa-card overflow-hidden">
-        <div className="bg-gradient-to-br from-[#064e3b] to-[#08766c] p-6 text-white md:p-8">
+        <div className="bg-gradient-to-br from-[#044741] to-[#086B63] p-6 text-white md:p-8">
           <div className="flex flex-col justify-between gap-6 md:flex-row md:items-start">
             <div>
               <div className="mb-3 flex items-center gap-2">

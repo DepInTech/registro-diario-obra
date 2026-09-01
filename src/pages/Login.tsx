@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
-import { EpaLogo } from '@/components/EpaLogo'
+import { EpaLogo, logoEpa } from '@/components/EpaLogo'
 
 export function LoginPage() {
   const [identity, setIdentity] = useState('annik_almeida@grupoepa.com.br')
@@ -62,12 +62,8 @@ export function LoginPage() {
         <div className="w-full max-w-md space-y-6">
           <div className="rounded-3xl border border-slate-800 bg-slate-900/90 p-8 shadow-2xl backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
             <div className="text-center space-y-2">
-              <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-emerald-950/80 border border-emerald-500/30 text-emerald-400 mb-2 shadow-inner">
-                <img
-                  src="https://dagtlwojkqyivnjgveda.supabase.co/storage/v1/object/public/message-attachments/9fd27c13-4b57-4495-a17d-d514629fc46c/logo-epa-f4060.png"
-                  alt="EPA Logo"
-                  className="h-10 w-auto object-contain brightness-0 invert"
-                />
+              <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-slate-950/80 border border-emerald-500/30 text-emerald-400 mb-2 shadow-inner">
+                <img src={logoEpa} alt="EPA Logo" className="h-16 w-auto object-contain" />
               </div>
               <h1 className="text-2xl font-bold tracking-tight text-white">
                 Sistema EPA de Gestão

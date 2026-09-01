@@ -1,6 +1,5 @@
 import { ReactNode, useState } from 'react'
 import {
-  Bell,
   ChevronDown,
   ClipboardList,
   FileSpreadsheet,
@@ -13,7 +12,6 @@ import {
   Search,
   ShieldCheck,
   Sun,
-  User as UserIcon,
   Users,
   Wifi,
   WifiOff,
@@ -45,6 +43,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { useSync } from '@/context/SyncContext'
 import { cn } from '@/lib/utils'
+import logoEpa from '@/assets/logo-epa-3e647.png'
 
 export type Page = 'dashboard' | 'projects' | 'rdos' | 'fields' | 'users' | 'audit'
 
@@ -110,14 +109,10 @@ export function Layout({
   const sidebar = (
     <>
       <div className="flex h-[88px] items-center border-b border-white/10 px-6">
-        <img
-          src="https://dagtlwojkqyivnjgveda.supabase.co/storage/v1/object/public/message-attachments/9fd27c13-4b57-4495-a17d-d514629fc46c/logo-epa-f4060.png"
-          alt="Grupo EPA"
-          className="h-12 w-auto brightness-0 invert"
-        />
+        <img src={logoEpa} alt="Grupo EPA" className="h-12 w-auto object-contain drop-shadow-md" />
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-5">
-        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.18em] text-emerald-300/60">
+        <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[.18em] text-teal-200/70">
           Operação
         </p>
         <nav className="space-y-1">
@@ -132,7 +127,7 @@ export function Layout({
         </nav>
         {isAdmin && (
           <>
-            <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[.18em] text-emerald-300/60">
+            <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[.18em] text-teal-200/70">
               Administração
             </p>
             <nav className="space-y-1">
@@ -185,7 +180,7 @@ export function Layout({
   )
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-gradient-to-b from-[#063f36] via-[#064e3b] to-[#052f2c] lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-gradient-to-b from-[#04332f] via-[#086B63] to-[#02201d] lg:flex">
         {sidebar}
       </aside>
       {mobileOpen && (
@@ -195,7 +190,7 @@ export function Layout({
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
           />
-          <aside className="relative flex h-full w-[280px] flex-col bg-[#064e3b] text-white shadow-2xl">
+          <aside className="relative flex h-full w-[280px] flex-col bg-[#086B63] text-white shadow-2xl">
             {sidebar}
             <Button
               variant="ghost"

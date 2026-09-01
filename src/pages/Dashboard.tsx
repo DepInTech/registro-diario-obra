@@ -101,7 +101,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
   return (
     <div className="space-y-6">
       {/* Welcome header with dynamic greeting */}
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between epa-card p-6 bg-gradient-to-r from-emerald-950 via-[#064e3b] to-teal-900 text-white dark:border-slate-800">
+      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between epa-card p-6 bg-gradient-to-r from-[#032825] via-[#086B63] to-[#0a524c] text-white dark:border-slate-800">
         <div>
           <p className="text-xs text-emerald-200 capitalize">{getFormattedDate()}</p>
           <h2 className="mt-1.5 text-2xl font-bold tracking-tight md:text-3xl">
@@ -263,7 +263,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         </article>
 
         <article className="epa-card overflow-hidden">
-          <div className="border-b bg-gradient-to-br from-emerald-900 to-teal-800 p-5 text-white">
+          <div className="border-b bg-gradient-to-br from-[#064a44] to-[#086B63] p-5 text-white">
             <div className="flex items-start justify-between">
               <div className="flex gap-3">
                 <div className="grid h-11 w-11 place-items-center rounded-xl bg-white/15">

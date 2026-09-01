@@ -41,17 +41,23 @@ routerAdd('GET', '/api/epa/export/field/{id}', (c) => {
     <meta charset="utf-8">
     <style>
       table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 11px; }
-      th { background-color: #064e3b; color: #ffffff; border: 1px solid #999; padding: 7px; }
+      th { background-color: #086B63; color: #ffffff; border: 1px solid #999; padding: 7px; }
       td { border: 1px solid #999; padding: 6px; }
-      .header-title { background-color: #064e3b; color: #ffffff; font-size: 14px; font-weight: bold; text-align: center; }
-      .section-hdr { background-color: #e6f4ea; color: #064e3b; font-weight: bold; }
-      .label-col { background-color: #f1f5f9; font-weight: bold; }
+      .header-title { background-color: #086B63; color: #ffffff; font-size: 14px; font-weight: bold; text-align: center; }
+      .section-hdr { background-color: #e6f5f3; color: #086B63; font-weight: bold; }
+      .label-col { background-color: #f0fdfa; font-weight: bold; }
     </style>
   </head>
   <body>
     <table>
       <tr>
-        <td colspan="5" class="header-title" style="padding: 12px;">GRUPO EPA — PLANILHA DE CAMPO & CONTROLE OPERACIONAL</td>
+        <td colspan="5" style="background-color: #044741; color: #ffffff; padding: 14px; text-align: center;">
+          <div style="font-size: 16px; font-weight: bold; letter-spacing: 1px;">GRUPO EPA</div>
+          <div style="font-size: 11px; margin-top: 4px; color: #a7f3d0;">SISTEMA INTEGRADO DE GESTÃO AMBIENTAL</div>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="5" class="header-title" style="padding: 10px;">PLANILHA DE CAMPO & CONTROLE OPERACIONAL</td>
       </tr>
       <tr>
         <td class="label-col">Projeto</td>
