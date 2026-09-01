@@ -1,0 +1,876 @@
+{
+  "generatedAt": "2026-09-01T17:35:48.837Z",
+  "collections": [
+    {
+      "name": "users",
+      "type": "auth",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || id = @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || (id = @request.auth.id && @request.body.role:isset = false))",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin' && id != @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["admin", "operator", "technician"]
+        },
+        {
+          "name": "active",
+          "type": "bool",
+          "required": false,
+          "system": false
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
+        "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+      ]
+    },
+    {
+      "name": "clients",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true",
+        "view": "@request.auth.id != '' && @request.auth.active = true",
+        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "document",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contact",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_clients_name ON clients (name)"]
+    },
+    {
+      "name": "companies",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true",
+        "view": "@request.auth.id != '' && @request.auth.active = true",
+        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "document",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_companies_name ON companies (name)"]
+    },
+    {
+      "name": "areas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true",
+        "view": "@request.auth.id != '' && @request.auth.active = true",
+        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_areas_name ON areas (name)"]
+    },
+    {
+      "name": "contracts",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true",
+        "view": "@request.auth.id != '' && @request.auth.active = true",
+        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "code",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "client",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clients"
+        },
+        {
+          "name": "company",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "companies"
+        },
+        {
+          "name": "start_date",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "end_date",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["active", "paused", "closed"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_contracts_code ON contracts (code)"]
+    },
+    {
+      "name": "projects",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || assigned_users ?~ @request.auth.id)",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || assigned_users ?~ @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "client",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "clients"
+        },
+        {
+          "name": "contract",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "contracts"
+        },
+        {
+          "name": "company",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "companies"
+        },
+        {
+          "name": "area",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "areas"
+        },
+        {
+          "name": "location",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "epa_code",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "progress",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["active", "paused", "completed"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "assigned_users",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_projects_epa_code ON projects (epa_code)",
+        "CREATE INDEX idx_projects_status ON projects (status)"
+      ]
+    },
+    {
+      "name": "wells",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id))",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "project",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "identification",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "default_diameter",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "active",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_wells_project_id ON wells (project, identification)"]
+    },
+    {
+      "name": "reports_rdo",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id && status != 'approved'))",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "number",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "project",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "report_date",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "weather",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Sol", "Chuva", "Nublado", "Instável"]
+        },
+        {
+          "name": "performed_by",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "supervised_by",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "activity_title",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "activity_description",
+          "type": "editor",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "location_map",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "time_displacement",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "time_waiting",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "interferences",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "plan_changes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "accidents",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["draft", "submitted", "approved", "returned"]
+        },
+        {
+          "name": "review_notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "vector",
+          "type": "json",
+          "required": false,
+          "system": false
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_rdo_project_date ON reports_rdo (project, report_date)",
+        "CREATE INDEX idx_rdo_status ON reports_rdo (status)"
+      ]
+    },
+    {
+      "name": "report_wells",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || report.project.assigned_users ?~ @request.auth.id)",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || report.project.assigned_users ?~ @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))"
+      },
+      "fields": [
+        {
+          "name": "report",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "reports_rdo"
+        },
+        {
+          "name": "well_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "depth",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "completion_date",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "diameter",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_report_wells_report ON report_wells (report)"]
+    },
+    {
+      "name": "report_photos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || report.project.assigned_users ?~ @request.auth.id)",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || report.project.assigned_users ?~ @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))"
+      },
+      "fields": [
+        {
+          "name": "report",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "reports_rdo"
+        },
+        {
+          "name": "image",
+          "type": "file",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "caption",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "order",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_report_photos_report_order ON report_photos (report, 'order')"]
+    },
+    {
+      "name": "field_spreadsheets",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id && status != 'approved'))",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "project",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "operator",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "area",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "weather",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pluviometer",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "extraction_data",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "infiltration_data",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nutrient_done",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nutrient_map_kg",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nutrient_ureia_kg",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "compressor_data",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "oil_removal_data",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "waste_liquid_qty",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "waste_solid_qty",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "env_5s_check",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "env_checklist_monthly",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observations",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["draft", "submitted", "approved", "returned"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "review_notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_field_project_date ON field_spreadsheets (project, date)"]
+    },
+    {
+      "name": "audit_logs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "view": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "actor",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "action",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "create",
+            "update",
+            "delete",
+            "export_pdf",
+            "export_excel",
+            "approve",
+            "return"
+          ]
+        },
+        {
+          "name": "entity",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "entity_record",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "details",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_audit_created ON audit_logs (created)",
+        "CREATE INDEX idx_audit_entity_record ON audit_logs (entity, entity_record)"
+      ]
+    }
+  ]
+}

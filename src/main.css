@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: 'Inter', sans-serif;
+    color: #0f172a;
+    background: #f8fafc;
+    font-synthesis: none;
+    --background: 210 40% 98%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 160 84% 20%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 160 84% 20%;
+    --radius: 0.75rem;
+  }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply m-0 min-w-[320px] bg-slate-50 antialiased;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  .font-mono {
+    font-family: 'Geist Mono', monospace;
+  }
+  .epa-card {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-sm;
+  }
+  .epa-label {
+    @apply text-[10px] font-semibold uppercase tracking-[.12em] text-slate-500;
+  }
+  .epa-input {
+    @apply mt-1.5 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10;
+  }
+  .epa-textarea {
+    @apply mt-1.5 min-h-[100px] w-full resize-y rounded-lg border border-slate-200 bg-white p-3 text-sm outline-none transition focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/10;
+  }
+}
+
+@keyframes active-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(16, 185, 129, 0);
+  }
+}
+.active-glow {
+  animation: active-pulse 2.6s ease-in-out infinite;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
