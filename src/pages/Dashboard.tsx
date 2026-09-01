@@ -69,21 +69,25 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         setSheetCount(sheets.length)
 
         if (navigator.onLine && pb.authStore.isValid) {
-          const projs = await pb.collection('projects').getFullList({ sort: '-created' })
-          if (projs.length > 0) {
-            setProjectsList(
-              projs.map((p) => ({
-                id: p.id,
-                name: p.name,
-                client: 'Petrobras — Refinaria Sul',
-                code: p.epa_code || 'EPA-001',
-                location: p.location || 'Área Industrial',
-                status: (p.status as any) || 'active',
-                progress: p.progress || 50,
-                contract: 'CT-2025',
-                team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
-              })),
-            )
+          try {
+            const projs = await pb.collection('projects').getFullList({ sort: '-created' })
+            if (projs.length > 0) {
+              setProjectsList(
+                projs.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  client: 'Petrobras — Refinaria Sul',
+                  code: p.epa_code || 'EPA-001',
+                  location: p.location || 'Área Industrial',
+                  status: (p.status as any) || 'active',
+                  progress: p.progress || 50,
+                  contract: 'CT-2025',
+                  team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
+                })),
+              )
+            }
+          } catch (projErr) {
+            console.warn('Projects fetch error:', projErr)
           }
         }
       } catch (err) {

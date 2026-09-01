@@ -110,7 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsAuthenticated(true)
       await offlineStorage.setCache(OFFLINE_AUTH_KEY, loggedUser)
     } catch (err: unknown) {
-      if (err instanceof Error) throw err
+      if (err instanceof Error) {
+        if (err.message.includes('Failed to authenticate') || err.message.includes('400')) {
+          throw new Error(
+            'Usuário ou senha incorretos. Verifique suas credenciais e tente novamente.',
+          )
+        }
+        throw err
+      }
       throw new Error('Usuário ou senha incorretos.')
     }
   }

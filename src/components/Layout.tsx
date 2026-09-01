@@ -97,6 +97,7 @@ export function Layout({
     }
   }
 
+  const isAdmin = user?.role === 'admin'
   const userRoleLabel =
     user?.role === 'admin' ? 'Administrador' : user?.role === 'technician' ? 'Técnico' : 'Operador'
   const userInitials =
@@ -129,19 +130,23 @@ export function Layout({
             />
           ))}
         </nav>
-        <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[.18em] text-emerald-300/60">
-          Administração
-        </p>
-        <nav className="space-y-1">
-          {admin.map((item) => (
-            <NavItem
-              key={item.id}
-              item={item}
-              active={page === item.id}
-              onClick={() => navigate(item.id)}
-            />
-          ))}
-        </nav>
+        {isAdmin && (
+          <>
+            <p className="mb-2 mt-7 px-3 text-[10px] font-semibold uppercase tracking-[.18em] text-emerald-300/60">
+              Administração
+            </p>
+            <nav className="space-y-1">
+              {admin.map((item) => (
+                <NavItem
+                  key={item.id}
+                  item={item}
+                  active={page === item.id}
+                  onClick={() => navigate(item.id)}
+                />
+              ))}
+            </nav>
+          </>
+        )}
       </div>
       <div className="border-t border-white/10 p-4">
         <div className="rounded-xl bg-white/[.06] p-3 space-y-2">
