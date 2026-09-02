@@ -54,6 +54,18 @@ export function RdosPage({ query }: { query: string }) {
     setLoading(true)
     try {
       // 1. Load from IndexedDB
+      // RBAC check: Only Admin and Operator can access RDOs
+      if (user && user.role !== 'admin' && user.role !== 'operator') {
+        toast({
+          title: 'Você não possui permissão para esta função.',
+          description: 'Acesso restrito ao perfil Operador e Administrador.',
+          variant: 'destructive',
+        })
+        setItems([])
+        setLoading(false)
+        return
+      }
+
       let localRdos = await offlineStorage.getAllRdos()
 
       // 2. If online and PocketBase available, fetch latest and sync cache
@@ -644,12 +656,15 @@ function RdoFullPageEditor({
     }
   }
 
-  // PDF Export
+  const isOperator = user?.role === 'operator'
+  const canExportPdf = isAdmin || isOperator
+
+  // PDF Export (Admin e Operador têm permissão de visualizar/exportar PDF do RDO)
   const handleExportPdf = async () => {
-    if (!isAdmin) {
+    if (!canExportPdf) {
       toast({
-        title: 'Você não possui permissão para esta função',
-        description: 'Exportação de PDF oficial é exclusiva para Administradores.',
+        title: 'Você não possui permissão para esta função.',
+        description: 'Exportação permitida para Administradores e Operadores.',
         variant: 'destructive',
       })
       return
@@ -719,7 +734,7 @@ function RdoFullPageEditor({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
+          {canExportPdf && (
             <Button
               variant="outline"
               onClick={handleExportPdf}
@@ -734,7 +749,7 @@ function RdoFullPageEditor({
               ) : (
                 <span className="flex items-center gap-1.5">
                   <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Exportar PDF (Admin)
+                  Visualizar / Exportar PDF
                 </span>
               )}
             </Button>

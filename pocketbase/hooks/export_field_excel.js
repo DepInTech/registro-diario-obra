@@ -5,8 +5,9 @@ routerAdd('GET', '/api/epa/export/field/{id}', (c) => {
   if (!auth) {
     return c.json(401, { error: 'Não autenticado' })
   }
-  if (auth.getString('role') !== 'admin') {
-    return c.json(403, { error: 'Exportação restrita a Administradores' })
+  const role = auth.getString('role')
+  if (role !== 'admin' && role !== 'technician') {
+    return c.json(403, { error: 'Exportação permitida apenas para Administradores e Técnicos' })
   }
 
   const id = c.pathParam('id')

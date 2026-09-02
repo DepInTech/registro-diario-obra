@@ -47,11 +47,21 @@ import logoEpa from '@/assets/logo-epa-3e647.png'
 
 export type Page = 'dashboard' | 'projects' | 'rdos' | 'fields' | 'users' | 'audit'
 
-const primary = [
+const allPrimary = [
   { id: 'dashboard' as Page, label: 'Visão geral', icon: Home },
   { id: 'projects' as Page, label: 'Meus projetos', icon: FolderKanban },
-  { id: 'rdos' as Page, label: 'Relatórios RDO', icon: ClipboardList },
-  { id: 'fields' as Page, label: 'Planilhas de campo', icon: FileSpreadsheet },
+  {
+    id: 'rdos' as Page,
+    label: 'Relatórios RDO',
+    icon: ClipboardList,
+    allowedRoles: ['admin', 'operator'],
+  },
+  {
+    id: 'fields' as Page,
+    label: 'Planilhas de campo',
+    icon: FileSpreadsheet,
+    allowedRoles: ['admin', 'technician'],
+  },
 ]
 const admin = [
   { id: 'users' as Page, label: 'Gestão de usuários', icon: Users },
@@ -106,6 +116,12 @@ export function Layout({
       .slice(0, 2)
       .join('')
       .toUpperCase() || 'EP'
+
+  const visiblePrimary = allPrimary.filter((item) => {
+    if (!item.allowedRoles) return true
+    return item.allowedRoles.includes(user?.role || '')
+  })
+
   const sidebar = (
     <>
       <div className="flex h-[88px] items-center border-b border-white/10 px-6">
@@ -116,7 +132,7 @@ export function Layout({
           Operação
         </p>
         <nav className="space-y-1">
-          {primary.map((item) => (
+          {visiblePrimary.map((item) => (
             <NavItem
               key={item.id}
               item={item}
@@ -395,7 +411,7 @@ export function Layout({
         </main>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t bg-white dark:border-slate-800 dark:bg-slate-900 lg:hidden">
-        {primary.slice(0, 4).map((item) => {
+        {visiblePrimary.map((item) => {
           const Icon = item.icon
           const isActive = page === item.id
           return (

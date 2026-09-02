@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-01T18:44:28.815Z",
+  "generatedAt": "2026-09-02T13:52:50.048Z",
   "collections": [
     {
       "name": "users",
@@ -404,10 +404,10 @@
       "name": "reports_rdo",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
-        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
-        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id))",
-        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id && status != 'approved'))",
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id))",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id))",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id && status != 'approved'))",
         "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
       },
       "fields": [
@@ -542,11 +542,11 @@
       "name": "report_wells",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || report.project.assigned_users ?~ @request.auth.id)",
-        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || report.project.assigned_users ?~ @request.auth.id)",
-        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
-        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
-        "delete": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))"
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id))",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id))",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))"
       },
       "fields": [
         {
@@ -601,11 +601,11 @@
       "name": "report_photos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || report.project.assigned_users ?~ @request.auth.id)",
-        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || report.project.assigned_users ?~ @request.auth.id)",
-        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
-        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
-        "delete": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))"
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id))",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id))",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && report.project.assigned_users ?~ @request.auth.id && report.status != 'approved'))"
       },
       "fields": [
         {
@@ -654,10 +654,10 @@
       "name": "field_spreadsheets",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
-        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
-        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id))",
-        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || ((@request.auth.role = 'operator' || @request.auth.role = 'technician') && project.assigned_users ?~ @request.auth.id && status != 'approved'))",
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id))",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id))",
+        "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id && status != 'approved'))",
         "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
       },
       "fields": [

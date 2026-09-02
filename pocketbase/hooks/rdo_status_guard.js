@@ -8,7 +8,6 @@ onRecordUpdateRequest((e) => {
     throw new ForbiddenError('RDO aprovado está bloqueado para edição')
   if ((next === 'approved' || next === 'returned') && role !== 'admin')
     throw new ForbiddenError('Somente administradores podem aprovar ou devolver RDOs')
-  if (next === 'submitted' && role === 'operator')
-    throw new ForbiddenError('O técnico deve revisar os dados e enviar o RDO')
+  // Operador e Admin podem submeter RDO
   e.next()
 }, 'reports_rdo')

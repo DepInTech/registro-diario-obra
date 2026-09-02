@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { projects, rdos, fieldSheets, type EpaProject } from '@/data/epa'
+import { useAuth } from '@/context/AuthContext'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -150,8 +151,36 @@ function ProjectDetail({
   onOpenRdo: () => void
   onOpenField: () => void
 }) {
+  const { user } = useAuth()
+  const role = user?.role
+  const isOperator = role === 'operator'
+  const isTechnician = role === 'technician'
+  const isAdmin = role === 'admin'
+
   const projectRdos = rdos.filter((r) => r.projectId === project.id)
   const sheets = fieldSheets.filter((s) => s.projectId === project.id)
+
+  const historyItems = [
+    ...(isAdmin || isOperator
+      ? projectRdos.map((r) => ({
+          id: r.id,
+          title: `RDO #${String(r.number).padStart(3, '0')} · ${r.activity}`,
+          date: r.date,
+          status: r.status,
+          type: 'RDO',
+        }))
+      : []),
+    ...(isAdmin || isTechnician
+      ? sheets.map((s) => ({
+          id: s.id,
+          title: `Planilha de Campo · ${s.area}`,
+          date: s.date,
+          status: s.status,
+          type: 'Campo',
+        }))
+      : []),
+  ]
+
   return (
     <div className="space-y-6">
       <button
@@ -204,24 +233,28 @@ function ProjectDetail({
         </div>
       </section>
       <div className="grid gap-5 md:grid-cols-3">
-        <MiniStat
-          label="RDOs emitidos"
-          value="18"
-          helper="3 aguardando aprovação"
-          icon={ClipboardList}
-        />
+        {(isAdmin || isOperator) && (
+          <MiniStat
+            label="RDOs emitidos"
+            value="18"
+            helper="3 aguardando aprovação"
+            icon={ClipboardList}
+          />
+        )}
         <MiniStat
           label="Poços monitorados"
           value="12"
           helper="10 ativos · 2 tamponados"
           icon={MapPin}
         />
-        <MiniStat
-          label="Planilhas de campo"
-          value="24"
-          helper="Última: 28 mai 2025"
-          icon={FileSpreadsheet}
-        />
+        {(isAdmin || isTechnician) && (
+          <MiniStat
+            label="Planilhas de campo"
+            value="24"
+            helper="Última: 28 mai 2025"
+            icon={FileSpreadsheet}
+          />
+        )}
       </div>
       <div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
         <section className="epa-card overflow-hidden">
@@ -235,44 +268,35 @@ function ProjectDetail({
             </Button>
           </div>
           <div className="divide-y">
-            {[
-              ...projectRdos.map((r) => ({
-                id: r.id,
-                title: `RDO #${String(r.number).padStart(3, '0')} · ${r.activity}`,
-                date: r.date,
-                status: r.status,
-                type: 'RDO',
-              })),
-              ...sheets.map((s) => ({
-                id: s.id,
-                title: `Planilha de Campo · ${s.area}`,
-                date: s.date,
-                status: s.status,
-                type: 'Campo',
-              })),
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={item.type === 'RDO' ? onOpenRdo : onOpenField}
-                className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-slate-50"
-              >
-                <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700">
-                  {item.type === 'RDO' ? (
-                    <ClipboardList className="h-4 w-4" />
-                  ) : (
-                    <FileSpreadsheet className="h-4 w-4" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{item.title}</p>
-                  <p className="text-[10px] text-slate-400">
-                    {item.date} · {item.type}
-                  </p>
-                </div>
-                <StatusBadge status={item.status} />
-                <ArrowRight className="h-4 w-4 text-slate-300" />
-              </button>
-            ))}
+            {historyItems.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400">
+                Nenhum histórico operacional acessível para o seu perfil.
+              </div>
+            ) : (
+              historyItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={item.type === 'RDO' ? onOpenRdo : onOpenField}
+                  className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                >
+                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    {item.type === 'RDO' ? (
+                      <ClipboardList className="h-4 w-4" />
+                    ) : (
+                      <FileSpreadsheet className="h-4 w-4" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{item.title}</p>
+                    <p className="text-[10px] text-slate-400">
+                      {item.date} · {item.type}
+                    </p>
+                  </div>
+                  <StatusBadge status={item.status} />
+                  <ArrowRight className="h-4 w-4 text-slate-300" />
+                </button>
+              ))
+            )}
           </div>
         </section>
         <section className="epa-card p-5">

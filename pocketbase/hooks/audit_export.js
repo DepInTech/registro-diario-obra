@@ -3,8 +3,13 @@ routerAdd(
   '/api/epa/audit-export',
   (e) => {
     const auth = e.auth
-    if (!auth || auth.getString('role') !== 'admin' || !auth.getBool('active')) {
-      throw new ForbiddenError('Somente administradores podem gerar documentos')
+    const role = auth?.getString('role')
+    if (
+      !auth ||
+      !auth.getBool('active') ||
+      (role !== 'admin' && role !== 'operator' && role !== 'technician')
+    ) {
+      throw new ForbiddenError('Acesso não autorizado para auditoria de exportação')
     }
     const body = e.requestInfo().body
     const action = body.action === 'export_excel' ? 'export_excel' : 'export_pdf'

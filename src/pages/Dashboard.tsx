@@ -113,21 +113,25 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         </div>
 
         <div className="flex flex-wrap gap-2.5">
-          <Button
-            onClick={() => navigate('rdos')}
-            className="bg-emerald-600 text-white hover:bg-emerald-500 shadow-md min-h-[44px] font-semibold text-xs"
-          >
-            <ClipboardList className="mr-2 h-4 w-4" />
-            Novo RDO
-          </Button>
-          <Button
-            onClick={() => navigate('fields')}
-            variant="outline"
-            className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs"
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Planilha de Campo
-          </Button>
+          {(user?.role === 'admin' || user?.role === 'operator') && (
+            <Button
+              onClick={() => navigate('rdos')}
+              className="bg-emerald-600 text-white hover:bg-emerald-500 shadow-md min-h-[44px] font-semibold text-xs"
+            >
+              <ClipboardList className="mr-2 h-4 w-4" />
+              Novo RDO
+            </Button>
+          )}
+          {(user?.role === 'admin' || user?.role === 'technician') && (
+            <Button
+              onClick={() => navigate('fields')}
+              variant="outline"
+              className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs"
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Planilha de Campo
+            </Button>
+          )}
         </div>
       </section>
 
@@ -143,6 +147,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             color: 'emerald',
             up: true,
             page: 'projects' as Page,
+            visible: true,
           },
           {
             label: 'RDOs aguardando aprovação',
@@ -153,6 +158,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             color: 'blue',
             up: pendingRdos === 0,
             page: 'rdos' as Page,
+            visible: user?.role === 'admin' || user?.role === 'operator',
           },
           {
             label: 'Planilhas de campo',
@@ -163,6 +169,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             color: 'cyan',
             up: true,
             page: 'fields' as Page,
+            visible: user?.role === 'admin' || user?.role === 'technician',
           },
           {
             label: 'Usuários cadastrados',
@@ -173,43 +180,46 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             color: 'amber',
             up: true,
             page: (user?.role === 'admin' ? 'users' : 'dashboard') as Page,
+            visible: user?.role === 'admin',
           },
-        ].map((stat) => {
-          const Icon = stat.icon
-          const Trend = stat.up ? ArrowUpRight : ArrowDownRight
-          return (
-            <article
-              key={stat.label}
-              onClick={() => navigate(stat.page)}
-              className="epa-card group p-5 transition hover:-translate-y-0.5 hover:shadow-md cursor-pointer dark:hover:border-emerald-500/40"
-            >
-              <div className="flex items-start justify-between">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                  <Icon className="h-5 w-5" />
+        ]
+          .filter((stat) => stat.visible)
+          .map((stat) => {
+            const Icon = stat.icon
+            const Trend = stat.up ? ArrowUpRight : ArrowDownRight
+            return (
+              <article
+                key={stat.label}
+                onClick={() => navigate(stat.page)}
+                className="epa-card group p-5 transition hover:-translate-y-0.5 hover:shadow-md cursor-pointer dark:hover:border-emerald-500/40"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <Trend
+                    className={`h-4 w-4 ${stat.up ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'}`}
+                  />
                 </div>
-                <Trend
-                  className={`h-4 w-4 ${stat.up ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'}`}
-                />
-              </div>
-              <p className="mt-4 text-3xl font-bold tracking-tight">{stat.value}</p>
-              <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
-                {stat.label}
-              </p>
-              <div className="mt-3 flex items-center justify-between border-t pt-3 text-xs dark:border-slate-800">
-                <span className="text-slate-400">{stat.helper}</span>
-                <span
-                  className={
-                    stat.up
-                      ? 'font-medium text-emerald-600 dark:text-emerald-400'
-                      : 'text-amber-600'
-                  }
-                >
-                  {stat.trend}
-                </span>
-              </div>
-            </article>
-          )
-        })}
+                <p className="mt-4 text-3xl font-bold tracking-tight">{stat.value}</p>
+                <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {stat.label}
+                </p>
+                <div className="mt-3 flex items-center justify-between border-t pt-3 text-xs dark:border-slate-800">
+                  <span className="text-slate-400">{stat.helper}</span>
+                  <span
+                    className={
+                      stat.up
+                        ? 'font-medium text-emerald-600 dark:text-emerald-400'
+                        : 'text-amber-600'
+                    }
+                  >
+                    {stat.trend}
+                  </span>
+                </div>
+              </article>
+            )
+          })}
       </section>
 
       {/* Projects Progress & Field Conditions */}
@@ -346,37 +356,41 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         <article className="epa-card p-5 space-y-4">
           <h3 className="font-semibold text-sm">Atalhos Operacionais</h3>
           <div className="grid gap-3">
-            <button
-              onClick={() => navigate('rdos')}
-              className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
-            >
-              <div className="flex items-center gap-3">
-                <ClipboardList className="h-5 w-5 text-emerald-600" />
-                <div>
-                  <p className="text-xs font-semibold">Emitir RDO</p>
-                  <p className="text-[10px] text-slate-500">
-                    Relatório Diário de Obra em tela única
-                  </p>
+            {(user?.role === 'admin' || user?.role === 'operator') && (
+              <button
+                onClick={() => navigate('rdos')}
+                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+              >
+                <div className="flex items-center gap-3">
+                  <ClipboardList className="h-5 w-5 text-emerald-600" />
+                  <div>
+                    <p className="text-xs font-semibold">Emitir RDO</p>
+                    <p className="text-[10px] text-slate-500">
+                      Relatório Diário de Obra em tela única
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-slate-400" />
-            </button>
+                <ArrowRight className="h-4 w-4 text-slate-400" />
+              </button>
+            )}
 
-            <button
-              onClick={() => navigate('fields')}
-              className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
-            >
-              <div className="flex items-center gap-3">
-                <FileSpreadsheet className="h-5 w-5 text-teal-600" />
-                <div>
-                  <p className="text-xs font-semibold">Preencher Planilha de Campo</p>
-                  <p className="text-[10px] text-slate-500">
-                    Extração, nutrientes, compressores e 5S
-                  </p>
+            {(user?.role === 'admin' || user?.role === 'technician') && (
+              <button
+                onClick={() => navigate('fields')}
+                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+              >
+                <div className="flex items-center gap-3">
+                  <FileSpreadsheet className="h-5 w-5 text-teal-600" />
+                  <div>
+                    <p className="text-xs font-semibold">Preencher Planilha de Campo</p>
+                    <p className="text-[10px] text-slate-500">
+                      Extração, nutrientes, compressores e 5S
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-slate-400" />
-            </button>
+                <ArrowRight className="h-4 w-4 text-slate-400" />
+              </button>
+            )}
 
             {user?.role === 'admin' && (
               <button

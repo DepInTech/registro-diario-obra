@@ -20,8 +20,73 @@ type RealtimeRecord = RecordModel & { status?: string }
 export default function Index() {
   const [page, setPage] = useState<Page>('dashboard')
   const [query, setQuery] = useState('')
-  const { isAuthenticated, isLoading } = useAuth()
+  const { user, isAuthenticated, isLoading } = useAuth()
   const { toast } = useToast()
+
+  // Guard navigation by user role
+  const handleNavigate = (targetPage: Page) => {
+    const role = user?.role
+
+    if (targetPage === 'fields' && role === 'operator') {
+      toast({
+        title: 'Você não possui permissão para esta função.',
+        description: 'O perfil Operador tem acesso restrito ao RDO.',
+        variant: 'destructive',
+      })
+      setPage('rdos')
+      return
+    }
+
+    if (targetPage === 'rdos' && role === 'technician') {
+      toast({
+        title: 'Você não possui permissão para esta função.',
+        description: 'O perfil Técnico tem acesso restrito à Planilha de Campo.',
+        variant: 'destructive',
+      })
+      setPage('fields')
+      return
+    }
+
+    if ((targetPage === 'users' || targetPage === 'audit') && role !== 'admin') {
+      toast({
+        title: 'Você não possui permissão para esta função.',
+        description: 'Acesso restrito a Administradores.',
+        variant: 'destructive',
+      })
+      setPage('dashboard')
+      return
+    }
+
+    setPage(targetPage)
+  }
+
+  // Effect to ensure user is not on a forbidden route on login or role switch
+  useEffect(() => {
+    if (!user) return
+    const role = user.role
+    if (page === 'fields' && role === 'operator') {
+      toast({
+        title: 'Você não possui permissão para esta função.',
+        description: 'Redirecionando para Relatórios RDO.',
+        variant: 'destructive',
+      })
+      setPage('rdos')
+    } else if (page === 'rdos' && role === 'technician') {
+      toast({
+        title: 'Você não possui permissão para esta função.',
+        description: 'Redirecionando para Planilha de Campo.',
+        variant: 'destructive',
+      })
+      setPage('fields')
+    } else if ((page === 'users' || page === 'audit') && role !== 'admin') {
+      toast({
+        title: 'Você não possui permissão para esta função.',
+        description: 'Redirecionando para Visão Geral.',
+        variant: 'destructive',
+      })
+      setPage('dashboard')
+    }
+  }, [user, page, toast])
 
   useRealtime<RealtimeRecord>('reports_rdo', ({ action, record }) => {
     if (action === 'update' && (record.status === 'approved' || record.status === 'returned')) {
@@ -61,19 +126,23 @@ export default function Index() {
   }
 
   return (
-    <Layout page={page} setPage={setPage} onSearch={setQuery}>
-      {page === 'dashboard' && <Dashboard navigate={setPage} />}
+    <Layout page={page} setPage={handleNavigate} onSearch={setQuery}>
+      {page === 'dashboard' && <Dashboard navigate={handleNavigate} />}
       {page === 'projects' && (
         <Projects
           query={query}
-          onOpenRdo={() => setPage('rdos')}
-          onOpenField={() => setPage('fields')}
+          onOpenRdo={() => handleNavigate('rdos')}
+          onOpenField={() => handleNavigate('fields')}
         />
       )}
-      {page === 'rdos' && <RdosPage query={query} />}
-      {page === 'fields' && <FieldSpreadsheets query={query} />}
-      {page === 'users' && <UsersPage />}
-      {page === 'audit' && <AuditPage />}
+      {page === 'rdos' && (user?.role === 'admin' || user?.role === 'operator') && (
+        <RdosPage query={query} />
+      )}
+      {page === 'fields' && (user?.role === 'admin' || user?.role === 'technician') && (
+        <FieldSpreadsheets query={query} />
+      )}
+      {page === 'users' && user?.role === 'admin' && <UsersPage />}
+      {page === 'audit' && user?.role === 'admin' && <AuditPage />}
       {(page === 'dashboard' || page === 'projects') && <Copilot />}
       <Toaster />
     </Layout>

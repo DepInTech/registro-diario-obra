@@ -49,6 +49,18 @@ export function FieldSpreadsheets({ query }: { query: string }) {
   const loadSheets = async () => {
     setLoading(true)
     try {
+      // RBAC check: Only Admin and Technician can access Field Spreadsheets
+      if (user && user.role !== 'admin' && user.role !== 'technician') {
+        toast({
+          title: 'Você não possui permissão para esta função.',
+          description: 'Acesso restrito ao perfil Técnico e Administrador.',
+          variant: 'destructive',
+        })
+        setItems([])
+        setLoading(false)
+        return
+      }
+
       let localSheets = await offlineStorage.getAllFieldSheets()
 
       if (navigator.onLine && pb.authStore.isValid) {
@@ -531,12 +543,15 @@ function FieldFullEditor({
     }
   }
 
-  // Excel Export
+  const isTechnician = user?.role === 'technician'
+  const canExportExcel = isAdmin || isTechnician
+
+  // Excel Export (Admin e Técnico têm permissão de exportar/visualizar planilha)
   const handleExportExcel = async () => {
-    if (!isAdmin) {
+    if (!canExportExcel) {
       toast({
-        title: 'Você não possui permissão para esta função',
-        description: 'A exportação de Excel da Planilha de Campo é exclusiva para Administradores.',
+        title: 'Você não possui permissão para esta função.',
+        description: 'Exportação permitida para Administradores e Técnicos.',
         variant: 'destructive',
       })
       return
@@ -603,7 +618,7 @@ function FieldFullEditor({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
+          {canExportExcel && (
             <Button
               variant="outline"
               onClick={handleExportExcel}
@@ -618,7 +633,7 @@ function FieldFullEditor({
               ) : (
                 <span className="flex items-center gap-1.5">
                   <Download className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  Exportar Excel (Admin)
+                  Exportar / Baixar Planilha
                 </span>
               )}
             </Button>
