@@ -30,7 +30,14 @@ export type Project = RecordModel & {
   epa_code: string
   progress: number
   status: 'active' | 'paused' | 'completed'
-  expand?: { client?: Client; contract?: Contract; company?: Company; area?: Area }
+  assigned_users?: string[]
+  expand?: {
+    client?: Client
+    contract?: Contract
+    company?: Company
+    area?: Area
+    assigned_users?: EpaUser[]
+  }
 }
 export type Well = RecordModel & {
   project?: string

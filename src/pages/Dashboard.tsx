@@ -70,20 +70,27 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
         if (navigator.onLine && pb.authStore.isValid) {
           try {
-            const projs = await pb.collection('projects').getFullList({ sort: '-created' })
+            const projs = await pb.collection('projects').getFullList({
+              sort: '-created',
+              expand: 'client,contract',
+            })
             if (projs.length > 0) {
               setProjectsList(
-                projs.map((p) => ({
-                  id: p.id,
-                  name: p.name,
-                  client: 'Petrobras — Refinaria Sul',
-                  code: p.epa_code || 'EPA-001',
-                  location: p.location || 'Área Industrial',
-                  status: (p.status as any) || 'active',
-                  progress: p.progress || 50,
-                  contract: 'CT-2025',
-                  team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
-                })),
+                projs.map((p) => {
+                  const clientExp = p.expand?.client as any
+                  const contractExp = p.expand?.contract as any
+                  return {
+                    id: p.id,
+                    name: p.name,
+                    client: clientExp?.name || 'Cliente EPA',
+                    code: p.epa_code || 'EPA-001',
+                    location: p.location || 'Área Industrial',
+                    status: (p.status as any) || 'active',
+                    progress: p.progress ?? 50,
+                    contract: contractExp?.code || 'CT-2025',
+                    team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
+                  }
+                }),
               )
             }
           } catch (projErr) {
@@ -130,6 +137,16 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             >
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Planilha de Campo
+            </Button>
+          )}
+          {user?.role === 'admin' && (
+            <Button
+              onClick={() => navigate('projects')}
+              variant="outline"
+              className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs"
+            >
+              <FolderKanban className="mr-2 h-4 w-4" />
+              Gerenciar Projetos
             </Button>
           )}
         </div>
@@ -356,6 +373,24 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         <article className="epa-card p-5 space-y-4">
           <h3 className="font-semibold text-sm">Atalhos Operacionais</h3>
           <div className="grid gap-3">
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => navigate('projects')}
+                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+              >
+                <div className="flex items-center gap-3">
+                  <FolderKanban className="h-5 w-5 text-emerald-700" />
+                  <div>
+                    <p className="text-xs font-semibold">Projetos & Obras Ambientais</p>
+                    <p className="text-[10px] text-slate-500">
+                      Cadastrar novo projeto, gerenciar contratos e equipes
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-slate-400" />
+              </button>
+            )}
+
             {(user?.role === 'admin' || user?.role === 'operator') && (
               <button
                 onClick={() => navigate('rdos')}
