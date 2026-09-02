@@ -107,16 +107,25 @@ export function Copilot() {
           {messages.length < 3 && (
             <div className="flex gap-2 overflow-x-auto border-t px-3 py-2 text-xs">
               <button
+                type="button"
                 onClick={() => quick('Resuma os últimos RDOs do projeto de Açailândia')}
-                className="whitespace-nowrap rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800"
+                className="whitespace-nowrap rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-800 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:hover:bg-emerald-900 transition"
               >
                 Resumir RDOs
               </button>
               <button
+                type="button"
                 onClick={() => quick('Há anomalias nos resíduos líquidos?')}
-                className="whitespace-nowrap rounded-full bg-amber-50 px-3 py-1.5 text-amber-800"
+                className="whitespace-nowrap rounded-full bg-amber-50 px-3 py-1.5 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900 transition"
               >
                 Analisar resíduos
+              </button>
+              <button
+                type="button"
+                onClick={() => quick('Quais são as pendências de aprovação nos relatórios?')}
+                className="whitespace-nowrap rounded-full bg-blue-50 px-3 py-1.5 text-blue-800 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900 transition"
+              >
+                Ver pendências
               </button>
             </div>
           )}
