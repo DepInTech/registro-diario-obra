@@ -19,10 +19,17 @@ routerAdd('GET', '/api/epa/export/field/{id}', (c) => {
   let extractionRows = ''
   if (Array.isArray(extData)) {
     extData.forEach((r) => {
+      const morningDisplay = r.morning_time
+        ? `${r.morning || '0'}<div style="font-size:9px;color:#555;margin-top:2px;">Hora: ${r.morning_time}</div>`
+        : r.morning || '0'
+      const afternoonDisplay = r.afternoon_time
+        ? `${r.afternoon || '0'}<div style="font-size:9px;color:#555;margin-top:2px;">Hora: ${r.afternoon_time}</div>`
+        : r.afternoon || '0'
+
       extractionRows += `<tr>
         <td style="border:1px solid #999;padding:6px;">${r.well || '—'}</td>
-        <td style="border:1px solid #999;padding:6px;">${r.morning || '0'}</td>
-        <td style="border:1px solid #999;padding:6px;">${r.afternoon || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;">${morningDisplay}</td>
+        <td style="border:1px solid #999;padding:6px;">${afternoonDisplay}</td>
         <td style="border:1px solid #999;padding:6px;">${r.pump || '0'}</td>
         <td style="border:1px solid #999;padding:6px;">${r.autopump || '0'}</td>
       </tr>`

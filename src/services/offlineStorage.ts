@@ -58,7 +58,9 @@ export interface OfflineFieldSheetItem {
   extraction_data?: Array<{
     well: string
     morning: string
+    morning_time?: string
     afternoon: string
+    afternoon_time?: string
     pump: string
     autopump: string
   }>

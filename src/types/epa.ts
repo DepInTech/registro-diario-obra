@@ -81,7 +81,9 @@ export type ReportRdo = RecordModel & {
 export type ExtractionRow = {
   well: string
   morning: string
+  morning_time?: string
   afternoon: string
+  afternoon_time?: string
   pump: string
   autopump: string
 }

@@ -421,7 +421,9 @@ function FieldFullEditor({
     const newRow = {
       well: `PB-${nextNum}`,
       morning: '0',
+      morning_time: '',
       afternoon: '0',
+      afternoon_time: '',
       pump: '0',
       autopump: '0',
     }
@@ -784,12 +786,12 @@ function FieldFullEditor({
           </div>
 
           <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[500px] text-left text-xs">
+            <table className="w-full min-w-[560px] text-left text-xs">
               <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                 <tr>
                   <th className="p-2.5">Poço</th>
-                  <th className="p-2.5">Hidrômetro Manhã</th>
-                  <th className="p-2.5">Hidrômetro Tarde</th>
+                  <th className="p-2.5 min-w-[140px]">Hidrômetro Manhã</th>
+                  <th className="p-2.5 min-w-[140px]">Hidrômetro Tarde</th>
                   <th className="p-2.5">Bomba</th>
                   <th className="p-2.5">Auto Bomba</th>
                   {!isLocked && <th className="p-2.5 w-10"></th>}
@@ -797,34 +799,71 @@ function FieldFullEditor({
               </thead>
               <tbody className="divide-y dark:divide-slate-800">
                 {formData.extraction_data?.map((row, index) => (
-                  <tr key={index}>
+                  <tr key={index} className="align-top">
                     <td className="p-1.5">
                       <Input
                         value={row.well}
                         onChange={(e) => handleExtractionCellChange(index, 'well', e.target.value)}
                         disabled={isLocked}
+                        placeholder="Ex.: PB-01"
                         className="h-8 font-semibold text-xs"
                       />
                     </td>
                     <td className="p-1.5">
-                      <Input
-                        value={row.morning}
-                        onChange={(e) =>
-                          handleExtractionCellChange(index, 'morning', e.target.value)
-                        }
-                        disabled={isLocked}
-                        className="h-8 font-mono text-xs"
-                      />
+                      <div className="space-y-1.5">
+                        <Input
+                          value={row.morning}
+                          onChange={(e) =>
+                            handleExtractionCellChange(index, 'morning', e.target.value)
+                          }
+                          disabled={isLocked}
+                          placeholder="Leitura"
+                          className="h-8 font-mono text-xs"
+                        />
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                            Horário:
+                          </span>
+                          <Input
+                            type="time"
+                            value={row.morning_time || ''}
+                            onChange={(e) =>
+                              handleExtractionCellChange(index, 'morning_time', e.target.value)
+                            }
+                            disabled={isLocked}
+                            aria-label="Horário Hidrômetro Manhã"
+                            className="h-7 font-mono text-xs px-1.5 py-0"
+                          />
+                        </div>
+                      </div>
                     </td>
                     <td className="p-1.5">
-                      <Input
-                        value={row.afternoon}
-                        onChange={(e) =>
-                          handleExtractionCellChange(index, 'afternoon', e.target.value)
-                        }
-                        disabled={isLocked}
-                        className="h-8 font-mono text-xs"
-                      />
+                      <div className="space-y-1.5">
+                        <Input
+                          value={row.afternoon}
+                          onChange={(e) =>
+                            handleExtractionCellChange(index, 'afternoon', e.target.value)
+                          }
+                          disabled={isLocked}
+                          placeholder="Leitura"
+                          className="h-8 font-mono text-xs"
+                        />
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] text-slate-500 whitespace-nowrap">
+                            Horário:
+                          </span>
+                          <Input
+                            type="time"
+                            value={row.afternoon_time || ''}
+                            onChange={(e) =>
+                              handleExtractionCellChange(index, 'afternoon_time', e.target.value)
+                            }
+                            disabled={isLocked}
+                            aria-label="Horário Hidrômetro Tarde"
+                            className="h-7 font-mono text-xs px-1.5 py-0"
+                          />
+                        </div>
+                      </div>
                     </td>
                     <td className="p-1.5">
                       <Input
@@ -845,7 +884,7 @@ function FieldFullEditor({
                       />
                     </td>
                     {!isLocked && (
-                      <td className="p-1.5 text-center">
+                      <td className="p-1.5 text-center pt-2">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -1198,10 +1237,17 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
   let extractionRows = ''
   if (sheet.extraction_data && sheet.extraction_data.length > 0) {
     sheet.extraction_data.forEach((r) => {
+      const morningDisplay = r.morning_time
+        ? `${r.morning || '0'}<div style="font-size:9px;color:#555;margin-top:2px;">Hora: ${r.morning_time}</div>`
+        : r.morning || '0'
+      const afternoonDisplay = r.afternoon_time
+        ? `${r.afternoon || '0'}<div style="font-size:9px;color:#555;margin-top:2px;">Hora: ${r.afternoon_time}</div>`
+        : r.afternoon || '0'
+
       extractionRows += `<tr>
         <td style="border:1px solid #999;padding:6px;">${r.well || '—'}</td>
-        <td style="border:1px solid #999;padding:6px;">${r.morning || '0'}</td>
-        <td style="border:1px solid #999;padding:6px;">${r.afternoon || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;">${morningDisplay}</td>
+        <td style="border:1px solid #999;padding:6px;">${afternoonDisplay}</td>
         <td style="border:1px solid #999;padding:6px;">${r.pump || '0'}</td>
         <td style="border:1px solid #999;padding:6px;">${r.autopump || '0'}</td>
       </tr>`
