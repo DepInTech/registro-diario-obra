@@ -55,6 +55,8 @@ export interface OfflineFieldSheetItem {
   operatorName?: string
   weather?: string
   pluviometer?: number
+  morning_time?: string
+  afternoon_time?: string
   extraction_data?: Array<{
     well: string
     morning: string

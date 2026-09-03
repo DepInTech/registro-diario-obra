@@ -81,9 +81,9 @@ export type ReportRdo = RecordModel & {
 export type ExtractionRow = {
   well: string
   morning: string
-  morning_time?: string
+  morning_time?: string // retrocompatibilidade com registros legados
   afternoon: string
-  afternoon_time?: string
+  afternoon_time?: string // retrocompatibilidade com registros legados
   pump: string
   autopump: string
 }
@@ -94,6 +94,8 @@ export type FieldSheet = RecordModel & {
   area: string
   weather?: string
   pluviometer?: number
+  morning_time?: string
+  afternoon_time?: string
   extraction_data?: ExtractionRow[]
   infiltration_data?: Record<string, string>
   nutrient_done?: boolean

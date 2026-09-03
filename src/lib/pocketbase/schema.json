@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-03T19:09:26.623Z",
+  "generatedAt": "2026-09-03T19:17:59.570Z",
   "collections": [
     {
       "name": "users",
@@ -794,6 +794,18 @@
         },
         {
           "name": "review_notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "morning_time",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "afternoon_time",
           "type": "text",
           "required": false,
           "system": false

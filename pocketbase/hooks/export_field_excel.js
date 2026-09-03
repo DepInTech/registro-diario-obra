@@ -16,25 +16,38 @@ routerAdd('GET', '/api/epa/export/field/{id}', (c) => {
   const operator = $app.findRecordById('users', sheet.getString('operator'))
 
   const extData = sheet.get('extraction_data') || []
+  let fallbackMorning = ''
+  let fallbackAfternoon = ''
+  if (Array.isArray(extData)) {
+    for (let i = 0; i < extData.length; i++) {
+      if (!fallbackMorning && extData[i].morning_time) fallbackMorning = extData[i].morning_time
+      if (!fallbackAfternoon && extData[i].afternoon_time)
+        fallbackAfternoon = extData[i].afternoon_time
+    }
+  }
+
+  const morningTime = sheet.getString('morning_time') || fallbackMorning || '—'
+  const afternoonTime = sheet.getString('afternoon_time') || fallbackAfternoon || '—'
+
   let extractionRows = ''
   if (Array.isArray(extData)) {
     extData.forEach((r) => {
-      const morningDisplay = r.morning_time
-        ? `${r.morning || '0'}<div style="font-size:9px;color:#555;margin-top:2px;">Hora: ${r.morning_time}</div>`
-        : r.morning || '0'
-      const afternoonDisplay = r.afternoon_time
-        ? `${r.afternoon || '0'}<div style="font-size:9px;color:#555;margin-top:2px;">Hora: ${r.afternoon_time}</div>`
-        : r.afternoon || '0'
-
       extractionRows += `<tr>
         <td style="border:1px solid #999;padding:6px;">${r.well || '—'}</td>
-        <td style="border:1px solid #999;padding:6px;">${morningDisplay}</td>
-        <td style="border:1px solid #999;padding:6px;">${afternoonDisplay}</td>
-        <td style="border:1px solid #999;padding:6px;">${r.pump || '0'}</td>
-        <td style="border:1px solid #999;padding:6px;">${r.autopump || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;text-align:right;">${r.morning || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;text-align:right;">${r.afternoon || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;text-align:right;">${r.pump || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;text-align:right;">${r.autopump || '0'}</td>
       </tr>`
     })
   }
+
+  const timeRow = `<tr>
+    <td style="border:1px solid #999;padding:6px;background-color:#f0fdfa;font-weight:bold;">Horário da Leitura</td>
+    <td style="border:1px solid #999;padding:6px;background-color:#f8fafc;font-weight:bold;text-align:center;">${morningTime}</td>
+    <td style="border:1px solid #999;padding:6px;background-color:#f8fafc;font-weight:bold;text-align:center;">${afternoonTime}</td>
+    <td colspan="2" style="border:1px solid #999;padding:6px;background-color:#f8fafc;color:#64748b;font-style:italic;">Registro único de horário das leituras</td>
+  </tr>`
 
   const infData = sheet.get('infiltration_data') || {}
   const compData = sheet.get('compressor_data') || {}
@@ -96,6 +109,7 @@ routerAdd('GET', '/api/epa/export/field/{id}', (c) => {
         <th>Auto Bomba</th>
       </tr>
       ${extractionRows}
+      ${timeRow}
       <tr>
         <td colspan="5" class="section-hdr">INFILTRAÇÃO</td>
       </tr>

@@ -76,6 +76,10 @@ export function FieldSpreadsheets({ query }: { query: string }) {
               const proj = rec.expand?.project as any
               const op = rec.expand?.operator as any
 
+              const rawExt = ((rec.extraction_data as any) || []) as any[]
+              const fallbackMorning = rawExt.find((r) => r.morning_time)?.morning_time || ''
+              const fallbackAfternoon = rawExt.find((r) => r.afternoon_time)?.afternoon_time || ''
+
               const item: OfflineFieldSheetItem = {
                 id: rec.id,
                 projectId: rec.project,
@@ -86,6 +90,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 operatorName: op?.name || 'Carlos Oliveira',
                 weather: rec.weather || 'Sol',
                 pluviometer: rec.pluviometer || 0,
+                morning_time: rec.morning_time || fallbackMorning,
+                afternoon_time: rec.afternoon_time || fallbackAfternoon,
                 extraction_data: (rec.extraction_data as any) || [],
                 infiltration_data: (rec.infiltration_data as any) || {},
                 nutrient_done: rec.nutrient_done || false,
@@ -125,6 +131,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
             operatorName: m.operator,
             weather: 'Sol',
             pluviometer: 0,
+            morning_time: '',
+            afternoon_time: '',
             extraction_data: [
               { well: 'PB-127', morning: '12540', afternoon: '12612', pump: '18', autopump: '72' },
               { well: 'PB-128', morning: '9860', afternoon: '9918', pump: '20', autopump: '58' },
@@ -196,6 +204,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       operatorName: user?.name || 'Carlos Oliveira',
       weather: 'Sol',
       pluviometer: 0,
+      morning_time: '',
+      afternoon_time: '',
       extraction_data: [{ well: 'PB-127', morning: '0', afternoon: '0', pump: '0', autopump: '0' }],
       infiltration_data: {
         geralMorning: '0',
@@ -421,9 +431,7 @@ function FieldFullEditor({
     const newRow = {
       well: `PB-${nextNum}`,
       morning: '0',
-      morning_time: '',
       afternoon: '0',
-      afternoon_time: '',
       pump: '0',
       autopump: '0',
     }
@@ -790,8 +798,8 @@ function FieldFullEditor({
               <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                 <tr>
                   <th className="p-2.5">Poço</th>
-                  <th className="p-2.5 min-w-[140px]">Hidrômetro Manhã</th>
-                  <th className="p-2.5 min-w-[140px]">Hidrômetro Tarde</th>
+                  <th className="p-2.5 min-w-[130px]">Hidrômetro Manhã</th>
+                  <th className="p-2.5 min-w-[130px]">Hidrômetro Tarde</th>
                   <th className="p-2.5">Bomba</th>
                   <th className="p-2.5">Auto Bomba</th>
                   {!isLocked && <th className="p-2.5 w-10"></th>}
@@ -799,7 +807,7 @@ function FieldFullEditor({
               </thead>
               <tbody className="divide-y dark:divide-slate-800">
                 {formData.extraction_data?.map((row, index) => (
-                  <tr key={index} className="align-top">
+                  <tr key={index} className="align-middle">
                     <td className="p-1.5">
                       <Input
                         value={row.well}
@@ -810,60 +818,26 @@ function FieldFullEditor({
                       />
                     </td>
                     <td className="p-1.5">
-                      <div className="space-y-1.5">
-                        <Input
-                          value={row.morning}
-                          onChange={(e) =>
-                            handleExtractionCellChange(index, 'morning', e.target.value)
-                          }
-                          disabled={isLocked}
-                          placeholder="Leitura"
-                          className="h-8 font-mono text-xs"
-                        />
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-500 whitespace-nowrap">
-                            Horário:
-                          </span>
-                          <Input
-                            type="time"
-                            value={row.morning_time || ''}
-                            onChange={(e) =>
-                              handleExtractionCellChange(index, 'morning_time', e.target.value)
-                            }
-                            disabled={isLocked}
-                            aria-label="Horário Hidrômetro Manhã"
-                            className="h-7 font-mono text-xs px-1.5 py-0"
-                          />
-                        </div>
-                      </div>
+                      <Input
+                        value={row.morning}
+                        onChange={(e) =>
+                          handleExtractionCellChange(index, 'morning', e.target.value)
+                        }
+                        disabled={isLocked}
+                        placeholder="Leitura manhã"
+                        className="h-8 font-mono text-xs"
+                      />
                     </td>
                     <td className="p-1.5">
-                      <div className="space-y-1.5">
-                        <Input
-                          value={row.afternoon}
-                          onChange={(e) =>
-                            handleExtractionCellChange(index, 'afternoon', e.target.value)
-                          }
-                          disabled={isLocked}
-                          placeholder="Leitura"
-                          className="h-8 font-mono text-xs"
-                        />
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-500 whitespace-nowrap">
-                            Horário:
-                          </span>
-                          <Input
-                            type="time"
-                            value={row.afternoon_time || ''}
-                            onChange={(e) =>
-                              handleExtractionCellChange(index, 'afternoon_time', e.target.value)
-                            }
-                            disabled={isLocked}
-                            aria-label="Horário Hidrômetro Tarde"
-                            className="h-7 font-mono text-xs px-1.5 py-0"
-                          />
-                        </div>
-                      </div>
+                      <Input
+                        value={row.afternoon}
+                        onChange={(e) =>
+                          handleExtractionCellChange(index, 'afternoon', e.target.value)
+                        }
+                        disabled={isLocked}
+                        placeholder="Leitura tarde"
+                        className="h-8 font-mono text-xs"
+                      />
                     </td>
                     <td className="p-1.5">
                       <Input
@@ -884,7 +858,7 @@ function FieldFullEditor({
                       />
                     </td>
                     {!isLocked && (
-                      <td className="p-1.5 text-center pt-2">
+                      <td className="p-1.5 text-center">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -898,6 +872,54 @@ function FieldFullEditor({
                   </tr>
                 ))}
               </tbody>
+              <tfoot className="border-t-2 border-slate-200 bg-slate-50/80 dark:border-slate-800 dark:bg-slate-900/80">
+                <tr>
+                  <td className="p-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Horário da Leitura
+                  </td>
+                  <td className="p-2">
+                    <div className="space-y-1">
+                      <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                        Horário (manhã)
+                      </span>
+                      <Input
+                        type="time"
+                        value={
+                          formData.morning_time ||
+                          formData.extraction_data?.find((r) => r.morning_time)?.morning_time ||
+                          ''
+                        }
+                        onChange={(e) => handleFieldChange('morning_time', e.target.value)}
+                        disabled={isLocked}
+                        aria-label="Horário Hidrômetro Manhã"
+                        className="h-8 font-mono text-xs bg-white dark:bg-slate-950"
+                      />
+                    </div>
+                  </td>
+                  <td className="p-2">
+                    <div className="space-y-1">
+                      <span className="block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                        Horário (tarde)
+                      </span>
+                      <Input
+                        type="time"
+                        value={
+                          formData.afternoon_time ||
+                          formData.extraction_data?.find((r) => r.afternoon_time)?.afternoon_time ||
+                          ''
+                        }
+                        onChange={(e) => handleFieldChange('afternoon_time', e.target.value)}
+                        disabled={isLocked}
+                        aria-label="Horário Hidrômetro Tarde"
+                        className="h-8 font-mono text-xs bg-white dark:bg-slate-950"
+                      />
+                    </div>
+                  </td>
+                  <td colSpan={!isLocked ? 3 : 2} className="p-2 text-[11px] text-slate-400 italic">
+                    Registro de horário único da medição diária dos hidrômetros
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </section>
@@ -1234,25 +1256,33 @@ function SectionHeader({
  * Generates local XML-Excel spreadsheet matching official EPA header and columns
  */
 function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
+  const morningTime =
+    sheet.morning_time || sheet.extraction_data?.find((r) => r.morning_time)?.morning_time || '—'
+  const afternoonTime =
+    sheet.afternoon_time ||
+    sheet.extraction_data?.find((r) => r.afternoon_time)?.afternoon_time ||
+    '—'
+
   let extractionRows = ''
   if (sheet.extraction_data && sheet.extraction_data.length > 0) {
     sheet.extraction_data.forEach((r) => {
-      const morningDisplay = r.morning_time
-        ? `${r.morning || '0'}<div style="font-size:9px;color:#555;margin-top:2px;">Hora: ${r.morning_time}</div>`
-        : r.morning || '0'
-      const afternoonDisplay = r.afternoon_time
-        ? `${r.afternoon || '0'}<div style="font-size:9px;color:#555;margin-top:2px;">Hora: ${r.afternoon_time}</div>`
-        : r.afternoon || '0'
-
       extractionRows += `<tr>
         <td style="border:1px solid #999;padding:6px;">${r.well || '—'}</td>
-        <td style="border:1px solid #999;padding:6px;">${morningDisplay}</td>
-        <td style="border:1px solid #999;padding:6px;">${afternoonDisplay}</td>
-        <td style="border:1px solid #999;padding:6px;">${r.pump || '0'}</td>
-        <td style="border:1px solid #999;padding:6px;">${r.autopump || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;text-align:right;">${r.morning || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;text-align:right;">${r.afternoon || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;text-align:right;">${r.pump || '0'}</td>
+        <td style="border:1px solid #999;padding:6px;text-align:right;">${r.autopump || '0'}</td>
       </tr>`
     })
   }
+
+  // Row with the single morning and afternoon times below the readings
+  const timeRow = `<tr>
+    <td style="border:1px solid #999;padding:6px;background-color:#f0fdfa;font-weight:bold;">Horário da Leitura</td>
+    <td style="border:1px solid #999;padding:6px;background-color:#f8fafc;font-weight:bold;text-align:center;">${morningTime}</td>
+    <td style="border:1px solid #999;padding:6px;background-color:#f8fafc;font-weight:bold;text-align:center;">${afternoonTime}</td>
+    <td colspan="2" style="border:1px solid #999;padding:6px;background-color:#f8fafc;color:#64748b;font-style:italic;">Registro único de horário das leituras</td>
+  </tr>`
 
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
   <head>
@@ -1306,6 +1336,7 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
         <th>Auto Bomba</th>
       </tr>
       ${extractionRows}
+      ${timeRow}
       <tr>
         <td colspan="5" class="section-hdr">INFILTRAÇÃO</td>
       </tr>
