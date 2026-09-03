@@ -57,6 +57,8 @@ export interface OfflineFieldSheetItem {
   pluviometer?: number
   morning_time?: string
   afternoon_time?: string
+  infiltration_morning_time?: string
+  infiltration_afternoon_time?: string
   extraction_data?: Array<{
     well: string
     morning: string

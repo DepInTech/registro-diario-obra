@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-03T19:17:59.570Z",
+  "generatedAt": "2026-09-03T19:27:36.560Z",
   "collections": [
     {
       "name": "users",
@@ -806,6 +806,18 @@
         },
         {
           "name": "afternoon_time",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "infiltration_morning_time",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "infiltration_afternoon_time",
           "type": "text",
           "required": false,
           "system": false
