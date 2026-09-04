@@ -9,10 +9,17 @@ routerAdd(
       const message = String(body.message || '').trim()
       if (!message) return e.badRequestError('Escreva uma pergunta para o EPA Copilot')
 
+      // Verificar se há projectId opcional para contexto direcionado
+      const projectId = body.project_id ? String(body.project_id).trim() : null
+      let fullMessage = message
+      if (projectId) {
+        fullMessage = `[Contexto do Projeto ID: ${projectId}] ${message}`
+      }
+
       const result = $ai.agent('epa-copilot').chat({
         user_id: userId,
         conversation_id: body.conversation_id || null,
-        message: message,
+        message: fullMessage,
       })
       return e.json(200, result)
     } catch (err) {
