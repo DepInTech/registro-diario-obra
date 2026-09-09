@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { RecordModel } from 'pocketbase'
 import { Layout, type Page } from '@/components/Layout'
-import { Copilot } from '@/components/Copilot'
 import { Dashboard } from '@/pages/Dashboard'
 import { Projects } from '@/pages/Projects'
 import { RdosPage } from '@/pages/Rdos'
@@ -143,7 +142,6 @@ export default function Index() {
       )}
       {page === 'users' && user?.role === 'admin' && <UsersPage />}
       {page === 'audit' && user?.role === 'admin' && <AuditPage />}
-      {(page === 'dashboard' || page === 'projects') && <Copilot />}
       <Toaster />
     </Layout>
   )
