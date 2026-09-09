@@ -121,13 +121,13 @@ export function LoginPage() {
 
         {/* Conteúdo Institucional */}
         <div className="relative z-10 flex flex-col h-full justify-between gap-10">
-          {/* Topo Esquerdo: Logo Oficial EPA com fundo branco suave e nítido */}
+          {/* Topo Esquerdo: Logo Oficial EPA sem moldura/fundo branco */}
           <div className="pt-2">
-            <div className="inline-flex items-center rounded-2xl bg-white/95 px-5 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.12)] backdrop-blur-md transition-transform hover:scale-[1.02]">
+            <div className="inline-flex items-center">
               <img
                 src={logoEpa}
                 alt="EPA — Soluções Ambientais"
-                className="h-10 sm:h-12 w-auto max-w-[210px] object-contain"
+                className="h-10 sm:h-12 w-auto max-w-[210px] object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]"
               />
             </div>
           </div>
