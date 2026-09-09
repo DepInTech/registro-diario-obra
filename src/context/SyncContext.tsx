@@ -99,6 +99,62 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
+            // Sync photos (field photo and general photos)
+            const allPhotosToSync: Array<{
+              id?: string
+              image?: string
+              caption?: string
+              order: number
+              dataUrl?: string
+              category?: 'general' | 'field_inspection'
+            }> = []
+
+            if (rdo.fieldPhoto?.dataUrl || rdo.fieldPhoto?.image) {
+              allPhotosToSync.push({
+                ...rdo.fieldPhoto,
+                order: 0,
+                category: 'field_inspection',
+              })
+            }
+
+            if (rdo.photos && rdo.photos.length > 0) {
+              rdo.photos.forEach((p, idx) => {
+                allPhotosToSync.push({
+                  ...p,
+                  order: idx + 1,
+                  category: p.category || 'general',
+                })
+              })
+            }
+
+            for (const p of allPhotosToSync) {
+              try {
+                if (p.dataUrl && p.dataUrl.startsWith('data:image/')) {
+                  const blob = await (await fetch(p.dataUrl)).blob()
+                  const ext =
+                    p.dataUrl.substring('data:image/'.length, p.dataUrl.indexOf(';')) || 'jpeg'
+                  const file = new File([blob], `photo_${Date.now()}.${ext}`, {
+                    type: blob.type || 'image/jpeg',
+                  })
+                  const photoFd = new FormData()
+                  photoFd.append('report', record.id)
+                  photoFd.append('image', file)
+                  photoFd.append(
+                    'caption',
+                    p.caption ||
+                      (p.category === 'field_inspection'
+                        ? 'Fotografia do campo/inspeção'
+                        : 'Foto do RDO'),
+                  )
+                  photoFd.append('order', String(p.order))
+                  photoFd.append('category', p.category || 'general')
+                  await pb.collection('report_photos').create(photoFd)
+                }
+              } catch (photoErr) {
+                console.warn('Could not sync photo for RDO:', photoErr)
+              }
+            }
+
             // update local offline item to synced
             await offlineStorage.deleteRdo(rdo.id)
             rdo.id = record.id
@@ -156,6 +212,63 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               review_notes: rdo.reviewNotes || '',
             }
             const updated = await pb.collection('reports_rdo').update(rdo.id, payload)
+
+            // Sync newly added local dataUrl photos if any
+            const photosToSync: Array<{
+              id?: string
+              image?: string
+              caption?: string
+              order: number
+              dataUrl?: string
+              category?: 'general' | 'field_inspection'
+            }> = []
+
+            if (rdo.fieldPhoto?.dataUrl && rdo.fieldPhoto.dataUrl.startsWith('data:image/')) {
+              photosToSync.push({
+                ...rdo.fieldPhoto,
+                order: 0,
+                category: 'field_inspection',
+              })
+            }
+
+            for (const p of rdo.photos || []) {
+              if (p.dataUrl && p.dataUrl.startsWith('data:image/')) {
+                photosToSync.push({
+                  ...p,
+                  order: p.order,
+                  category: p.category || 'general',
+                })
+              }
+            }
+
+            for (const p of photosToSync) {
+              try {
+                if (p.dataUrl && p.dataUrl.startsWith('data:image/')) {
+                  const blob = await (await fetch(p.dataUrl)).blob()
+                  const ext =
+                    p.dataUrl.substring('data:image/'.length, p.dataUrl.indexOf(';')) || 'jpeg'
+                  const file = new File([blob], `photo_${Date.now()}.${ext}`, {
+                    type: blob.type || 'image/jpeg',
+                  })
+                  const photoFd = new FormData()
+                  photoFd.append('report', rdo.id)
+                  photoFd.append('image', file)
+                  photoFd.append(
+                    'caption',
+                    p.caption ||
+                      (p.category === 'field_inspection'
+                        ? 'Fotografia do campo/inspeção'
+                        : 'Foto do RDO'),
+                  )
+                  photoFd.append('order', String(p.order))
+                  photoFd.append('category', p.category || 'general')
+                  await pb.collection('report_photos').create(photoFd)
+                }
+              } catch (photoErr) {
+                console.warn('Could not sync photo for RDO update:', photoErr)
+              }
+            }
+
             rdo.syncStatus = 'synced'
             rdo.serverUpdatedAt = updated.updated
             await offlineStorage.saveRdo(rdo)

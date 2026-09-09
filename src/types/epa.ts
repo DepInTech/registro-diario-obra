@@ -57,6 +57,7 @@ export type ReportPhoto = RecordModel & {
   image: string
   caption: string
   order: number
+  category?: 'general' | 'field_inspection'
 }
 export type RdoStatus = 'draft' | 'submitted' | 'approved' | 'returned'
 export type ReportRdo = RecordModel & {

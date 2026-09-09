@@ -39,7 +39,14 @@ export interface OfflineRdoItem {
     caption: string
     order: number
     dataUrl?: string // base64 or blob URL stored locally
+    category?: 'general' | 'field_inspection'
   }>
+  fieldPhoto?: {
+    id?: string
+    image?: string
+    caption?: string
+    dataUrl?: string
+  }
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict'
   lastModified: number
   serverUpdatedAt?: string

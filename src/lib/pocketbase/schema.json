@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-09T14:08:40.145Z",
+  "generatedAt": "2026-09-09T14:16:20.663Z",
   "collections": [
     {
       "name": "users",
@@ -646,6 +646,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "category",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["general", "field_inspection"]
         }
       ],
       "indexes": ["CREATE INDEX idx_report_photos_report_order ON report_photos (report, 'order')"]

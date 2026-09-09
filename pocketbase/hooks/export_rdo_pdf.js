@@ -1,6 +1,6 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-routerAdd('GET', '/api/epa/export/rdo/{id}', (c) => {
+routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
   const auth = c.get('authRecord')
   if (!auth) {
     return c.json(401, { error: 'Não autenticado' })
@@ -44,8 +44,31 @@ routerAdd('GET', '/api/epa/export/rdo/{id}', (c) => {
   // Photos
   const photos = $app.findRecordsByFilter('report_photos', `report = "${id}"`, 'order')
   let photoCards = ''
-  if (photos.length > 0) {
-    photos.forEach((p, idx) => {
+  let fieldPhotoHtml = ''
+
+  const fieldPhotoRecord = photos.find((p) => p.getString('category') === 'field_inspection')
+  const generalPhotos = photos.filter((p) => p.getString('category') !== 'field_inspection')
+
+  if (fieldPhotoRecord) {
+    const fieldImg = fieldPhotoRecord.getString('image')
+    const fieldSrc = fieldImg
+      ? `/api/files/report_photos/${fieldPhotoRecord.id}/${fieldImg}`
+      : 'https://img.usecurling.com/p/640/420?q=field%20site'
+    fieldPhotoHtml = `
+    <div style="border:1px solid #9ca3af;border-top:none;padding:8px;background:#f9fafb;break-inside:avoid;">
+      <b style="font-size:9px;text-transform:uppercase;color:#086B63;display:block;margin-bottom:6px;">Fotografia do Campo / Local das Inspeções:</b>
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <img src="${fieldSrc}" style="width:240px;height:150px;object-fit:cover;border:1px solid #9ca3af;border-radius:4px;flex-shrink:0;" />
+        <div style="font-size:10px;color:#374151;line-height:1.4;">
+          <b>Legenda / Identificação do Local:</b><br />
+          ${fieldPhotoRecord.getString('caption') || 'Registro fotográfico do local onde foram realizadas as inspeções.'}
+        </div>
+      </div>
+    </div>`
+  }
+
+  if (generalPhotos.length > 0) {
+    generalPhotos.forEach((p, idx) => {
       const imgFile = p.getString('image')
       const imgSrc = imgFile
         ? `/api/files/report_photos/${p.id}/${imgFile}`
@@ -218,8 +241,9 @@ routerAdd('GET', '/api/epa/export/rdo/{id}', (c) => {
     </div>
 
     <div class="section-block">
-      <h3>Descrição da Atividade</h3>
+      <h3>Descrição da Atividade & Foto do Campo</h3>
       <div class="text-box">${rdo.getString('activity_description') || '—'}</div>
+      ${fieldPhotoHtml}
     </div>
 
     <div class="section-block">

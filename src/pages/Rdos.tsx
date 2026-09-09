@@ -97,6 +97,11 @@ export function RdosPage({ query }: { query: string }) {
               const performer = rec.expand?.performed_by as any
               const supervisor = rec.expand?.supervised_by as any
 
+              const fieldInspectionPhoto = photos.find(
+                (p) => (p as any).category === 'field_inspection',
+              )
+              const generalPhotos = photos.filter((p) => (p as any).category !== 'field_inspection')
+
               const item: OfflineRdoItem = {
                 id: rec.id,
                 number: rec.number,
@@ -128,12 +133,20 @@ export function RdosPage({ query }: { query: string }) {
                   completion_date: w.completion_date ? w.completion_date.slice(0, 10) : undefined,
                   diameter: w.diameter,
                 })),
-                photos: photos.map((p) => ({
+                photos: generalPhotos.map((p) => ({
                   id: p.id,
                   image: p.image,
                   caption: p.caption,
                   order: p.order,
+                  category: 'general',
                 })),
+                fieldPhoto: fieldInspectionPhoto
+                  ? {
+                      id: fieldInspectionPhoto.id,
+                      image: fieldInspectionPhoto.image,
+                      caption: fieldInspectionPhoto.caption,
+                    }
+                  : undefined,
                 syncStatus: 'synced',
                 lastModified: new Date(rec.updated).getTime(),
                 serverUpdatedAt: rec.updated,
@@ -184,14 +197,21 @@ export function RdosPage({ query }: { query: string }) {
                 caption: 'Leitura inicial do hidrômetro PZ-01',
                 order: 0,
                 image: 'https://img.usecurling.com/p/640/420?q=monitoring%20well',
+                category: 'general',
               },
               {
                 id: 'p2',
                 caption: 'Condição da bomba pneumática',
                 order: 1,
                 image: 'https://img.usecurling.com/p/640/420?q=water%20pump',
+                category: 'general',
               },
             ],
+            fieldPhoto: {
+              id: 'p_field_mock',
+              caption: 'Vista geral do campo de inspeção e poços de monitoramento',
+              image: 'https://img.usecurling.com/p/640/420?q=field%20site',
+            },
             syncStatus: 'synced',
             lastModified: Date.now(),
           }
@@ -254,6 +274,7 @@ export function RdosPage({ query }: { query: string }) {
         },
       ],
       photos: [],
+      fieldPhoto: undefined,
       syncStatus: 'pending_create',
       lastModified: Date.now(),
     }
@@ -477,6 +498,7 @@ function RdoFullPageEditor({
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewNotes, setReviewNotes] = useState(initialReport.reviewNotes || '')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const fieldPhotoInputRef = useRef<HTMLInputElement>(null)
 
   const { user, setHasUnsavedChanges } = useAuth()
   const { isOnline, syncNow } = useSync()
@@ -558,6 +580,55 @@ function RdoFullPageEditor({
     const updated = [...(formData.photos || [])]
     updated[index] = { ...updated[index], caption }
     handleFieldChange('photos', updated)
+  }
+
+  // Field/Inspection Photo Handlers
+  const handleSelectFieldPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (uploadEvent) => {
+      const dataUrl = uploadEvent.target?.result as string
+      const fieldPhotoObj = {
+        id: 'field_photo_' + Date.now(),
+        caption:
+          formData.fieldPhoto?.caption ||
+          `Fotografia do campo/local da inspeção — ${formData.projectName}`,
+        dataUrl,
+      }
+      setFormData((prev) => ({
+        ...prev,
+        fieldPhoto: fieldPhotoObj,
+      }))
+      setHasUnsavedChanges(true)
+      toast({
+        title: 'Foto do campo adicionada',
+        description: 'Imagem do local da inspeção salva localmente com sucesso.',
+      })
+    }
+    reader.readAsDataURL(file)
+    if (fieldPhotoInputRef.current) fieldPhotoInputRef.current.value = ''
+  }
+
+  const handleRemoveFieldPhoto = () => {
+    setFormData((prev) => ({
+      ...prev,
+      fieldPhoto: undefined,
+    }))
+    setHasUnsavedChanges(true)
+    toast({
+      title: 'Foto do campo removida',
+      description: 'A fotografia do local da inspeção foi excluída.',
+    })
+  }
+
+  const handleFieldPhotoCaptionChange = (caption: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      fieldPhoto: prev.fieldPhoto ? { ...prev.fieldPhoto, caption } : undefined,
+    }))
+    setHasUnsavedChanges(true)
   }
 
   // Save logic (Draft or Submitted)
@@ -935,9 +1006,9 @@ function RdoFullPageEditor({
         <SectionHeader
           icon={Wrench}
           title="2. Atividade e Descrição dos Serviços"
-          subtitle="Resumo e detalhamento técnico das tarefas realizadas em campo"
+          subtitle="Resumo, detalhamento técnico e fotografia do campo/local onde as inspeções foram realizadas"
         />
-        <div className="mt-5 space-y-4">
+        <div className="mt-5 space-y-5">
           <div>
             <label className="epa-label">Título da Atividade *</label>
             <Input
@@ -957,6 +1028,136 @@ function RdoFullPageEditor({
               disabled={isLocked}
               className="epa-textarea min-h-[140px]"
             />
+          </div>
+
+          {/* FOTO DO CAMPO / LOCAL DAS INSPEÇÕES */}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4.5 dark:border-emerald-900/60 dark:bg-emerald-950/15">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Camera className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
+                  <label className="text-xs font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-200">
+                    Foto do Campo / Local da Inspeção
+                  </label>
+                </div>
+                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  Fotografia do local onde foram realizadas as inspeções (câmera do dispositivo ou
+                  galeria).
+                </p>
+              </div>
+
+              {!isLocked && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={fieldPhotoInputRef}
+                    onChange={handleSelectFieldPhoto}
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fieldPhotoInputRef.current?.click()}
+                    className="w-full sm:w-fit text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[38px]"
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    {formData.fieldPhoto ? 'Reenviar / Substituir Foto' : 'Inserir Foto do Campo'}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {formData.fieldPhoto ? (
+              <div className="mt-4 grid gap-4 sm:grid-cols-12 items-start rounded-lg border border-slate-200 bg-white p-3.5 dark:border-slate-800 dark:bg-slate-900 shadow-sm">
+                <div className="relative sm:col-span-4 lg:col-span-3 aspect-video sm:aspect-square w-full overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800 border">
+                  {(() => {
+                    const fieldPhotoSrc =
+                      formData.fieldPhoto.dataUrl ||
+                      (formData.fieldPhoto.image?.startsWith('http')
+                        ? formData.fieldPhoto.image
+                        : formData.fieldPhoto.image
+                          ? `${pb.baseUrl}/api/files/report_photos/${formData.fieldPhoto.id}/${formData.fieldPhoto.image}`
+                          : 'https://img.usecurling.com/p/640/420?q=field%20site')
+                    return (
+                      <img
+                        src={fieldPhotoSrc}
+                        alt="Foto do campo / local da inspeção"
+                        className="h-full w-full object-cover"
+                      />
+                    )
+                  })()}
+                  {!isLocked && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveFieldPhoto}
+                      className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-slate-900/80 text-white hover:bg-red-600 transition"
+                      title="Excluir foto do campo"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="sm:col-span-8 lg:col-span-9 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
+                      Fotografia carregada com sucesso
+                    </span>
+                    {!isLocked && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveFieldPhoto}
+                        className="h-7 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40"
+                      >
+                        <Trash2 className="mr-1 h-3.5 w-3.5" />
+                        Excluir
+                      </Button>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+                      Legenda / Descrição do Local (opcional)
+                    </label>
+                    <Input
+                      value={formData.fieldPhoto.caption || ''}
+                      onChange={(e) => handleFieldPhotoCaptionChange(e.target.value)}
+                      disabled={isLocked}
+                      placeholder="Ex.: Área operacional do Lote A onde foram realizadas as inspeções visuais dos poços..."
+                      className="mt-1 text-xs"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Esta fotografia é associada diretamente à descrição técnica dos serviços e será
+                    incluída no relatório oficial.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => !isLocked && fieldPhotoInputRef.current?.click()}
+                className={cn(
+                  'mt-3.5 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-emerald-300/80 bg-white/70 p-5 text-center transition dark:border-emerald-800 dark:bg-slate-900/50',
+                  !isLocked &&
+                    'cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/70 hover:shadow-sm',
+                )}
+              >
+                <div className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  <Camera className="h-5 w-5" />
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Nenhuma foto do local/campo anexada
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  Clique aqui para selecionar uma foto da galeria ou capturar com a câmera do
+                  tablet/celular
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -1361,6 +1562,29 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
     photoCards = `<p style="border:1px solid #9ca3af;padding:12px;text-align:center;font-size:11px;grid-column:1/-1;">Sem registros fotográficos adicionados.</p>`
   }
 
+  // Field/Inspection Photo HTML for Section 2
+  let fieldPhotoHtml = ''
+  if (report.fieldPhoto && (report.fieldPhoto.dataUrl || report.fieldPhoto.image)) {
+    const fieldSrc =
+      report.fieldPhoto.dataUrl ||
+      (report.fieldPhoto.image?.startsWith('http')
+        ? report.fieldPhoto.image
+        : report.fieldPhoto.image
+          ? `${pb.baseUrl}/api/files/report_photos/${report.fieldPhoto.id}/${report.fieldPhoto.image}`
+          : 'https://img.usecurling.com/p/640/420?q=field%20site')
+    fieldPhotoHtml = `
+    <div style="border:1px solid #9ca3af;border-top:none;padding:8px;background:#f9fafb;break-inside:avoid;">
+      <b style="font-size:9px;text-transform:uppercase;color:#086B63;display:block;margin-bottom:6px;">Fotografia do Campo / Local das Inspeções:</b>
+      <div style="display:flex;gap:12px;align-items:flex-start;">
+        <img src="${fieldSrc}" style="width:240px;height:150px;object-fit:cover;border:1px solid #9ca3af;border-radius:4px;flex-shrink:0;" />
+        <div style="font-size:10px;color:#374151;line-height:1.4;">
+          <b>Legenda / Identificação do Local:</b><br />
+          ${report.fieldPhoto.caption || 'Registro fotográfico do local onde foram realizadas as inspeções.'}
+        </div>
+      </div>
+    </div>`
+  }
+
   const html = `<!doctype html>
   <html>
   <head>
@@ -1513,8 +1737,9 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
     </div>
 
     <div class="section-block">
-      <h3>Descrição da Atividade</h3>
+      <h3>Descrição da Atividade & Foto do Campo</h3>
       <div class="text-box">${report.activityDescription || '—'}</div>
+      ${fieldPhotoHtml}
     </div>
 
     <div class="section-block">
