@@ -37,7 +37,7 @@ export async function askEpaCopilot(
 }
 
 export function exportUrl(kind: 'rdo' | 'field', id: string) {
-  return `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/export/${kind}/${id}`
+  return `${import.meta.env.VITE_POCKETBASE_URL}/backend/v1/epa/export/${kind}/${id}`
 }
 
 export function authHeaders() {

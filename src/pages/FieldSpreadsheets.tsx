@@ -738,27 +738,16 @@ function FieldFullEditor({
         </div>
       </div>
 
-      {/* CABEÇALHO OFICIAL GRUPO EPA */}
+      {/* CABEÇALHO OFICIAL */}
       <section className="epa-card p-6 border-t-4 border-t-emerald-700">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 dark:border-slate-800">
           <div className="flex items-center gap-3">
-            <img src={logoEpa} alt="Grupo EPA" className="h-12 w-auto object-contain" />
-            <div>
-              <p className="text-xs font-bold tracking-wider text-emerald-800 dark:text-emerald-400">
-                GRUPO EPA
-              </p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-tight">
-                A Engenharia Protegendo o Ambiente
-              </p>
-            </div>
+            <img src={logoEpa} alt="EPA" className="h-12 w-auto object-contain" />
           </div>
           <div className="text-left md:text-right">
-            <h1 className="text-sm md:text-base font-extrabold tracking-wide text-slate-900 dark:text-white uppercase">
-              PLANILHA DIÁRIA DE CAMPO - UNIDADE DE BIORREMEDIAÇÃO - CONTRATO 5900089378
-            </h1>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+            <h1 className="text-base md:text-lg font-extrabold tracking-wide text-slate-900 dark:text-white">
               Controle Operacional Diário de Remediação
-            </p>
+            </h1>
           </div>
         </div>
 
@@ -1578,16 +1567,10 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
   </head>
   <body>
     <table style="width:100%;">
-      <!-- LOGO & CABEÇALHO OFICIAL GRUPO EPA -->
+      <!-- CABEÇALHO OFICIAL -->
       <tr>
-        <td colspan="5" style="background-color: #ffffff; border: 1px solid #777; padding: 12px; text-align: center;">
-          <div style="font-size: 20px; font-weight: bold; color: #086B63; letter-spacing: 2px;">GRUPO EPA</div>
-          <div style="font-size: 10px; font-weight: bold; color: #044741; letter-spacing: 1px; margin-top: 2px;">A Engenharia Protegendo o Ambiente</div>
-        </td>
-      </tr>
-      <tr>
-        <td colspan="5" class="header-title" style="padding: 9px; font-size: 12px;">
-          PLANILHA DIÁRIA DE CAMPO - UNIDADE DE BIORREMEDIAÇÃO - CONTRATO 5900089378
+        <td colspan="5" class="header-title" style="padding: 12px; font-size: 14px;">
+          Controle Operacional Diário de Remediação
         </td>
       </tr>
 

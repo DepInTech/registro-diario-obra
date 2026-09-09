@@ -1,6 +1,6 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-routerAdd('GET', '/api/epa/export/field/{id}', (c) => {
+routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
   const auth = c.get('authRecord')
   if (!auth) {
     return c.json(401, { error: 'Não autenticado' })
@@ -73,16 +73,10 @@ routerAdd('GET', '/api/epa/export/field/{id}', (c) => {
   </head>
   <body>
     <table style="width:100%;">
-      <!-- LOGO & CABEÇALHO OFICIAL GRUPO EPA -->
+      <!-- CABEÇALHO OFICIAL -->
       <tr>
-        <td colspan="5" style="background-color: #ffffff; border: 1px solid #777; padding: 12px; text-align: center;">
-          <div style="font-size: 20px; font-weight: bold; color: #086B63; letter-spacing: 2px;">GRUPO EPA</div>
-          <div style="font-size: 10px; font-weight: bold; color: #044741; letter-spacing: 1px; margin-top: 2px;">A Engenharia Protegendo o Ambiente</div>
-        </td>
-      </tr>
-      <tr>
-        <td colspan="5" class="header-title" style="padding: 9px; font-size: 12px;">
-          PLANILHA DIÁRIA DE CAMPO - UNIDADE DE BIORREMEDIAÇÃO - CONTRATO 5900089378
+        <td colspan="5" class="header-title" style="padding: 12px; font-size: 14px;">
+          Controle Operacional Diário de Remediação
         </td>
       </tr>
 
