@@ -7,12 +7,13 @@ import {
   Loader2,
   AlertCircle,
   ShieldCheck,
-  Cpu,
   Leaf,
-  Users,
+  BarChart3,
+  Users2,
   Sun,
   Moon,
   Info,
+  ArrowRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,13 +21,16 @@ import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { logoEpa } from '@/components/EpaLogo'
 
+// Imagem estável de alta resolução: Lago límpido cercado por densa floresta e luz solar suave ao amanhecer
+const NATURE_BG = 'https://img.usecurling.com/p/1600/1200?q=lake+forest+sunrise&color=008F68'
+
 export function LoginPage() {
   const [identity, setIdentity] = useState('annik_almeida@grupoepa.com.br')
   const [password, setPassword] = useState('Skip@Pass')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [rememberMe, setRememberMe] = useState(true)
+  const [rememberMe, setRememberMe] = useState(false)
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState<string | null>(null)
   const { login } = useAuth()
   const { theme, toggleTheme } = useTheme()
@@ -69,175 +73,189 @@ export function LoginPage() {
 
   return (
     <div className="relative min-h-screen w-full flex flex-col lg:flex-row bg-[#F7FAF9] dark:bg-slate-950 text-[#17324D] dark:text-slate-100 selection:bg-[#008F68] selection:text-white font-sans antialiased overflow-x-hidden">
-      {/* Botão de alternância de tema no topo à direita */}
-      <div className="absolute top-4 right-4 z-30">
+      {/* Botão de alternância de tema discreto no topo */}
+      <div className="absolute top-4 right-4 z-40">
         <Button
           variant="outline"
           size="sm"
           onClick={toggleTheme}
           aria-label={theme === 'dark' ? 'Alternar para Modo Claro' : 'Alternar para Modo Escuro'}
-          className="h-9 px-3 rounded-full border-slate-200/80 bg-white/80 text-xs font-medium text-[#17324D] shadow-sm backdrop-blur-md transition-all hover:bg-white hover:text-[#008F68] hover:border-[#008F68]/30 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:bg-slate-900 dark:hover:text-emerald-400"
+          className="h-8 px-2.5 rounded-full border-slate-200/80 bg-white/80 text-[11px] font-medium text-[#17324D] shadow-sm backdrop-blur-md transition-all hover:bg-white hover:text-[#008F68] dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:bg-slate-900 dark:hover:text-emerald-400"
         >
           {theme === 'dark' ? (
             <span className="flex items-center gap-1.5">
               <Sun className="h-3.5 w-3.5 text-amber-400" />
-              <span>Modo Claro</span>
+              <span className="hidden sm:inline">Modo Claro</span>
             </span>
           ) : (
             <span className="flex items-center gap-1.5">
               <Moon className="h-3.5 w-3.5 text-slate-600" />
-              <span>Modo Escuro</span>
+              <span className="hidden sm:inline">Modo Escuro</span>
             </span>
           )}
         </Button>
       </div>
 
       {/* ========================================================= */}
-      {/* LADO ESQUERDO (~45%): Área Institucional EPA              */}
+      {/* LADO ESQUERDO (~46%): Natureza, Logo EPA e Pilares EPA   */}
       {/* ========================================================= */}
-      <aside className="relative flex flex-col justify-between w-full lg:w-[45%] lg:min-h-screen p-6 sm:p-10 lg:p-12 xl:p-14 overflow-hidden bg-[#063B4A] text-white">
-        {/* Imagem de fundo temática sustentabilidade/natureza com sobreposição verde/azul escura */}
+      <aside className="relative flex flex-col justify-between w-full lg:w-[46%] xl:w-[47%] min-h-[460px] lg:min-h-screen p-8 sm:p-12 lg:p-14 xl:p-16 overflow-hidden text-white shrink-0">
+        {/* Imagem de Fundo Realística de Natureza (Lago, Floresta, Amanhecer) */}
         <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-1000 scale-105 pointer-events-none opacity-25 mix-blend-overlay"
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat transition-transform duration-1000 scale-[1.02]"
           style={{
-            backgroundImage: `url('https://img.usecurling.com/p/1600/1200?q=forest+water+drone&color=063B4A')`,
+            backgroundImage: `url('${NATURE_BG}')`,
           }}
           aria-hidden="true"
         />
 
-        {/* Gradientes de sobreposição para garantir legibilidade perfeita */}
+        {/* Leve overlay de teal/verde para contraste impecável preservando a vivacidade da foto */}
         <div
-          className="absolute inset-0 bg-gradient-to-br from-[#063B4A]/95 via-[#005B4F]/90 to-[#063B4A]/95 pointer-events-none"
+          className="absolute inset-0 bg-gradient-to-b from-[#063B4A]/40 via-transparent to-[#063B4A]/70 pointer-events-none"
           aria-hidden="true"
         />
         <div
-          className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,168,120,0.18),transparent_50%)] pointer-events-none"
-          aria-hidden="true"
-        />
-        <div
-          className="absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-[#008F68]/20 blur-3xl pointer-events-none"
+          className="absolute inset-0 bg-gradient-to-r from-black/20 via-transparent to-black/15 pointer-events-none"
           aria-hidden="true"
         />
 
         {/* Conteúdo Institucional */}
-        <div className="relative z-10 flex flex-col h-full justify-between gap-8 lg:gap-12">
-          {/* Topo: Logo EPA Oficial */}
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl bg-white/95 px-3.5 py-2 shadow-md backdrop-blur-sm transition-transform hover:scale-[1.02]">
+        <div className="relative z-10 flex flex-col h-full justify-between gap-10">
+          {/* Topo Esquerdo: Logo Oficial EPA com fundo branco suave e nítido */}
+          <div className="pt-2">
+            <div className="inline-flex items-center rounded-2xl bg-white/95 px-5 py-3 shadow-[0_4px_20px_rgba(0,0,0,0.12)] backdrop-blur-md transition-transform hover:scale-[1.02]">
               <img
                 src={logoEpa}
                 alt="EPA — Soluções Ambientais"
-                className="h-10 sm:h-11 w-auto max-w-[190px] object-contain"
+                className="h-10 sm:h-12 w-auto max-w-[210px] object-contain"
               />
             </div>
-            <div className="hidden sm:block border-l border-white/20 pl-3">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-emerald-300">
-                Soluções Ambientais
-              </span>
-              <span className="block text-[11px] text-white/70">
-                Gestão Integrada de Campo & RDO
-              </span>
-            </div>
           </div>
 
-          {/* Centro: Título de impacto e descrições */}
-          <div className="my-auto py-4 sm:py-6 max-w-xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200 backdrop-blur-sm mb-4">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Plataforma Operacional de Campo
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl xl:text-[2.65rem] font-bold tracking-tight text-white leading-tight sm:leading-snug">
-              Tecnologia e compromisso com um{' '}
-              <span className="bg-gradient-to-r from-[#00A878] to-emerald-300 bg-clip-text text-transparent underline decoration-[#00A878]/50 decoration-wavy decoration-1 underline-offset-4">
-                futuro sustentável
+          {/* Centro: Título em destaque e descrição operacional */}
+          <div className="max-w-xl my-auto py-6 lg:py-8">
+            <h1 className="text-3xl sm:text-4xl lg:text-[40px] xl:text-[44px] font-semibold text-white tracking-tight leading-[1.2] drop-shadow-[0_2px_12px_rgba(0,0,0,0.4)]">
+              Tecnologia e compromisso{' '}
+              <span className="block mt-1">
+                com um{' '}
+                <span className="text-[#34D399] font-bold drop-shadow-[0_2px_10px_rgba(0,0,0,0.3)]">
+                  futuro sustentável.
+                </span>
               </span>
-              .
             </h1>
 
-            <div className="mt-4 sm:mt-5 space-y-2 text-sm sm:text-base text-white/85 leading-relaxed">
-              <p className="font-medium text-white/95">
-                Sistema de Gestão de RDO e Planilha de Campo
+            <div className="mt-6 space-y-1 text-sm sm:text-base text-white/95 drop-shadow-[0_1px_4px_rgba(0,0,0,0.4)] font-normal leading-relaxed">
+              <p className="font-medium text-white">
+                Sistema de Gestão de RDO e Planilha de Campo.
               </p>
-              <p className="text-white/75 text-xs sm:text-sm">
-                Mais controle, agilidade e segurança para suas operações ambientais.
+              <p className="text-white/85 text-xs sm:text-sm">
+                Mais controle, agilidade e segurança para suas operações.
               </p>
             </div>
           </div>
 
-          {/* Rodapé institucional: Pequenos blocos com ícones simples */}
-          <div className="pt-2">
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
-              <div className="group rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm transition-all hover:bg-white/10 hover:border-emerald-400/30">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#008F68]/30 text-emerald-300 group-hover:scale-105 transition-transform">
-                    <ShieldCheck className="h-4 w-4" />
-                  </div>
-                  <span className="text-xs font-semibold text-white/95 leading-tight">
-                    Conformidade ambiental
-                  </span>
+          {/* Base: 4 Pilares Institucionais em linha com ícones delineados e divisórias translúcidas */}
+          <div className="pb-2 pt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 items-start gap-3 sm:gap-0 sm:divide-x sm:divide-white/20">
+              {/* Item 1 */}
+              <div className="flex flex-col items-center text-center px-2 py-1">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-white/10 backdrop-blur-sm text-white shadow-sm mb-2.5 transition-transform hover:scale-110">
+                  <ShieldCheck className="h-5 w-5 stroke-[1.75]" />
                 </div>
+                <span className="text-[11px] sm:text-xs font-medium text-white/95 leading-tight tracking-tight">
+                  Conformidade
+                  <br />
+                  ambiental
+                </span>
               </div>
 
-              <div className="group rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm transition-all hover:bg-white/10 hover:border-emerald-400/30">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#008F68]/30 text-emerald-300 group-hover:scale-105 transition-transform">
-                    <Cpu className="h-4 w-4" />
-                  </div>
-                  <span className="text-xs font-semibold text-white/95 leading-tight">
-                    Gestão inteligente
-                  </span>
+              {/* Item 2 */}
+              <div className="flex flex-col items-center text-center px-2 py-1">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-white/10 backdrop-blur-sm text-white shadow-sm mb-2.5 transition-transform hover:scale-110">
+                  <Leaf className="h-5 w-5 stroke-[1.75]" />
                 </div>
+                <span className="text-[11px] sm:text-xs font-medium text-white/95 leading-tight tracking-tight">
+                  Gestão
+                  <br />
+                  inteligente
+                </span>
               </div>
 
-              <div className="group rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm transition-all hover:bg-white/10 hover:border-emerald-400/30">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#008F68]/30 text-emerald-300 group-hover:scale-105 transition-transform">
-                    <Leaf className="h-4 w-4" />
-                  </div>
-                  <span className="text-xs font-semibold text-white/95 leading-tight">
-                    Resultados sustentáveis
-                  </span>
+              {/* Item 3 */}
+              <div className="flex flex-col items-center text-center px-2 py-1">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-white/10 backdrop-blur-sm text-white shadow-sm mb-2.5 transition-transform hover:scale-110">
+                  <BarChart3 className="h-5 w-5 stroke-[1.75]" />
                 </div>
+                <span className="text-[11px] sm:text-xs font-medium text-white/95 leading-tight tracking-tight">
+                  Resultados
+                  <br />
+                  sustentáveis
+                </span>
               </div>
 
-              <div className="group rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm transition-all hover:bg-white/10 hover:border-emerald-400/30">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#008F68]/30 text-emerald-300 group-hover:scale-105 transition-transform">
-                    <Users className="h-4 w-4" />
-                  </div>
-                  <span className="text-xs font-semibold text-white/95 leading-tight">
-                    Juntos por um amanhã melhor
-                  </span>
+              {/* Item 4 */}
+              <div className="flex flex-col items-center text-center px-2 py-1">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-white/10 backdrop-blur-sm text-white shadow-sm mb-2.5 transition-transform hover:scale-110">
+                  <Users2 className="h-5 w-5 stroke-[1.75]" />
                 </div>
+                <span className="text-[11px] sm:text-xs font-medium text-white/95 leading-tight tracking-tight">
+                  Juntos por
+                  <br />
+                  um amanhã melhor
+                </span>
               </div>
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-white/50">
-              <span>Operação Offline / PWA Habilitado</span>
-              <span>EPA &copy; {new Date().getFullYear()}</span>
             </div>
           </div>
         </div>
       </aside>
 
       {/* ========================================================= */}
-      {/* LADO DIREITO (~55%): Card de Login Centralizado           */}
+      {/* LADO DIREITO (~54%): Fundo claro decorado e Card Branco  */}
       {/* ========================================================= */}
-      <main className="flex-1 flex flex-col justify-center items-center p-4 sm:p-8 lg:p-12 min-h-screen bg-[#F7FAF9] dark:bg-slate-950">
-        <div className="w-full max-w-[440px] transition-all duration-300 animate-in fade-in zoom-in-[0.98]">
-          {/* Card de Login Premium / Corporativo */}
-          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/80 bg-white p-6 sm:p-9 shadow-[0_10px_35px_-10px_rgba(6,59,74,0.08)] dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_10px_35px_-10px_rgba(0,0,0,0.5)] transition-all">
+      <main className="relative flex-1 flex flex-col justify-between items-center p-6 sm:p-10 lg:p-12 min-h-screen bg-[#F7FAF9] dark:bg-slate-950 overflow-hidden">
+        {/* Blobs orgânicos sutis em verde conforme referência visual */}
+        <div
+          className="pointer-events-none absolute -top-24 -right-24 h-[420px] w-[420px] rounded-full bg-gradient-to-br from-[#00A878]/12 via-[#008F68]/8 to-transparent blur-3xl"
+          aria-hidden="true"
+        />
+        <div
+          className="pointer-events-none absolute top-12 right-0 h-96 w-96 opacity-60 dark:opacity-20"
+          aria-hidden="true"
+        >
+          <svg
+            viewBox="0 0 400 400"
+            className="w-full h-full text-emerald-600/10 fill-current"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M320,60 C380,120 410,220 370,290 C330,360 220,400 140,370 C60,340 10,240 30,160 C50,80 140,40 220,30 C260,25 290,30 320,60 Z"
+              opacity="0.6"
+            />
+          </svg>
+        </div>
+
+        <div
+          className="pointer-events-none absolute -bottom-20 -left-20 h-[380px] w-[380px] rounded-full bg-gradient-to-tr from-[#008F68]/10 via-[#063B4A]/6 to-transparent blur-3xl"
+          aria-hidden="true"
+        />
+
+        {/* Espaçador flexível no topo */}
+        <div className="w-full" />
+
+        {/* Card de Login Centralizado e Fiel à Imagem de Referência */}
+        <div className="relative z-10 w-full max-w-[430px] sm:max-w-[450px] my-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-7 sm:p-10 shadow-[0_15px_45px_-10px_rgba(6,59,74,0.07)] dark:border-slate-800 dark:bg-slate-900 dark:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.6)]">
             {/* Topo do Card: Logo Oficial EPA Centralizada */}
-            <div className="text-center flex flex-col items-center">
-              <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-[#F7FAF9] border border-slate-100 shadow-sm dark:bg-slate-950 dark:border-slate-800 mb-4 transition-transform hover:scale-105">
+            <div className="flex flex-col items-center text-center">
+              <div className="mb-6 flex items-center justify-center">
                 <img
                   src={logoEpa}
                   alt="EPA — Soluções Ambientais"
-                  className="h-12 sm:h-14 w-auto object-contain"
+                  className="h-14 sm:h-16 w-auto max-w-[210px] object-contain"
                 />
               </div>
-              <h2 className="text-2xl font-bold tracking-tight text-[#17324D] dark:text-white">
+
+              <h2 className="text-2xl sm:text-[26px] font-bold text-[#17324D] dark:text-white tracking-tight">
                 Bem-vindo!
               </h2>
               <p className="mt-1 text-sm text-[#64748B] dark:text-slate-400">
@@ -245,29 +263,29 @@ export function LoginPage() {
               </p>
             </div>
 
-            {/* Mensagem de Erro */}
+            {/* Mensagem de Erro com ícone */}
             {error && (
-              <div className="mt-5 flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-50/80 p-3.5 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-950/40 dark:text-red-300 animate-in fade-in duration-200">
-                <AlertCircle className="h-4 w-4 shrink-0 text-red-500 dark:text-red-400 mt-0.5" />
+              <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-red-500/25 bg-red-50/90 p-3 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-950/40 dark:text-red-300 animate-in fade-in">
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
                 <div className="space-y-0.5">
-                  <p className="font-semibold">Falha na autenticação</p>
-                  <p className="leading-relaxed">{error}</p>
+                  <p className="font-semibold">Erro ao entrar</p>
+                  <p className="leading-snug">{error}</p>
                 </div>
               </div>
             )}
 
-            {/* Mensagem do Esqueceu sua senha */}
+            {/* Mensagem de Instrução de Recuperação */}
             {forgotPasswordMessage && (
-              <div className="mt-5 flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-50/80 p-3.5 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-300 animate-in fade-in duration-200">
-                <Info className="h-4 w-4 shrink-0 text-[#008F68] dark:text-emerald-400 mt-0.5" />
+              <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-50/90 p-3 text-xs text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950/40 dark:text-emerald-300 animate-in fade-in">
+                <Info className="h-4 w-4 shrink-0 text-[#008F68] mt-0.5" />
                 <div className="space-y-0.5">
-                  <p className="font-semibold">Recuperação de Acesso</p>
-                  <p className="leading-relaxed">{forgotPasswordMessage}</p>
+                  <p className="font-semibold">Recuperação de Senha</p>
+                  <p className="leading-snug">{forgotPasswordMessage}</p>
                 </div>
               </div>
             )}
 
-            {/* Formulário de Login */}
+            {/* Formulário de Autenticação */}
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {/* Campo Usuário ou E-mail */}
               <div className="space-y-1.5 text-left">
@@ -278,7 +296,7 @@ export function LoginPage() {
                   Usuário ou E-mail
                 </label>
                 <div className="relative group">
-                  <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#008F68] transition-colors">
+                  <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#008F68] dark:group-focus-within:text-emerald-400 transition-colors">
                     <User className="h-4 w-4" />
                   </div>
                   <Input
@@ -290,23 +308,21 @@ export function LoginPage() {
                     autoComplete="username"
                     required
                     disabled={loading}
-                    className="h-11 rounded-xl border-slate-200/90 bg-[#F7FAF9]/60 pl-10 text-sm text-[#17324D] placeholder:text-slate-400 shadow-none transition-all hover:border-slate-300 focus-visible:border-[#008F68] focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-[#008F68]/15 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:border-emerald-500 dark:focus-visible:ring-emerald-500/20"
+                    className="h-11 rounded-xl border-slate-200 bg-white pl-10 text-sm text-[#17324D] placeholder:text-slate-400 transition-all hover:border-slate-300 focus-visible:border-[#008F68] focus-visible:ring-2 focus-visible:ring-[#008F68]/15 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:border-emerald-500 dark:focus-visible:ring-emerald-500/20 shadow-none"
                   />
                 </div>
               </div>
 
               {/* Campo Senha */}
               <div className="space-y-1.5 text-left">
-                <div className="flex items-center justify-between">
-                  <label
-                    htmlFor="password-input"
-                    className="block text-xs font-semibold text-[#17324D] dark:text-slate-300"
-                  >
-                    Senha
-                  </label>
-                </div>
+                <label
+                  htmlFor="password-input"
+                  className="block text-xs font-semibold text-[#17324D] dark:text-slate-300"
+                >
+                  Senha
+                </label>
                 <div className="relative group">
-                  <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#008F68] transition-colors">
+                  <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#008F68] dark:group-focus-within:text-emerald-400 transition-colors">
                     <Lock className="h-4 w-4" />
                   </div>
                   <Input
@@ -318,13 +334,13 @@ export function LoginPage() {
                     autoComplete="current-password"
                     required
                     disabled={loading}
-                    className="h-11 rounded-xl border-slate-200/90 bg-[#F7FAF9]/60 pl-10 pr-10 text-sm text-[#17324D] placeholder:text-slate-400 shadow-none transition-all hover:border-slate-300 focus-visible:border-[#008F68] focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-[#008F68]/15 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:border-emerald-500 dark:focus-visible:ring-emerald-500/20"
+                    className="h-11 rounded-xl border-slate-200 bg-white pl-10 pr-10 text-sm text-[#17324D] placeholder:text-slate-400 transition-all hover:border-slate-300 focus-visible:border-[#008F68] focus-visible:ring-2 focus-visible:ring-[#008F68]/15 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus-visible:border-emerald-500 dark:focus-visible:ring-emerald-500/20 shadow-none"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
                     tabIndex={-1}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#008F68] dark:hover:text-emerald-400 transition-colors p-1"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#008F68] dark:hover:text-emerald-400 transition-colors p-1 rounded-md"
                     aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -332,8 +348,8 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Opções extras: Lembrar-me e Esqueceu sua senha? */}
-              <div className="flex items-center justify-between pt-1 text-xs">
+              {/* Opções: Lembrar-me e Esqueceu sua senha? */}
+              <div className="flex items-center justify-between pt-0.5 text-xs">
                 <label className="flex items-center gap-2 cursor-pointer select-none text-[#64748B] dark:text-slate-400 hover:text-[#17324D] dark:hover:text-slate-200">
                   <input
                     type="checkbox"
@@ -353,11 +369,11 @@ export function LoginPage() {
                 </button>
               </div>
 
-              {/* Botão de Login Redesenhado */}
+              {/* Botão Entrar com seta */}
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#008F68] font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#00A878] active:bg-[#005B4F] active:scale-[0.99] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+                className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#008F68] text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:bg-[#00A878] active:bg-[#005B4F] active:scale-[0.99] disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">
@@ -365,51 +381,65 @@ export function LoginPage() {
                     Entrando...
                   </span>
                 ) : (
-                  <span>Entrar &rarr;</span>
+                  <span className="flex items-center gap-2">
+                    <span>Entrar</span>
+                    <ArrowRight className="h-4 w-4 stroke-[2.5]" />
+                  </span>
                 )}
               </button>
             </form>
 
-            {/* Acessos Rápidos para demonstração / testes em campo */}
-            <div className="mt-7 border-t border-slate-100 dark:border-slate-800/80 pt-5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#64748B] dark:text-slate-500 text-center mb-2.5">
-                Acessos Rápidos (Demonstração)
-              </p>
-              <div className="grid grid-cols-3 gap-2 text-xs">
+            {/* Separador EPA sutil e Acessos Rápidos de Demonstração */}
+            <div className="mt-7">
+              <div className="relative flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200/80 dark:border-slate-800" />
+                </div>
+                <div className="relative bg-white px-3 text-[11px] font-semibold tracking-wider text-slate-400 dark:bg-slate-900 dark:text-slate-500 uppercase">
+                  EPA
+                </div>
+              </div>
+
+              {/* Botões de Acesso Rápido estilizados discretamente */}
+              <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => handleQuickFill('annik_almeida@grupoepa.com.br')}
-                  className="rounded-xl border border-slate-200/80 bg-[#F7FAF9] p-2 text-center transition-all hover:border-[#008F68] hover:bg-emerald-50/50 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-emerald-600/50 dark:hover:bg-slate-800"
+                  className="group rounded-xl border border-slate-200/90 bg-[#F7FAF9]/70 py-2 px-1.5 text-center transition-all hover:border-[#008F68] hover:bg-emerald-50/50 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-emerald-600/50 dark:hover:bg-slate-800"
                 >
-                  <p className="font-semibold text-[#008F68] dark:text-emerald-400">Admin</p>
+                  <p className="font-semibold text-[#008F68] dark:text-emerald-400 text-xs">
+                    Admin
+                  </p>
                   <p className="text-[10px] text-[#64748B] dark:text-slate-400 truncate">Annik</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickFill('tecnico@grupoepa.com.br')}
-                  className="rounded-xl border border-slate-200/80 bg-[#F7FAF9] p-2 text-center transition-all hover:border-blue-500 hover:bg-blue-50/50 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-blue-600/50 dark:hover:bg-slate-800"
+                  className="group rounded-xl border border-slate-200/90 bg-[#F7FAF9]/70 py-2 px-1.5 text-center transition-all hover:border-blue-500 hover:bg-blue-50/50 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-blue-600/50 dark:hover:bg-slate-800"
                 >
-                  <p className="font-semibold text-blue-600 dark:text-blue-400">Técnico</p>
+                  <p className="font-semibold text-blue-600 dark:text-blue-400 text-xs">Técnico</p>
                   <p className="text-[10px] text-[#64748B] dark:text-slate-400 truncate">Marina</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickFill('operador@grupoepa.com.br')}
-                  className="rounded-xl border border-slate-200/80 bg-[#F7FAF9] p-2 text-center transition-all hover:border-teal-500 hover:bg-teal-50/50 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-teal-600/50 dark:hover:bg-slate-800"
+                  className="group rounded-xl border border-slate-200/90 bg-[#F7FAF9]/70 py-2 px-1.5 text-center transition-all hover:border-teal-500 hover:bg-teal-50/50 hover:shadow-sm dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-teal-600/50 dark:hover:bg-slate-800"
                 >
-                  <p className="font-semibold text-teal-600 dark:text-teal-400">Operador</p>
+                  <p className="font-semibold text-teal-600 dark:text-teal-400 text-xs">Operador</p>
                   <p className="text-[10px] text-[#64748B] dark:text-slate-400 truncate">Carlos</p>
                 </button>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Rodapé sutil de suporte */}
-          <div className="mt-5 text-center text-[11px] text-[#64748B] dark:text-slate-500 space-y-0.5">
-            <p>Grupo EPA &copy; {new Date().getFullYear()} · Sistema RDO & Planilha de Campo</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-600">
-              Ambiente seguro com criptografia de ponta a ponta
+        {/* Rodapé discreto no canto inferior direito conforme imagem de referência */}
+        <div className="w-full pt-6 pb-1 flex justify-end items-center">
+          <div className="text-right text-[11px] text-[#64748B]/80 dark:text-slate-500 space-y-0.5 select-none">
+            <p className="font-medium text-slate-500 dark:text-slate-400">
+              EPA – Soluções Ambientais
             </p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-600">Versão 1.0.0</p>
           </div>
         </div>
       </main>
