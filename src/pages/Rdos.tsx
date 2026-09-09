@@ -209,7 +209,7 @@ export function RdosPage({ query }: { query: string }) {
             ],
             fieldPhoto: {
               id: 'p_field_mock',
-              caption: 'Vista geral do campo de inspeção e poços de monitoramento',
+              caption: 'Figura 01 – Mapa de localização da área de interesse.',
               image: 'https://img.usecurling.com/p/640/420?q=field%20site',
             },
             syncStatus: 'synced',
@@ -593,8 +593,7 @@ function RdoFullPageEditor({
       const fieldPhotoObj = {
         id: 'field_photo_' + Date.now(),
         caption:
-          formData.fieldPhoto?.caption ||
-          `Fotografia do campo/local da inspeção — ${formData.projectName}`,
+          formData.fieldPhoto?.caption || 'Figura 01 – Mapa de localização da área de interesse.',
         dataUrl,
       }
       setFormData((prev) => ({
@@ -1001,163 +1000,175 @@ function RdoFullPageEditor({
         </div>
       </section>
 
-      {/* 2. ATIVIDADE E DESCRIÇÃO */}
+      {/* 2. ATIVIDADE E DESCRIÇÃO DOS SERVIÇOS (CONFORME MODELO OFICIAL EPA) */}
       <section className="epa-card p-6">
         <SectionHeader
           icon={Wrench}
           title="2. Atividade e Descrição dos Serviços"
-          subtitle="Resumo, detalhamento técnico e fotografia do campo/local onde as inspeções foram realizadas"
+          subtitle="Formatação idêntica ao modelo oficial EPA (faixas ATIVIDADE e DESCRIÇÃO DA ATIVIDADE com foto do campo/local centralizada)"
         />
-        <div className="mt-5 space-y-5">
-          <div>
-            <label className="epa-label">Título da Atividade *</label>
-            <Input
-              placeholder="Ex.: Tamponamento de poços de monitoramento ou Operação de Extração"
-              value={formData.activityTitle}
-              onChange={(e) => handleFieldChange('activityTitle', e.target.value)}
-              disabled={isLocked}
-              className="mt-1.5 font-medium"
-            />
-          </div>
-          <div>
-            <label className="epa-label">Descrição da Atividade</label>
-            <Textarea
-              placeholder="Descreva minuciosamente os serviços executados, maquinário, equipe, horários e procedimentos adotados..."
-              value={formData.activityDescription}
-              onChange={(e) => handleFieldChange('activityDescription', e.target.value)}
-              disabled={isLocked}
-              className="epa-textarea min-h-[140px]"
-            />
+
+        <div className="mt-6 space-y-6">
+          {/* FAIXA: ATIVIDADE */}
+          <div className="overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700 shadow-sm">
+            <div className="bg-slate-100 dark:bg-slate-800/90 px-4 py-2 text-center border-b border-slate-300 dark:border-slate-700">
+              <h3 className="text-xs font-bold tracking-wider text-slate-800 dark:text-slate-100 uppercase">
+                ATIVIDADE
+              </h3>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-900">
+              <Input
+                placeholder="Ex.: Tamponamento de poços de monitoramento ou Operação de Extração"
+                value={formData.activityTitle}
+                onChange={(e) => handleFieldChange('activityTitle', e.target.value)}
+                disabled={isLocked}
+                className="font-medium text-sm border-slate-300 dark:border-slate-700"
+              />
+            </div>
           </div>
 
-          {/* FOTO DO CAMPO / LOCAL DAS INSPEÇÕES */}
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4.5 dark:border-emerald-900/60 dark:bg-emerald-950/15">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {/* FAIXA: DESCRIÇÃO DA ATIVIDADE */}
+          <div className="overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700 shadow-sm">
+            <div className="bg-slate-100 dark:bg-slate-800/90 px-4 py-2 text-center border-b border-slate-300 dark:border-slate-700">
+              <h3 className="text-xs font-bold tracking-wider text-slate-800 dark:text-slate-100 uppercase">
+                DESCRIÇÃO DA ATIVIDADE
+              </h3>
+            </div>
+            <div className="p-4 bg-white dark:bg-slate-900 space-y-6">
               <div>
-                <div className="flex items-center gap-2">
-                  <Camera className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
-                  <label className="text-xs font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-200">
-                    Foto do Campo / Local da Inspeção
-                  </label>
-                </div>
-                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                  Fotografia do local onde foram realizadas as inspeções (câmera do dispositivo ou
-                  galeria).
-                </p>
+                <Textarea
+                  placeholder="Descreva minuciosamente os serviços executados, procedimentos e informações de campo..."
+                  value={formData.activityDescription}
+                  onChange={(e) => handleFieldChange('activityDescription', e.target.value)}
+                  disabled={isLocked}
+                  className="epa-textarea min-h-[120px] text-xs sm:text-sm"
+                />
               </div>
 
-              {!isLocked && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="file"
-                    ref={fieldPhotoInputRef}
-                    onChange={handleSelectFieldPhoto}
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fieldPhotoInputRef.current?.click()}
-                    className="w-full sm:w-fit text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[38px]"
-                  >
-                    <Upload className="mr-1.5 h-3.5 w-3.5" />
-                    {formData.fieldPhoto ? 'Reenviar / Substituir Foto' : 'Inserir Foto do Campo'}
-                  </Button>
-                </div>
-              )}
-            </div>
+              {/* FOTO DO CAMPO / LOCAL DA INSPEÇÃO (CENTRALIZADA COM LEGENDA ACIMA) */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Camera className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
+                      <span className="text-xs font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200">
+                        Foto do Campo / Local da Inspeção (Modelo Oficial)
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                      Exibida sob a descrição da atividade com legenda centralizada no topo da
+                      imagem.
+                    </p>
+                  </div>
 
-            {formData.fieldPhoto ? (
-              <div className="mt-4 grid gap-4 sm:grid-cols-12 items-start rounded-lg border border-slate-200 bg-white p-3.5 dark:border-slate-800 dark:bg-slate-900 shadow-sm">
-                <div className="relative sm:col-span-4 lg:col-span-3 aspect-video sm:aspect-square w-full overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800 border">
-                  {(() => {
-                    const fieldPhotoSrc =
-                      formData.fieldPhoto.dataUrl ||
-                      (formData.fieldPhoto.image?.startsWith('http')
-                        ? formData.fieldPhoto.image
-                        : formData.fieldPhoto.image
-                          ? `${pb.baseUrl}/api/files/report_photos/${formData.fieldPhoto.id}/${formData.fieldPhoto.image}`
-                          : 'https://img.usecurling.com/p/640/420?q=field%20site')
-                    return (
-                      <img
-                        src={fieldPhotoSrc}
-                        alt="Foto do campo / local da inspeção"
-                        className="h-full w-full object-cover"
-                      />
-                    )
-                  })()}
                   {!isLocked && (
-                    <button
-                      type="button"
-                      onClick={handleRemoveFieldPhoto}
-                      className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-slate-900/80 text-white hover:bg-red-600 transition"
-                      title="Excluir foto do campo"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        ref={fieldPhotoInputRef}
+                        onChange={handleSelectFieldPhoto}
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fieldPhotoInputRef.current?.click()}
+                        className="w-full sm:w-fit text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[38px]"
+                      >
+                        <Upload className="mr-1.5 h-3.5 w-3.5" />
+                        {formData.fieldPhoto ? 'Substituir Foto do Campo' : 'Inserir Foto do Campo'}
+                      </Button>
+                    </div>
                   )}
                 </div>
 
-                <div className="sm:col-span-8 lg:col-span-9 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-emerald-800 dark:text-emerald-300">
-                      Fotografia carregada com sucesso
-                    </span>
-                    {!isLocked && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleRemoveFieldPhoto}
-                        className="h-7 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40"
-                      >
-                        <Trash2 className="mr-1 h-3.5 w-3.5" />
-                        Excluir
-                      </Button>
+                {formData.fieldPhoto ? (
+                  <div className="mt-4 flex flex-col items-center">
+                    {/* Legenda centralizada no topo exatamente como no modelo: Figura 01 – Mapa de localização da área de interesse. */}
+                    <div className="w-full max-w-2xl mb-3 text-center">
+                      <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block mb-1">
+                        Legenda da Imagem (Centralizada no topo da foto)
+                      </label>
+                      <Input
+                        value={formData.fieldPhoto.caption || ''}
+                        onChange={(e) => handleFieldPhotoCaptionChange(e.target.value)}
+                        disabled={isLocked}
+                        placeholder="Ex.: Figura 01 – Mapa de localização da área de interesse."
+                        className="text-center font-bold text-xs sm:text-sm h-9 border-slate-300 dark:border-slate-700"
+                      />
+                    </div>
+
+                    {/* Imagem do Campo */}
+                    <div className="relative w-full max-w-2xl overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                      {(() => {
+                        const fieldPhotoSrc =
+                          formData.fieldPhoto.dataUrl ||
+                          (formData.fieldPhoto.image?.startsWith('http')
+                            ? formData.fieldPhoto.image
+                            : formData.fieldPhoto.image
+                              ? `${pb.baseUrl}/api/files/report_photos/${formData.fieldPhoto.id}/${formData.fieldPhoto.image}`
+                              : 'https://img.usecurling.com/p/640/420?q=field%20site')
+                        return (
+                          <img
+                            src={fieldPhotoSrc}
+                            alt={formData.fieldPhoto.caption || 'Foto do campo / local da inspeção'}
+                            className="w-full h-auto max-h-[500px] object-contain mx-auto block"
+                          />
+                        )
+                      })()}
+                      {!isLocked && (
+                        <div className="absolute right-2 top-2 flex items-center gap-1.5 bg-slate-950/70 backdrop-blur p-1 rounded-md shadow">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => fieldPhotoInputRef.current?.click()}
+                            className="h-7 px-2 text-[11px] text-white hover:bg-white/20"
+                          >
+                            <Upload className="mr-1 h-3 w-3" />
+                            Trocar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleRemoveFieldPhoto}
+                            className="h-7 px-2 text-[11px] text-red-300 hover:bg-red-500/30 hover:text-red-100"
+                          >
+                            <Trash2 className="mr-1 h-3 w-3" />
+                            Excluir
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => !isLocked && fieldPhotoInputRef.current?.click()}
+                    className={cn(
+                      'mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white/70 p-6 text-center transition dark:border-slate-700 dark:bg-slate-900/50',
+                      !isLocked &&
+                        'cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/70 hover:shadow-sm',
                     )}
+                  >
+                    <div className="grid h-11 w-11 place-items-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                      <Camera className="h-5 w-5" />
+                    </div>
+                    <p className="mt-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Nenhuma foto do local/campo inserida
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 max-w-sm">
+                      Clique aqui para adicionar a fotografia da área de interesse (câmera ou
+                      galeria). Conforme o modelo oficial, ela será exibida centralizada sob a
+                      descrição.
+                    </p>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
-                      Legenda / Descrição do Local (opcional)
-                    </label>
-                    <Input
-                      value={formData.fieldPhoto.caption || ''}
-                      onChange={(e) => handleFieldPhotoCaptionChange(e.target.value)}
-                      disabled={isLocked}
-                      placeholder="Ex.: Área operacional do Lote A onde foram realizadas as inspeções visuais dos poços..."
-                      className="mt-1 text-xs"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400">
-                    Esta fotografia é associada diretamente à descrição técnica dos serviços e será
-                    incluída no relatório oficial.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div
-                onClick={() => !isLocked && fieldPhotoInputRef.current?.click()}
-                className={cn(
-                  'mt-3.5 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-emerald-300/80 bg-white/70 p-5 text-center transition dark:border-emerald-800 dark:bg-slate-900/50',
-                  !isLocked &&
-                    'cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/70 hover:shadow-sm',
                 )}
-              >
-                <div className="grid h-10 w-10 place-items-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                  <Camera className="h-5 w-5" />
-                </div>
-                <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Nenhuma foto do local/campo anexada
-                </p>
-                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                  Clique aqui para selecionar uma foto da galeria ou capturar com a câmera do
-                  tablet/celular
-                </p>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </section>
@@ -1562,7 +1573,7 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
     photoCards = `<p style="border:1px solid #9ca3af;padding:12px;text-align:center;font-size:11px;grid-column:1/-1;">Sem registros fotográficos adicionados.</p>`
   }
 
-  // Field/Inspection Photo HTML for Section 2
+  // Field/Inspection Photo HTML for Section 2 (exact official EPA PDF model: centered caption on top, centered full-width image below)
   let fieldPhotoHtml = ''
   if (report.fieldPhoto && (report.fieldPhoto.dataUrl || report.fieldPhoto.image)) {
     const fieldSrc =
@@ -1572,15 +1583,14 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
         : report.fieldPhoto.image
           ? `${pb.baseUrl}/api/files/report_photos/${report.fieldPhoto.id}/${report.fieldPhoto.image}`
           : 'https://img.usecurling.com/p/640/420?q=field%20site')
+    const fieldCaption =
+      report.fieldPhoto.caption || 'Figura 01 – Mapa de localização da área de interesse.'
+
     fieldPhotoHtml = `
-    <div style="border:1px solid #9ca3af;border-top:none;padding:8px;background:#f9fafb;break-inside:avoid;">
-      <b style="font-size:9px;text-transform:uppercase;color:#086B63;display:block;margin-bottom:6px;">Fotografia do Campo / Local das Inspeções:</b>
-      <div style="display:flex;gap:12px;align-items:flex-start;">
-        <img src="${fieldSrc}" style="width:240px;height:150px;object-fit:cover;border:1px solid #9ca3af;border-radius:4px;flex-shrink:0;" />
-        <div style="font-size:10px;color:#374151;line-height:1.4;">
-          <b>Legenda / Identificação do Local:</b><br />
-          ${report.fieldPhoto.caption || 'Registro fotográfico do local onde foram realizadas as inspeções.'}
-        </div>
+    <div style="margin-top:16px;text-align:center;break-inside:avoid;page-break-inside:avoid;">
+      <p style="margin:0 0 8px 0;text-align:center;font-size:10.5px;font-weight:bold;color:#111827;">${fieldCaption}</p>
+      <div style="display:inline-block;width:100%;max-width:680px;text-align:center;">
+        <img src="${fieldSrc}" style="width:100%;max-height:480px;object-fit:contain;border:1px solid #1f2937;display:block;margin:0 auto;" alt="${fieldCaption}" />
       </div>
     </div>`
   }
@@ -1628,34 +1638,41 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
         color: #086B63;
         font-weight: bold;
       }
-      .main-title {
-        background: #086B63;
-        color: #ffffff;
-        text-align: center;
-        padding: 8px;
-        font-size: 14px;
+      .header-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+      }
+      .header-table td {
+        border: 1px solid #1f2937;
+        padding: 5px 8px;
+        font-size: 11px;
+        vertical-align: middle;
+      }
+      .header-table td b {
         font-weight: bold;
-        letter-spacing: 0.5px;
-        margin: 0 0 8px 0;
       }
-      .grid-2 {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-      }
-      .grid-cell {
-        border: 1px solid #9ca3af;
-        padding: 6px;
-        min-height: 32px;
-      }
-      .grid-cell b {
-        display: block;
-        font-size: 8px;
+      .official-section-title {
+        border: 1px solid #1f2937;
+        text-align: center;
+        font-weight: bold;
+        font-size: 11px;
         text-transform: uppercase;
-        color: #086B63;
-        margin-bottom: 2px;
+        padding: 4px;
+        margin-top: 10px;
+        letter-spacing: 0.5px;
+        background: #fdfdfd;
+      }
+      .official-content-box {
+        border: 1px solid #1f2937;
+        border-top: none;
+        padding: 8px;
+        min-height: 28px;
+        font-size: 11px;
+        white-space: pre-wrap;
       }
       .section-block {
-        margin-top: 8px;
+        margin-top: 10px;
         break-inside: avoid;
       }
       .section-block h3 {
@@ -1667,18 +1684,11 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
         font-size: 10px;
         text-transform: uppercase;
       }
-      .text-box {
-        border: 1px solid #9ca3af;
-        border-top: none;
-        padding: 8px;
-        min-height: 44px;
-        white-space: pre-wrap;
-      }
-      table {
+      table.data-table {
         width: 100%;
         border-collapse: collapse;
       }
-      th {
+      table.data-table th {
         background: #e6f5f3;
         color: #086B63;
         border: 1px solid #9ca3af;
@@ -1713,38 +1723,52 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
     <div class="page-header">
       <img src="${logoUrl}" alt="EPA Logo" />
       <div class="doc-id">
-        RELATÓRIO DIÁRIO DE OBRA<br />
+        RELATÓRIO DIÁRIO DE ACOMPANHAMENTO DE OBRAS<br />
         RDO Nº ${String(report.number).padStart(3, '0')}
       </div>
     </div>
 
-    <h1 class="main-title">RELATÓRIO DIÁRIO DE ACOMPANHAMENTO DE OBRAS</h1>
+    <!-- CABEÇALHO OFICIAL CONFORME MODELO EPA -->
+    <table class="header-table" style="margin-top:4px;">
+      <tr>
+        <td style="width:50%;"><b>Cliente:</b> ${report.clientName || 'Petrobras — Refinaria Sul'}</td>
+        <td style="width:50%;"><b>Local:</b> ${report.location || 'Refinaria Sul — Área Industrial'}</td>
+      </tr>
+      <tr>
+        <td><b>Contrato:</b> ${report.contractCode || 'CT-EPA-2025-017'}</td>
+        <td><b>Projeto:</b> ${report.projectName || 'Recuperação Ambiental Lote A'}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Empresa:</b> ${report.companyName || 'EPA Gestão Ambiental'}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Realizado por:</b> ${report.performedByName || 'Carlos Oliveira'}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Supervisionado por:</b> ${report.supervisedByName || 'Marina Santos'}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Data:</b> ${report.reportDate}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Clima:</b> ${report.weather}</td>
+      </tr>
+    </table>
 
-    <div class="grid-2">
-      <div class="grid-cell"><b>Cliente</b>${report.clientName || 'Petrobras — Refinaria Sul'}</div>
-      <div class="grid-cell"><b>Contrato</b>${report.contractCode || 'CT-EPA-2025-017'}</div>
-      <div class="grid-cell"><b>Local</b>${report.location || 'Refinaria Sul — Área Industrial'}</div>
-      <div class="grid-cell"><b>Projeto EPA</b>${report.projectName || 'Recuperação Ambiental Lote A'}</div>
-      <div class="grid-cell"><b>Empresa Executora</b>${report.companyName || 'EPA Gestão Ambiental'}</div>
-      <div class="grid-cell"><b>Data / Clima</b>${report.reportDate} · ${report.weather}</div>
-      <div class="grid-cell"><b>Realizado por</b>${report.performedByName || 'Carlos Oliveira'}</div>
-      <div class="grid-cell"><b>Supervisionado por</b>${report.supervisedByName || 'Marina Santos'}</div>
-    </div>
+    <!-- SEÇÃO ATIVIDADE CONFORME MODELO OFICIAL EPA -->
+    <div class="official-section-title">ATIVIDADE</div>
+    <div class="official-content-box">${report.activityTitle || '—'}</div>
 
-    <div class="section-block">
-      <h3>Atividade</h3>
-      <div class="text-box">${report.activityTitle || '—'}</div>
-    </div>
-
-    <div class="section-block">
-      <h3>Descrição da Atividade & Foto do Campo</h3>
-      <div class="text-box">${report.activityDescription || '—'}</div>
+    <!-- SEÇÃO DESCRIÇÃO DA ATIVIDADE CONFORME MODELO OFICIAL EPA -->
+    <div class="official-section-title">DESCRIÇÃO DA ATIVIDADE</div>
+    <div class="official-content-box">
+      ${report.activityDescription ? `<div>${report.activityDescription}</div>` : ''}
       ${fieldPhotoHtml}
     </div>
 
     <div class="section-block">
       <h3>Tabela de Poços</h3>
-      <table>
+      <table class="data-table">
         <thead>
           <tr>
             <th>ID do Poço</th>
@@ -1768,7 +1792,7 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
 
     <div class="section-block">
       <h3>Observações Técnicas & Controle</h3>
-      <table>
+      <table class="data-table">
         <tr>
           <th style="width:35%;">Acidentes / Incidentes</th>
           <td style="border:1px solid #9ca3af;padding:6px;">${report.accidents || 'Não houve'}</td>

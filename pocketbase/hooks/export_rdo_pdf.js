@@ -54,15 +54,15 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
     const fieldSrc = fieldImg
       ? `/api/files/report_photos/${fieldPhotoRecord.id}/${fieldImg}`
       : 'https://img.usecurling.com/p/640/420?q=field%20site'
+    const fieldCaption =
+      fieldPhotoRecord.getString('caption') ||
+      'Figura 01 – Mapa de localização da área de interesse.'
+
     fieldPhotoHtml = `
-    <div style="border:1px solid #9ca3af;border-top:none;padding:8px;background:#f9fafb;break-inside:avoid;">
-      <b style="font-size:9px;text-transform:uppercase;color:#086B63;display:block;margin-bottom:6px;">Fotografia do Campo / Local das Inspeções:</b>
-      <div style="display:flex;gap:12px;align-items:flex-start;">
-        <img src="${fieldSrc}" style="width:240px;height:150px;object-fit:cover;border:1px solid #9ca3af;border-radius:4px;flex-shrink:0;" />
-        <div style="font-size:10px;color:#374151;line-height:1.4;">
-          <b>Legenda / Identificação do Local:</b><br />
-          ${fieldPhotoRecord.getString('caption') || 'Registro fotográfico do local onde foram realizadas as inspeções.'}
-        </div>
+    <div style="margin-top:16px;text-align:center;break-inside:avoid;page-break-inside:avoid;">
+      <p style="margin:0 0 8px 0;text-align:center;font-size:10.5px;font-weight:bold;color:#111827;">${fieldCaption}</p>
+      <div style="display:inline-block;width:100%;max-width:680px;text-align:center;">
+        <img src="${fieldSrc}" style="width:100%;max-height:480px;object-fit:contain;border:1px solid #1f2937;display:block;margin:0 auto;" alt="${fieldCaption}" />
       </div>
     </div>`
   }
@@ -132,34 +132,41 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
         color: #086B63;
         font-weight: bold;
       }
-      .main-title {
-        background: #086B63;
-        color: #ffffff;
-        text-align: center;
-        padding: 8px;
-        font-size: 14px;
+      .header-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+      }
+      .header-table td {
+        border: 1px solid #1f2937;
+        padding: 5px 8px;
+        font-size: 11px;
+        vertical-align: middle;
+      }
+      .header-table td b {
         font-weight: bold;
-        letter-spacing: 0.5px;
-        margin: 0 0 8px 0;
       }
-      .grid-2 {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-      }
-      .grid-cell {
-        border: 1px solid #9ca3af;
-        padding: 6px;
-        min-height: 32px;
-      }
-      .grid-cell b {
-        display: block;
-        font-size: 8px;
+      .official-section-title {
+        border: 1px solid #1f2937;
+        text-align: center;
+        font-weight: bold;
+        font-size: 11px;
         text-transform: uppercase;
-        color: #086B63;
-        margin-bottom: 2px;
+        padding: 4px;
+        margin-top: 10px;
+        letter-spacing: 0.5px;
+        background: #fdfdfd;
+      }
+      .official-content-box {
+        border: 1px solid #1f2937;
+        border-top: none;
+        padding: 8px;
+        min-height: 28px;
+        font-size: 11px;
+        white-space: pre-wrap;
       }
       .section-block {
-        margin-top: 8px;
+        margin-top: 10px;
         break-inside: avoid;
       }
       .section-block h3 {
@@ -171,18 +178,11 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
         font-size: 10px;
         text-transform: uppercase;
       }
-      .text-box {
-        border: 1px solid #9ca3af;
-        border-top: none;
-        padding: 8px;
-        min-height: 44px;
-        white-space: pre-wrap;
-      }
-      table {
+      table.data-table {
         width: 100%;
         border-collapse: collapse;
       }
-      th {
+      table.data-table th {
         background: #e6f5f3;
         color: #086B63;
         border: 1px solid #9ca3af;
@@ -217,38 +217,52 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
     <div class="page-header">
       <img src="${logoUrl}" alt="EPA Logo" />
       <div class="doc-id">
-        RELATÓRIO DIÁRIO DE OBRA<br />
+        RELATÓRIO DIÁRIO DE ACOMPANHAMENTO DE OBRAS<br />
         RDO Nº ${String(rdo.getInt('number')).padStart(3, '0')}
       </div>
     </div>
 
-    <h1 class="main-title">RELATÓRIO DIÁRIO DE ACOMPANHAMENTO DE OBRAS</h1>
+    <!-- CABEÇALHO OFICIAL CONFORME MODELO EPA -->
+    <table class="header-table" style="margin-top:4px;">
+      <tr>
+        <td style="width:50%;"><b>Cliente:</b> ${client.getString('name')}</td>
+        <td style="width:50%;"><b>Local:</b> ${project.getString('location')}</td>
+      </tr>
+      <tr>
+        <td><b>Contrato:</b> ${contract.getString('code')}</td>
+        <td><b>Projeto:</b> ${project.getString('name')}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Empresa:</b> ${company.getString('name')}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Realizado por:</b> ${performer.getString('name')}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Supervisionado por:</b> ${supervisorName}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Data:</b> ${dateStr}</td>
+      </tr>
+      <tr>
+        <td colspan="2"><b>Clima:</b> ${rdo.getString('weather')}</td>
+      </tr>
+    </table>
 
-    <div class="grid-2">
-      <div class="grid-cell"><b>Cliente</b>${client.getString('name')}</div>
-      <div class="grid-cell"><b>Contrato</b>${contract.getString('code')}</div>
-      <div class="grid-cell"><b>Local</b>${project.getString('location')}</div>
-      <div class="grid-cell"><b>Projeto EPA</b>${project.getString('name')}</div>
-      <div class="grid-cell"><b>Empresa Executora</b>${company.getString('name')}</div>
-      <div class="grid-cell"><b>Data / Clima</b>${dateStr} · ${rdo.getString('weather')}</div>
-      <div class="grid-cell"><b>Realizado por</b>${performer.getString('name')}</div>
-      <div class="grid-cell"><b>Supervisionado por</b>${supervisorName}</div>
-    </div>
+    <!-- SEÇÃO ATIVIDADE CONFORME MODELO OFICIAL EPA -->
+    <div class="official-section-title">ATIVIDADE</div>
+    <div class="official-content-box">${rdo.getString('activity_title') || '—'}</div>
 
-    <div class="section-block">
-      <h3>Atividade</h3>
-      <div class="text-box">${rdo.getString('activity_title') || '—'}</div>
-    </div>
-
-    <div class="section-block">
-      <h3>Descrição da Atividade & Foto do Campo</h3>
-      <div class="text-box">${rdo.getString('activity_description') || '—'}</div>
+    <!-- SEÇÃO DESCRIÇÃO DA ATIVIDADE CONFORME MODELO OFICIAL EPA -->
+    <div class="official-section-title">DESCRIÇÃO DA ATIVIDADE</div>
+    <div class="official-content-box">
+      ${rdo.getString('activity_description') ? `<div>${rdo.getString('activity_description')}</div>` : ''}
       ${fieldPhotoHtml}
     </div>
 
     <div class="section-block">
       <h3>Tabela de Poços</h3>
-      <table>
+      <table class="data-table">
         <thead>
           <tr>
             <th>ID do Poço</th>
@@ -272,7 +286,7 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
 
     <div class="section-block">
       <h3>Observações Técnicas & Controle</h3>
-      <table>
+      <table class="data-table">
         <tr>
           <th style="width:35%;">Acidentes / Incidentes</th>
           <td style="border:1px solid #9ca3af;padding:6px;">${rdo.getString('accidents') || 'Não houve'}</td>
