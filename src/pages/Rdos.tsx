@@ -40,6 +40,7 @@ import { authHeaders, exportUrl, updateRdoStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
 import { rdos as mockRdos, type Status } from '@/data/epa'
+import { EPA_LOGO_BASE64 } from '@/components/epaLogoBase64'
 
 export function RdosPage({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineRdoItem | null>(null)
@@ -1536,41 +1537,80 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
   const popup = window.open('', '_blank')
   if (!popup) return
 
-  const logoUrl = '/og-image.png'
+  const logoSrc = EPA_LOGO_BASE64
 
   let wellsRows = ''
   if (report.wells && report.wells.length > 0) {
     report.wells.forEach((w) => {
       wellsRows += `<tr>
-        <td style="border:1px solid #9ca3af;padding:6px;font-weight:600;">${w.well_id || '—'}</td>
-        <td style="border:1px solid #9ca3af;padding:6px;">${w.depth ? w.depth + ' m' : '—'}</td>
-        <td style="border:1px solid #9ca3af;padding:6px;">${w.completion_date || '—'}</td>
-        <td style="border:1px solid #9ca3af;padding:6px;">${w.diameter || '—'}</td>
+        <td style="border:1px solid #000;padding:5px 6px;font-weight:600;text-align:center;">${w.well_id || '—'}</td>
+        <td style="border:1px solid #000;padding:5px 6px;text-align:center;">${w.depth ? w.depth + ' m' : '—'}</td>
+        <td style="border:1px solid #000;padding:5px 6px;text-align:center;">${w.completion_date || '—'}</td>
+        <td style="border:1px solid #000;padding:5px 6px;text-align:center;">${w.diameter || '—'}</td>
       </tr>`
     })
   } else {
-    wellsRows = `<tr><td colspan="4" style="border:1px solid #9ca3af;padding:8px;text-align:center;">Nenhum poço registrado.</td></tr>`
+    wellsRows = `<tr><td colspan="4" style="border:1px solid #000;padding:8px;text-align:center;">Nenhum poço registrado.</td></tr>`
   }
 
   let photoCards = ''
   if (report.photos && report.photos.length > 0) {
-    report.photos.forEach((p, idx) => {
-      const src =
-        p.dataUrl ||
-        (p.image?.startsWith('http')
-          ? p.image
-          : p.image
-            ? `${pb.baseUrl}/api/files/report_photos/${p.id}/${p.image}`
+    const photoPairs: (typeof report.photos)[] = []
+    for (let i = 0; i < report.photos.length; i += 2) {
+      photoPairs.push(report.photos.slice(i, i + 2))
+    }
+
+    photoPairs.forEach((pair, pairIdx) => {
+      const idx1 = pairIdx * 2 + 1
+      const p1 = pair[0]
+      const src1 =
+        p1.dataUrl ||
+        (p1.image?.startsWith('http')
+          ? p1.image
+          : p1.image
+            ? `${pb.baseUrl}/api/files/report_photos/${p1.id}/${p1.image}`
             : 'https://img.usecurling.com/p/640/420?q=monitoring%20well')
-      photoCards += `<figure style="border:1px solid #9ca3af;padding:6px;margin:0;break-inside:avoid;page-break-inside:avoid;">
-        <img src="${src}" style="width:100%;height:180px;object-fit:cover;display:block;" />
-        <figcaption style="padding:6px;text-align:center;font-size:10px;font-weight:500;">
-          <b>Foto ${idx + 1}:</b> ${p.caption || 'Registro fotográfico de campo'}
-        </figcaption>
-      </figure>`
+
+      let img2Block = ''
+      let defaultCaption = ''
+      if (pair.length > 1) {
+        const idx2 = pairIdx * 2 + 2
+        const p2 = pair[1]
+        const src2 =
+          p2.dataUrl ||
+          (p2.image?.startsWith('http')
+            ? p2.image
+            : p2.image
+              ? `${pb.baseUrl}/api/files/report_photos/${p2.id}/${p2.image}`
+              : 'https://img.usecurling.com/p/640/420?q=monitoring%20well')
+
+        img2Block = `<div style="flex:1;text-align:center;">
+          <img src="${src2}" style="width:100%;height:320px;object-fit:cover;display:block;" />
+        </div>`
+
+        const str1 = String(idx1).padStart(2, '0')
+        const str2 = String(idx2).padStart(2, '0')
+        defaultCaption = `Fotos ${str1} e ${str2} – ${p1.caption || p2.caption || 'Registro fotográfico de campo'}`
+      } else {
+        const str1 = String(idx1).padStart(2, '0')
+        defaultCaption = `Foto ${str1} – ${p1.caption || 'Registro fotográfico de campo'}`
+      }
+
+      photoCards += `
+      <div style="margin-top:14px;border:1px solid #000;break-inside:avoid;page-break-inside:avoid;background:#fff;">
+        <div style="display:flex;flex-direction:row;gap:6px;padding:6px;border-bottom:1px solid #000;">
+          <div style="flex:1;text-align:center;">
+            <img src="${src1}" style="width:100%;height:320px;object-fit:cover;display:block;" />
+          </div>
+          ${img2Block}
+        </div>
+        <div style="padding:6px 10px;text-align:center;font-size:10.5px;font-weight:bold;color:#000;">
+          ${defaultCaption}
+        </div>
+      </div>`
     })
   } else {
-    photoCards = `<p style="border:1px solid #9ca3af;padding:12px;text-align:center;font-size:11px;grid-column:1/-1;">Sem registros fotográficos adicionados.</p>`
+    photoCards = `<p style="border:1px solid #000;padding:12px;text-align:center;font-size:11px;margin-top:10px;">Sem registros fotográficos adicionados.</p>`
   }
 
   // Field/Inspection Photo HTML for Section 2 (exact official EPA PDF model: centered caption on top, centered full-width image below)
@@ -1587,13 +1627,15 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
       report.fieldPhoto.caption || 'Figura 01 – Mapa de localização da área de interesse.'
 
     fieldPhotoHtml = `
-    <div style="margin-top:16px;text-align:center;break-inside:avoid;page-break-inside:avoid;">
-      <p style="margin:0 0 8px 0;text-align:center;font-size:10.5px;font-weight:bold;color:#111827;">${fieldCaption}</p>
+    <div style="margin-top:14px;text-align:center;break-inside:avoid;page-break-inside:avoid;">
+      <p style="margin:0 0 8px 0;text-align:center;font-size:11px;font-weight:bold;color:#000;">${fieldCaption}</p>
       <div style="display:inline-block;width:100%;max-width:680px;text-align:center;">
-        <img src="${fieldSrc}" style="width:100%;max-height:480px;object-fit:contain;border:1px solid #1f2937;display:block;margin:0 auto;" alt="${fieldCaption}" />
+        <img src="${fieldSrc}" style="width:100%;max-height:480px;object-fit:contain;border:1px solid #000;display:block;margin:0 auto;" alt="${fieldCaption}" />
       </div>
     </div>`
   }
+
+  const rdoNumStr = `RDO ${String(report.number).padStart(2, '0')} – ${report.location || ''}`
 
   const html = `<!doctype html>
   <html>
@@ -1603,223 +1645,313 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
     <style>
       @page {
         size: A4 portrait;
-        margin: 26mm 14mm 16mm 14mm;
+        margin: 22mm 15mm 20mm 15mm;
         @top-center {
-          content: element(pageHeader);
+          content: element(docHeader);
         }
+        @bottom-center {
+          content: element(docFooter);
+        }
+      }
+      @page :left {
+        @top-center { content: element(docHeader); }
+        @bottom-center { content: element(docFooter); }
+      }
+      @page :right {
+        @top-center { content: element(docHeader); }
+        @bottom-center { content: element(docFooter); }
       }
       * { box-sizing: border-box; }
       body {
-        font-family: Arial, sans-serif;
+        font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
         font-size: 11px;
-        color: #1f2937;
+        color: #000000;
         margin: 0;
         padding: 0;
+        background: #fff;
+        line-height: 1.35;
       }
-      .page-header {
+
+      /* Running Header strictly printed on top of every page */
+      .doc-header-running {
         position: fixed;
-        top: -22mm;
+        top: -19mm;
         left: 0;
         right: 0;
         height: 18mm;
-        border-bottom: 2px solid #086B63;
+        border: 1px solid #000;
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        background: #fff;
+        padding: 0 10px;
       }
-      .page-header img {
-        height: 44px;
-        max-width: 170px;
-        object-fit: contain;
-      }
-      .page-header .doc-id {
-        text-align: right;
-        font-size: 9px;
-        color: #086B63;
-        font-weight: bold;
-      }
-      .header-table {
+      .doc-header-running table {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: 10px;
+        border: none;
       }
-      .header-table td {
-        border: 1px solid #1f2937;
-        padding: 5px 8px;
-        font-size: 11px;
+      .doc-header-running td {
+        border: none;
+        padding: 0;
         vertical-align: middle;
       }
-      .header-table td b {
-        font-weight: bold;
+      .doc-header-running .header-logo {
+        height: 48px;
+        max-width: 170px;
+        object-fit: contain;
+        display: block;
       }
-      .official-section-title {
-        border: 1px solid #1f2937;
+      .doc-header-running .header-text {
         text-align: center;
+        font-size: 12.5px;
         font-weight: bold;
+        color: #000;
+        letter-spacing: 0.2px;
+      }
+
+      /* Running Footer strictly printed on bottom of every page */
+      .doc-footer-running {
+        position: fixed;
+        bottom: -15mm;
+        left: 0;
+        right: 0;
+        height: 12mm;
+        border-top: 1px solid #000;
+        padding-top: 6px;
         font-size: 11px;
-        text-transform: uppercase;
-        padding: 4px;
-        margin-top: 10px;
-        letter-spacing: 0.5px;
-        background: #fdfdfd;
+        font-weight: bold;
+        color: #000;
+        background: #fff;
       }
-      .official-content-box {
-        border: 1px solid #1f2937;
-        border-top: none;
-        padding: 8px;
-        min-height: 28px;
-        font-size: 11px;
-        white-space: pre-wrap;
-      }
-      .section-block {
-        margin-top: 10px;
-        break-inside: avoid;
-      }
-      .section-block h3 {
-        margin: 0;
-        background: #e6f5f3;
-        color: #086B63;
-        border: 1px solid #8cb8b3;
-        padding: 5px 8px;
-        font-size: 10px;
-        text-transform: uppercase;
-      }
-      table.data-table {
+
+      /* Tabela de Metadados / Cabeçalho */
+      .header-meta-table {
         width: 100%;
         border-collapse: collapse;
+        margin-top: 0;
+        margin-bottom: 12px;
       }
-      table.data-table th {
-        background: #e6f5f3;
-        color: #086B63;
-        border: 1px solid #9ca3af;
-        padding: 6px;
-        font-size: 9px;
-        text-transform: uppercase;
+      .header-meta-table td {
+        border: 1px solid #000;
+        padding: 4.5px 7px;
+        font-size: 11px;
+        color: #000;
+        vertical-align: middle;
       }
-      .photos-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 8px;
-        border: 1px solid #9ca3af;
-        border-top: none;
-        padding: 8px;
+      .header-meta-table td b {
+        font-weight: bold;
+        color: #000;
       }
-      .signatures {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 40px;
-        margin-top: 30px;
-        break-inside: avoid;
-      }
-      .sign-box {
+
+      /* Faixas Oficiais EPA */
+      .official-banner {
+        border: 1px solid #000;
         text-align: center;
-        border-top: 1px solid #374151;
-        padding-top: 6px;
+        font-weight: bold;
+        font-size: 11px;
+        text-transform: uppercase;
+        padding: 3.5px 6px;
+        background: #fff;
+        color: #000;
+        letter-spacing: 0.5px;
+      }
+      .official-box {
+        border: 1px solid #000;
+        border-top: none;
+        padding: 7px 9px;
+        min-height: 24px;
+        font-size: 11px;
+        color: #000;
+        background: #fff;
+        line-height: 1.4;
+      }
+
+      /* Tabela de Poços */
+      table.wells-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 0;
+      }
+      table.wells-table th {
+        background: #fff;
+        color: #000;
+        border: 1px solid #000;
+        padding: 5px 6px;
         font-size: 10px;
+        font-weight: bold;
+        text-align: center;
+        line-height: 1.25;
+      }
+      table.wells-table td {
+        border: 1px solid #000;
+        padding: 5px 6px;
+        font-size: 10.5px;
+        color: #000;
+      }
+
+      /* Bloco das seções de controle / observações técnicas */
+      .control-section-item {
+        margin-top: 10px;
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* Quebras e páginas */
+      .page-break {
+        page-break-before: always;
+        break-before: page;
+      }
+      .keep-together {
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      @media screen {
+        body {
+          padding: 24px;
+          background: #f1f5f9;
+        }
+        .screen-container {
+          max-width: 800px;
+          margin: 0 auto;
+          background: #fff;
+          padding: 32px 36px;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+        }
+        .doc-header-running {
+          position: static;
+          margin-bottom: 0;
+        }
+        .doc-footer-running {
+          position: static;
+          margin-top: 24px;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="page-header">
-      <img src="${logoUrl}" alt="EPA Logo" />
-      <div class="doc-id">
-        RELATÓRIO DIÁRIO DE ACOMPANHAMENTO DE OBRAS<br />
-        RDO Nº ${String(report.number).padStart(3, '0')}
+    <!-- Running Header em todas as páginas -->
+    <div class="doc-header-running">
+      <table>
+        <tr>
+          <td style="width:180px;text-align:left;">
+            <img src="${logoSrc}" class="header-logo" alt="Grupo EPA" />
+          </td>
+          <td class="header-text">
+            Relatório Diário de Acompanhamento de Obras
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Running Footer em todas as páginas -->
+    <div class="doc-footer-running">
+      ${rdoNumStr}
+    </div>
+
+    <div class="screen-container">
+      <!-- CABEÇALHO OFICIAL DE METADADOS -->
+      <table class="header-meta-table">
+        <tr>
+          <td style="width:50%;"><b>Cliente:</b> ${report.clientName || 'VALE S.A.'}</td>
+          <td style="width:50%;"><b>Local:</b> ${report.location || 'Açailândia -MA.'}</td>
+        </tr>
+        <tr>
+          <td><b>Contrato:</b> ${report.contractCode || '5900117667'}</td>
+          <td><b>Projeto EPA:</b> ${report.projectName || '24-0234'}</td>
+        </tr>
+        <tr>
+          <td colspan="2"><b>Empresa:</b> ${report.companyName || 'EPA Engenharia de Proteção Ambiental'}</td>
+        </tr>
+        <tr>
+          <td colspan="2"><b>Realizado por:</b> ${report.performedByName || 'Rodrigo Bezerra e Evandlier Sampaio'}</td>
+        </tr>
+        <tr>
+          <td colspan="2"><b>Supervisionado por:</b> ${report.supervisedByName || 'Karoline Ferreira.'}</td>
+        </tr>
+        <tr>
+          <td colspan="2"><b>Data:</b> ${report.reportDate}</td>
+        </tr>
+        <tr>
+          <td colspan="2"><b>Clima:</b> ${report.weather}</td>
+        </tr>
+      </table>
+
+      <!-- FAIXA ATIVIDADE -->
+      <div class="official-banner">ATIVIDADE</div>
+      <div class="official-box">${report.activityTitle || '—'}</div>
+
+      <!-- FAIXA DESCRIÇÃO DA ATIVIDADE -->
+      <div class="official-banner" style="margin-top:10px;">DESCRIÇÃO DA ATIVIDADE</div>
+      <div class="official-box">
+        ${report.activityDescription ? `<div style="white-space:pre-wrap;">${report.activityDescription}</div>` : ''}
+        ${fieldPhotoHtml}
       </div>
-    </div>
 
-    <!-- CABEÇALHO OFICIAL CONFORME MODELO EPA -->
-    <table class="header-table" style="margin-top:4px;">
-      <tr>
-        <td style="width:50%;"><b>Cliente:</b> ${report.clientName || 'Petrobras — Refinaria Sul'}</td>
-        <td style="width:50%;"><b>Local:</b> ${report.location || 'Refinaria Sul — Área Industrial'}</td>
-      </tr>
-      <tr>
-        <td><b>Contrato:</b> ${report.contractCode || 'CT-EPA-2025-017'}</td>
-        <td><b>Projeto:</b> ${report.projectName || 'Recuperação Ambiental Lote A'}</td>
-      </tr>
-      <tr>
-        <td colspan="2"><b>Empresa:</b> ${report.companyName || 'EPA Gestão Ambiental'}</td>
-      </tr>
-      <tr>
-        <td colspan="2"><b>Realizado por:</b> ${report.performedByName || 'Carlos Oliveira'}</td>
-      </tr>
-      <tr>
-        <td colspan="2"><b>Supervisionado por:</b> ${report.supervisedByName || 'Marina Santos'}</td>
-      </tr>
-      <tr>
-        <td colspan="2"><b>Data:</b> ${report.reportDate}</td>
-      </tr>
-      <tr>
-        <td colspan="2"><b>Clima:</b> ${report.weather}</td>
-      </tr>
-    </table>
+      <!-- QUEBRA PARA TABELA DE POÇOS CONFORME MODELO OFICIAL -->
+      <div class="page-break"></div>
 
-    <!-- SEÇÃO ATIVIDADE CONFORME MODELO OFICIAL EPA -->
-    <div class="official-section-title">ATIVIDADE</div>
-    <div class="official-content-box">${report.activityTitle || '—'}</div>
-
-    <!-- SEÇÃO DESCRIÇÃO DA ATIVIDADE CONFORME MODELO OFICIAL EPA -->
-    <div class="official-section-title">DESCRIÇÃO DA ATIVIDADE</div>
-    <div class="official-content-box">
-      ${report.activityDescription ? `<div>${report.activityDescription}</div>` : ''}
-      ${fieldPhotoHtml}
-    </div>
-
-    <div class="section-block">
-      <h3>Tabela de Poços</h3>
-      <table class="data-table">
+      <!-- TABELA DE POÇOS -->
+      <table class="wells-table">
         <thead>
           <tr>
-            <th>ID do Poço</th>
-            <th>Profundidade</th>
-            <th>Data Conclusão</th>
-            <th>Diâmetro</th>
+            <th style="width:25%;">Identificação<br />do Poço</th>
+            <th style="width:25%;">Profundidade</th>
+            <th style="width:25%;">Data de<br />finalização</th>
+            <th style="width:25%;">Diâmetro do<br />Poço (pol.)</th>
           </tr>
         </thead>
         <tbody>
           ${wellsRows}
         </tbody>
       </table>
-    </div>
 
-    <div class="section-block">
-      <h3>Registro Fotográfico</h3>
-      <div class="photos-grid">
+      <!-- SEÇÃO FOTOGRÁFICA -->
+      <div class="page-break"></div>
+      <div style="font-size:11px;font-weight:bold;margin-bottom:8px;text-align:center;">
+        As fotos evidenciam os trabalhos executados.
+      </div>
+      <div>
         ${photoCards}
       </div>
-    </div>
 
-    <div class="section-block">
-      <h3>Observações Técnicas & Controle</h3>
-      <table class="data-table">
-        <tr>
-          <th style="width:35%;">Acidentes / Incidentes</th>
-          <td style="border:1px solid #9ca3af;padding:6px;">${report.accidents || 'Não houve'}</td>
-        </tr>
-        <tr>
-          <th>Interferências / Dificuldades</th>
-          <td style="border:1px solid #9ca3af;padding:6px;">${report.interferences || 'Não houve'}</td>
-        </tr>
-        <tr>
-          <th>Mudanças no Plano de Trabalho</th>
-          <td style="border:1px solid #9ca3af;padding:6px;">${report.planChanges || 'Não houve'}</td>
-        </tr>
-        <tr>
-          <th>Tempo de Espera / Deslocamento</th>
-          <td style="border:1px solid #9ca3af;padding:6px;">${report.timeWaiting || 'Sem ocorrências'} · ${report.timeDisplacement || '01h20'}</td>
-        </tr>
-      </table>
-    </div>
+      <!-- SEÇÃO FINAL: OBSERVAÇÕES E CONTROLE OPERACIONAL -->
+      <div class="page-break"></div>
 
-    <div class="signatures">
-      <div class="sign-box">
-        <b>${report.performedByName || 'Responsável pela Execução'}</b><br />
-        Execução em Campo
+      <div class="control-section-item">
+        <div class="official-banner">Tempo em deslocamento de máquinas e equipamentos</div>
+        <div class="official-box">${report.timeDisplacement || 'N.A'}</div>
       </div>
-      <div class="sign-box">
-        <b>${report.supervisedByName || 'Supervisão / Aprovação'}</b><br />
-        Supervisão Técnica
+
+      <div class="control-section-item">
+        <div class="official-banner">Tempo aguardando liberação (externa)</div>
+        <div class="official-box">${report.timeWaiting || 'N.A'}</div>
+      </div>
+
+      <div class="control-section-item">
+        <div class="official-banner">Interferências/Dificuldades</div>
+        <div class="official-box">${report.interferences || 'Sem interferências ou dificuldades.'}</div>
+      </div>
+
+      <div class="control-section-item">
+        <div class="official-banner">Mudanças no Plano de Trabalho</div>
+        <div class="official-box">${report.planChanges || 'Sem mudanças no Plano de Trabalho.'}</div>
+      </div>
+
+      <div class="control-section-item">
+        <div class="official-banner">Acidentes/Incidentes</div>
+        <div class="official-box">${report.accidents || 'Sem acidentes e/ou incidentes.'}</div>
+      </div>
+
+      <div class="keep-together" style="display:flex;justify-content:space-between;margin-top:36px;gap:40px;">
+        <div style="flex:1;text-align:center;border-top:1px solid #000;padding-top:6px;font-size:10px;">
+          <b>${report.performedByName || 'Realizado por'}</b><br />
+          Realizado por
+        </div>
+        <div style="flex:1;text-align:center;border-top:1px solid #000;padding-top:6px;font-size:10px;">
+          <b>${report.supervisedByName || 'Supervisionado por'}</b><br />
+          Supervisionado por
+        </div>
       </div>
     </div>
   </body>
