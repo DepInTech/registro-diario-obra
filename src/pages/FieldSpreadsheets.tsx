@@ -23,6 +23,8 @@ import {
   Wind,
   X,
   RotateCcw,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react'
 import { logoEpa } from '@/components/EpaLogo'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -43,8 +45,12 @@ export function FieldSpreadsheets({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineFieldSheetItem | null>(null)
   const [items, setItems] = useState<OfflineFieldSheetItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [tabFilter, setTabFilter] = useState<'active' | 'archived'>('active')
   const [filter, setFilter] = useState<'all' | Status>('all')
   const [isNew, setIsNew] = useState(false)
+  const [deleteModalSheet, setDeleteModalSheet] = useState<OfflineFieldSheetItem | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const { user } = useAuth()
   const { toast } = useToast()
 
@@ -113,6 +119,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 syncStatus: 'synced',
                 lastModified: new Date(rec.updated).getTime(),
                 serverUpdatedAt: rec.updated,
+                archived: Boolean(rec.archived),
               }
               await offlineStorage.saveFieldSheet(item)
             }
@@ -172,6 +179,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
             status: m.status,
             syncStatus: 'synced',
             lastModified: Date.now(),
+            archived: false,
           }
           await offlineStorage.saveFieldSheet(item)
         }
@@ -191,11 +199,111 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     loadSheets()
   }, [])
 
-  const filtered = items.filter(
-    (s) =>
-      (filter === 'all' || s.status === filter) &&
-      `${s.projectName} ${s.area} ${s.date}`.toLowerCase().includes(query.toLowerCase()),
-  )
+  const filtered = items.filter((s) => {
+    const matchesTab = tabFilter === 'archived' ? Boolean(s.archived) : !s.archived
+    const matchesStatus = filter === 'all' || s.status === filter
+    const matchesQuery = `${s.projectName} ${s.area} ${s.date}`
+      .toLowerCase()
+      .includes(query.toLowerCase())
+    return matchesTab && matchesStatus && matchesQuery
+  })
+
+  const activeCount = items.filter((s) => !s.archived).length
+  const archivedCount = items.filter((s) => Boolean(s.archived)).length
+
+  const confirmDeleteSheet = async () => {
+    if (!deleteModalSheet) return
+    if (user?.role !== 'admin') {
+      toast({
+        title: 'Você não possui permissão para esta ação.',
+        description: 'Apenas Administradores podem excluir planilhas de campo.',
+        variant: 'destructive',
+      })
+      setDeleteModalSheet(null)
+      return
+    }
+
+    const sheetToDelete = deleteModalSheet
+    setIsDeleting(true)
+    try {
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          await pb.collection('field_spreadsheets').delete(sheetToDelete.id)
+        } catch (pbErr: any) {
+          console.warn('Backend delete error (will delete locally):', pbErr)
+        }
+      }
+
+      await offlineStorage.deleteFieldSheet(sheetToDelete.id)
+      setItems((prev) => prev.filter((i) => i.id !== sheetToDelete.id))
+      if (editing?.id === sheetToDelete.id) {
+        setEditing(null)
+      }
+
+      toast({
+        title: 'Planilha de campo excluída com sucesso',
+        description: `A planilha de ${sheetToDelete.date} (${sheetToDelete.area}) foi removida.`,
+      })
+      setDeleteModalSheet(null)
+    } catch (err: any) {
+      console.error('Delete sheet error:', err)
+      toast({
+        title: 'Erro ao excluir planilha',
+        description: err.message || 'Ocorreu um erro ao excluir a planilha.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleToggleArchiveSheet = async (sheet: OfflineFieldSheetItem) => {
+    const nextArchived = !sheet.archived
+    setActionLoadingId(sheet.id)
+    try {
+      const updated: OfflineFieldSheetItem = {
+        ...sheet,
+        archived: nextArchived,
+        syncStatus: 'pending_update',
+        lastModified: Date.now(),
+      }
+
+      await offlineStorage.saveFieldSheet(updated)
+
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          await pb.collection('field_spreadsheets').update(sheet.id, {
+            archived: nextArchived,
+          })
+          updated.syncStatus = 'synced'
+          await offlineStorage.saveFieldSheet(updated)
+        } catch (serverErr: any) {
+          console.warn('Archive update failed on server, queued for sync:', serverErr)
+        }
+      }
+
+      setItems((prev) => prev.map((item) => (item.id === sheet.id ? updated : item)))
+      if (editing?.id === sheet.id) {
+        setEditing(updated)
+      }
+
+      toast({
+        title: nextArchived ? 'Planilha arquivada' : 'Planilha desarquivada',
+        description: nextArchived
+          ? `A planilha de ${sheet.date} foi movida para os arquivados.`
+          : `A planilha de ${sheet.date} foi restaurada para a listagem ativa.`,
+      })
+    } catch (err: any) {
+      console.error('Toggle archive sheet error:', err)
+      toast({
+        title: 'Erro ao alterar estado de arquivamento',
+        description: err.message || 'Verifique suas permissões.',
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
 
   const openNew = () => {
     const newSheet: OfflineFieldSheetItem = {
@@ -282,12 +390,56 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         onSaved={() => {
           loadSheets()
         }}
+        onDelete={() => setDeleteModalSheet(editing)}
+        onToggleArchive={() => handleToggleArchiveSheet(editing)}
+        actionLoading={actionLoadingId === editing.id}
       />
     )
   }
 
   return (
     <div className="space-y-6">
+      {/* Abas Ativas vs Arquivadas */}
+      <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800">
+        <button
+          onClick={() => setTabFilter('active')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+            tabFilter === 'active'
+              ? 'bg-emerald-700 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+          )}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          Planilhas Ativas ({activeCount})
+        </button>
+        <button
+          onClick={() => setTabFilter('archived')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+            tabFilter === 'archived'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+          )}
+        >
+          <Archive className="h-4 w-4" />
+          Arquivadas ({archivedCount})
+        </button>
+      </div>
+
+      {tabFilter === 'archived' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Archive className="h-4 w-4 shrink-0 text-amber-600" />
+            <span>
+              <b>Visualização de Planilhas Arquivadas:</b> Registros arquivados para histórico em
+              modo somente leitura. Você pode desarquivá-los a qualquer momento para retorná-los à
+              listagem ativa.
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ['Total de Planilhas', `${items.length} emitidas`, Droplets, 'emerald'],
@@ -373,13 +525,13 @@ export function FieldSpreadsheets({ query }: { query: string }) {
             {filtered.map((sheet) => {
               const totalNutrients = (sheet.nutrient_map_kg || 0) + (sheet.nutrient_ureia_kg || 0)
               return (
-                <button
+                <div
+                  key={sheet.id}
                   onClick={() => {
                     setEditing(sheet)
                     setIsNew(false)
                   }}
-                  key={sheet.id}
-                  className="group rounded-2xl border border-slate-200/80 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
+                  className="group relative cursor-pointer rounded-2xl border border-slate-200/80 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md dark:border-slate-800 dark:bg-slate-900"
                 >
                   <div className="flex items-start justify-between">
                     <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
@@ -391,6 +543,35 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                         <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
                           Offline
                         </span>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleToggleArchiveSheet(sheet)
+                        }}
+                        disabled={actionLoadingId === sheet.id}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                        title={sheet.archived ? 'Desarquivar planilha' : 'Arquivar planilha'}
+                      >
+                        {actionLoadingId === sheet.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : sheet.archived ? (
+                          <ArchiveRestore className="h-3.5 w-3.5 text-amber-600" />
+                        ) : (
+                          <Archive className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                      {user?.role === 'admin' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteModalSheet(sheet)
+                          }}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                          title="Excluir planilha (apenas Admin)"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       )}
                     </div>
                   </div>
@@ -421,15 +602,69 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                   <div className="mt-4 flex items-center justify-between text-xs">
                     <span className="text-slate-400">Por {sheet.operatorName || 'Operador'}</span>
                     <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                      Abrir Planilha →
+                      {sheet.archived ? 'Visualizar arquivada →' : 'Abrir Planilha →'}
                     </span>
                   </div>
-                </button>
+                </div>
               )
             })}
+            =======
           </div>
         )}
       </section>
+
+      {/* Modal de confirmação de exclusão da Planilha de Campo */}
+      {deleteModalSheet && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Excluir Planilha de Campo
+              </h3>
+            </div>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+              Tem certeza que deseja excluir a planilha de{' '}
+              <b className="text-slate-900 dark:text-white">
+                {deleteModalSheet.date} — {deleteModalSheet.projectName} ({deleteModalSheet.area})
+              </b>
+              ?
+            </p>
+            <div className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              ⚠️ <b>Esta ação não pode ser desfeita.</b> Todos os registros operacionais diários,
+              dados de extração, infiltração e compressores vinculados a esta planilha serão
+              removidos em definitivo.
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isDeleting}
+                onClick={() => setDeleteModalSheet(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={isDeleting}
+                onClick={confirmDeleteSheet}
+                className="bg-red-600 hover:bg-red-700 text-white min-w-[100px]"
+              >
+                {isDeleting ? (
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Excluindo...
+                  </span>
+                ) : (
+                  'Confirmar Exclusão'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -439,11 +674,17 @@ function FieldFullEditor({
   isNew,
   onBack,
   onSaved,
+  onDelete,
+  onToggleArchive,
+  actionLoading,
 }: {
   sheet: OfflineFieldSheetItem
   isNew: boolean
   onBack: () => void
   onSaved: () => void
+  onDelete?: () => void
+  onToggleArchive?: () => void
+  actionLoading?: boolean
 }) {
   const [formData, setFormData] = useState<OfflineFieldSheetItem>({ ...initialSheet })
   const [isSaving, setIsSaving] = useState(false)
@@ -667,6 +908,37 @@ function FieldFullEditor({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Arquivar / Desarquivar */}
+          {onToggleArchive && (
+            <Button
+              variant="outline"
+              onClick={onToggleArchive}
+              disabled={actionLoading}
+              className="min-h-[44px] text-xs font-semibold dark:border-slate-800"
+            >
+              {actionLoading ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : formData.archived ? (
+                <ArchiveRestore className="mr-1.5 h-4 w-4 text-amber-600" />
+              ) : (
+                <Archive className="mr-1.5 h-4 w-4 text-slate-500" />
+              )}
+              {formData.archived ? 'Desarquivar Planilha' : 'Arquivar Planilha'}
+            </Button>
+          )}
+
+          {/* Excluir (Admin apenas) */}
+          {isAdmin && onDelete && (
+            <Button
+              variant="ghost"
+              onClick={onDelete}
+              className="min-h-[44px] text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40"
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Excluir
+            </Button>
+          )}
+
           {canExportExcel && (
             <Button
               variant="outline"
@@ -688,7 +960,7 @@ function FieldFullEditor({
             </Button>
           )}
 
-          {!isLocked && (
+          {!isLocked && !formData.archived && (
             <>
               <Button
                 variant="outline"
@@ -714,7 +986,7 @@ function FieldFullEditor({
             </>
           )}
 
-          {isAdmin && formData.status === 'submitted' && (
+          {isAdmin && formData.status === 'submitted' && !formData.archived && (
             <>
               <Button
                 onClick={() => handleAdminStatusChange('approved')}
@@ -737,6 +1009,38 @@ function FieldFullEditor({
           )}
         </div>
       </div>
+
+      {formData.archived && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                Planilha de Campo Arquivada
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Esta planilha está em modo de leitura nos arquivos. Você pode desarquivá-la a
+                qualquer momento.
+              </p>
+            </div>
+          </div>
+          {onToggleArchive && (
+            <Button
+              size="sm"
+              onClick={onToggleArchive}
+              disabled={actionLoading}
+              className="bg-amber-700 hover:bg-amber-800 text-white text-xs"
+            >
+              {actionLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <ArchiveRestore className="h-3.5 w-3.5 mr-1" />
+              )}
+              Desarquivar
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* CABEÇALHO OFICIAL */}
       <section className="epa-card p-6 border-t-4 border-t-emerald-700">

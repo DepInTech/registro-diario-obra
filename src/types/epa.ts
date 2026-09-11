@@ -31,6 +31,7 @@ export type Project = RecordModel & {
   progress: number
   status: 'active' | 'paused' | 'completed'
   assigned_users?: string[]
+  archived?: boolean
   expand?: {
     client?: Client
     contract?: Contract
@@ -77,6 +78,7 @@ export type ReportRdo = RecordModel & {
   accidents?: string
   status: RdoStatus
   review_notes?: string
+  archived?: boolean
   expand?: { project?: Project; performed_by?: EpaUser; supervised_by?: EpaUser }
 }
 export type ExtractionRow = {
@@ -111,7 +113,8 @@ export type FieldSheet = RecordModel & {
   env_5s_check?: boolean
   env_checklist_monthly?: boolean
   observations?: string
-  status: 'draft' | 'submitted' | 'approved'
+  status: 'draft' | 'submitted' | 'approved' | 'returned'
+  archived?: boolean
   expand?: { project?: Project; operator?: EpaUser }
 }
 export type AuditLog = RecordModel & {

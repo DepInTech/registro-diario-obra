@@ -18,6 +18,8 @@ import {
   AlertCircle,
   Briefcase,
   Layers,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import {
@@ -42,6 +44,7 @@ interface ProjectItem extends EpaProject {
   rawCompany?: string
   rawArea?: string
   assignedUsersIds?: string[]
+  archived?: boolean
 }
 
 export function Projects({
@@ -56,7 +59,13 @@ export function Projects({
   const [selected, setSelected] = useState<ProjectItem | null>(null)
   const [projectsList, setProjectsList] = useState<ProjectItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [tabFilter, setTabFilter] = useState<'active' | 'archived'>('active')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'completed'>('all')
+
+  // Delete modal state
+  const [deleteModalProject, setDeleteModalProject] = useState<ProjectItem | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
 
   // Auxiliary data for project creation / edit
   const [clients, setClients] = useState<Client[]>([])
@@ -152,6 +161,7 @@ export function Projects({
               rawCompany: rec.company,
               rawArea: rec.area,
               assignedUsersIds: assignedIds,
+              archived: Boolean(rec.archived),
             }
           })
           setProjectsList(mapped)
@@ -165,6 +175,7 @@ export function Projects({
         staticProjects.map((p) => ({
           ...p,
           assignedUsersIds: ['mb059ge3zci2tzr', 'cfpekk93zx4j1pr', '2n6he1v3guzt3yt'],
+          archived: false,
         })),
       )
     } catch (err) {
@@ -173,6 +184,7 @@ export function Projects({
         staticProjects.map((p) => ({
           ...p,
           assignedUsersIds: ['mb059ge3zci2tzr', 'cfpekk93zx4j1pr', '2n6he1v3guzt3yt'],
+          archived: false,
         })),
       )
     } finally {
@@ -282,17 +294,19 @@ export function Projects({
     }
   }
 
-  const handleDeleteProject = async (p: ProjectItem) => {
+  const confirmDeleteProject = async () => {
+    if (!deleteModalProject) return
     if (!isAdmin) {
       toast({
-        title: 'Você não possui permissão para esta função.',
+        title: 'Você não possui permissão para esta ação.',
         variant: 'destructive',
       })
+      setDeleteModalProject(null)
       return
     }
 
-    if (!confirm(`Tem certeza que deseja excluir o projeto "${p.name}"?`)) return
-
+    const p = deleteModalProject
+    setIsDeleting(true)
     try {
       if (navigator.onLine && pb.authStore.isValid) {
         await pb.collection('projects').delete(p.id)
@@ -305,6 +319,7 @@ export function Projects({
         title: 'Projeto excluído com sucesso',
         description: `O projeto ${p.name} foi removido.`,
       })
+      setDeleteModalProject(null)
     } catch (err: any) {
       console.error('Delete project error:', err)
       toast({
@@ -312,6 +327,41 @@ export function Projects({
         description: err.message || 'Verifique se há relatórios vinculados.',
         variant: 'destructive',
       })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleToggleArchiveProject = async (p: ProjectItem) => {
+    const nextArchived = !p.archived
+    setActionLoadingId(p.id)
+    try {
+      if (navigator.onLine && pb.authStore.isValid) {
+        await pb.collection('projects').update(p.id, {
+          archived: nextArchived,
+        })
+      }
+      setProjectsList((prev) =>
+        prev.map((item) => (item.id === p.id ? { ...item, archived: nextArchived } : item)),
+      )
+      if (selected?.id === p.id) {
+        setSelected({ ...selected, archived: nextArchived })
+      }
+      toast({
+        title: nextArchived ? 'Projeto arquivado' : 'Projeto desarquivado',
+        description: nextArchived
+          ? `O projeto "${p.name}" foi movido para os arquivados.`
+          : `O projeto "${p.name}" foi restaurado para a listagem ativa.`,
+      })
+    } catch (err: any) {
+      console.error('Error toggling archive:', err)
+      toast({
+        title: 'Erro ao alterar estado de arquivamento',
+        description: err.message || 'Verifique suas permissões.',
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoadingId(null)
     }
   }
 
@@ -468,27 +518,82 @@ export function Projects({
     }
   }
 
+  const activeCount = projectsList.filter((p) => !p.archived).length
+  const archivedCount = projectsList.filter((p) => p.archived).length
+
   const filtered = projectsList.filter((p) => {
+    const matchesTab = tabFilter === 'archived' ? Boolean(p.archived) : !p.archived
     const matchesSearch = `${p.name} ${p.client} ${p.code} ${p.location}`
       .toLowerCase()
       .includes(query.toLowerCase())
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter
-    return matchesSearch && matchesStatus
+    return matchesTab && matchesSearch && matchesStatus
   })
 
   if (selected) {
     return (
-      <ProjectDetail
-        project={selected}
-        onBack={() => {
-          setSelected(null)
-          loadProjects()
-        }}
-        onEdit={() => openEditProjectModal(selected)}
-        onDelete={() => handleDeleteProject(selected)}
-        onOpenRdo={onOpenRdo}
-        onOpenField={onOpenField}
-      />
+      <>
+        <ProjectDetail
+          project={selected}
+          onBack={() => {
+            setSelected(null)
+            loadProjects()
+          }}
+          onEdit={() => openEditProjectModal(selected)}
+          onDelete={() => setDeleteModalProject(selected)}
+          onToggleArchive={() => handleToggleArchiveProject(selected)}
+          actionLoading={actionLoadingId === selected.id}
+          onOpenRdo={onOpenRdo}
+          onOpenField={onOpenField}
+        />
+        {deleteModalProject && (
+          <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center gap-3 text-red-600">
+                <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Excluir Projeto
+                </h3>
+              </div>
+              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+                Tem certeza que deseja excluir o projeto{' '}
+                <b className="text-slate-900 dark:text-white">"{deleteModalProject.name}"</b>?
+              </p>
+              <div className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                ⚠️ <b>Esta ação não pode ser desfeita.</b> Somente administradores têm permissão
+                para exclusão definitiva.
+              </div>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isDeleting}
+                  onClick={() => setDeleteModalProject(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={isDeleting}
+                  onClick={confirmDeleteProject}
+                  className="bg-red-600 hover:bg-red-700 text-white min-w-[100px]"
+                >
+                  {isDeleting ? (
+                    <span className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Excluindo...
+                    </span>
+                  ) : (
+                    'Confirmar Exclusão'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     )
   }
 
@@ -517,11 +622,51 @@ export function Projects({
         )}
       </div>
 
+      {/* Abas Ativos vs Arquivados */}
+      <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800">
+        <button
+          onClick={() => setTabFilter('active')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+            tabFilter === 'active'
+              ? 'bg-emerald-700 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+          )}
+        >
+          <Building2 className="h-4 w-4" />
+          Projetos Ativos ({activeCount})
+        </button>
+        <button
+          onClick={() => setTabFilter('archived')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+            tabFilter === 'archived'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+          )}
+        >
+          <Archive className="h-4 w-4" />
+          Arquivados ({archivedCount})
+        </button>
+      </div>
+
+      {tabFilter === 'archived' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Archive className="h-4 w-4 shrink-0 text-amber-600" />
+            <span>
+              <b>Visualização de Arquivados:</b> Estes projetos estão arquivados para histórico.
+              Você pode desarquivá-los a qualquer momento para retorná-los à listagem operacional.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Filter and stats row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          <b className="text-slate-800 dark:text-slate-100">{filtered.length}</b> projeto(s)
-          visíveis para seu perfil
+          <b className="text-slate-800 dark:text-slate-100">{filtered.length}</b> projeto(s){' '}
+          {tabFilter === 'archived' ? 'arquivado(s)' : 'ativo(s)'} visíveis para seu perfil
         </p>
         <div className="flex rounded-lg border bg-white p-1 text-xs dark:bg-slate-900 dark:border-slate-800">
           <button
@@ -634,17 +779,46 @@ export function Projects({
                           ? 'Ⅱ Pausado'
                           : '✓ Concluído'}
                     </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleToggleArchiveProject(project)
+                      }}
+                      disabled={actionLoadingId === project.id}
+                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                      title={project.archived ? 'Desarquivar projeto' : 'Arquivar projeto'}
+                    >
+                      {actionLoadingId === project.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : project.archived ? (
+                        <ArchiveRestore className="h-3.5 w-3.5 text-amber-600" />
+                      ) : (
+                        <Archive className="h-3.5 w-3.5" />
+                      )}
+                    </button>
                     {isAdmin && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          openEditProjectModal(project)
-                        }}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                        title="Editar projeto"
-                      >
-                        <Edit2 className="h-3.5 w-3.5" />
-                      </button>
+                      <>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openEditProjectModal(project)
+                          }}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                          title="Editar projeto"
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteModalProject(project)
+                          }}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                          title="Excluir projeto"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -709,9 +883,14 @@ export function Projects({
                     variant="ghost"
                     size="sm"
                     onClick={() => setSelected(project)}
-                    className="text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-slate-800"
+                    className={cn(
+                      'text-xs font-semibold',
+                      project.archived
+                        ? 'text-amber-700 hover:bg-amber-50 dark:text-amber-400'
+                        : 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-slate-800',
+                    )}
                   >
-                    Abrir projeto
+                    {project.archived ? 'Ver arquivado' : 'Abrir projeto'}
                     <ArrowRight className="ml-1 h-3.5 w-3.5 transition group-hover:translate-x-1" />
                   </Button>
                 </div>
@@ -1035,6 +1214,8 @@ function ProjectDetail({
   onBack,
   onEdit,
   onDelete,
+  onToggleArchive,
+  actionLoading,
   onOpenRdo,
   onOpenField,
 }: {
@@ -1042,6 +1223,8 @@ function ProjectDetail({
   onBack: () => void
   onEdit: () => void
   onDelete: () => void
+  onToggleArchive: () => void
+  actionLoading: boolean
   onOpenRdo: () => void
   onOpenField: () => void
 }) {
@@ -1136,29 +1319,78 @@ function ProjectDetail({
           Voltar aos projetos
         </button>
 
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onEdit}
-              className="text-xs min-h-[38px] dark:border-slate-800"
-            >
-              <Edit2 className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-              Editar Projeto
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onDelete}
-              className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 min-h-[38px]"
-            >
-              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-              Excluir
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onToggleArchive}
+            disabled={actionLoading}
+            className="text-xs min-h-[38px] dark:border-slate-800"
+          >
+            {actionLoading ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : project.archived ? (
+              <ArchiveRestore className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
+            ) : (
+              <Archive className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
+            )}
+            {project.archived ? 'Desarquivar Projeto' : 'Arquivar Projeto'}
+          </Button>
+
+          {isAdmin && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onEdit}
+                className="text-xs min-h-[38px] dark:border-slate-800"
+              >
+                <Edit2 className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                Editar Projeto
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onDelete}
+                className="text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 min-h-[38px]"
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Excluir
+              </Button>
+            </>
+          )}
+        </div>
       </div>
+
+      {project.archived && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                Projeto Arquivado
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Este projeto está em modo de leitura nos arquivos. Você pode desarquivá-lo para
+                reativar operações normais.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            onClick={onToggleArchive}
+            disabled={actionLoading}
+            className="bg-amber-700 hover:bg-amber-800 text-white text-xs"
+          >
+            {actionLoading ? (
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
+            ) : (
+              <ArchiveRestore className="h-3.5 w-3.5 mr-1" />
+            )}
+            Desarquivar
+          </Button>
+        </div>
+      )}
 
       <section className="epa-card overflow-hidden">
         <div className="bg-gradient-to-br from-[#044741] to-[#086B63] p-6 text-white md:p-8">

@@ -9,7 +9,12 @@ onRecordUpdateRequest(
       log.set('actor', e.auth.id)
       let action = 'update'
       const entity = e.record.collection().name
-      if (
+      const previousArchived = e.record.original().getBool('archived')
+      const currentArchived = e.record.getBool('archived')
+
+      if (previousArchived !== currentArchived) {
+        action = currentArchived ? 'archive' : 'unarchive'
+      } else if (
         (entity === 'reports_rdo' || entity === 'field_spreadsheets') &&
         previousStatus !== e.record.getString('status')
       ) {
@@ -17,9 +22,11 @@ onRecordUpdateRequest(
         if (e.record.getString('status') === 'returned') action = 'return'
       }
       log.set('action', action)
-      log.set('entity', e.record.collection().name)
+      log.set('entity', entity)
       log.set('entity_record', e.record.id)
       log.set('details', {
+        archived: currentArchived,
+        previousArchived: previousArchived,
         status: e.record.getString('status') || '',
         previousStatus: previousStatus,
       })

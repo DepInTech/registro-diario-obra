@@ -83,6 +83,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               accidents: rdo.accidents || '',
               status: rdo.status,
               review_notes: rdo.reviewNotes || '',
+              archived: Boolean(rdo.archived),
             }
             const record = await pb.collection('reports_rdo').create(payload)
 
@@ -210,6 +211,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               accidents: rdo.accidents || '',
               status: rdo.status,
               review_notes: rdo.reviewNotes || '',
+              archived: Boolean(rdo.archived),
             }
             const updated = await pb.collection('reports_rdo').update(rdo.id, payload)
 
@@ -309,6 +311,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               observations: sheet.observations || '',
               status: sheet.status,
               review_notes: sheet.reviewNotes || '',
+              archived: Boolean(sheet.archived),
             }
             const created = await pb.collection('field_spreadsheets').create(payload)
             await offlineStorage.deleteFieldSheet(sheet.id)
@@ -372,6 +375,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               observations: sheet.observations || '',
               status: sheet.status,
               review_notes: sheet.reviewNotes || '',
+              archived: Boolean(sheet.archived),
             }
             const updated = await pb.collection('field_spreadsheets').update(sheet.id, payload)
             sheet.syncStatus = 'synced'

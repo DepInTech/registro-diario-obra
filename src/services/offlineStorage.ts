@@ -26,6 +26,7 @@ export interface OfflineRdoItem {
   accidents?: string
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   reviewNotes?: string
+  archived?: boolean
   wells: Array<{
     id?: string
     well_id: string
@@ -88,6 +89,7 @@ export interface OfflineFieldSheetItem {
   observations?: string
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   reviewNotes?: string
+  archived?: boolean
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict'
   lastModified: number
   serverUpdatedAt?: string

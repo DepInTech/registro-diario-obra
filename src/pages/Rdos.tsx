@@ -27,6 +27,8 @@ import {
   CloudSun,
   ShieldCheck,
   RotateCcw,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -46,8 +48,12 @@ export function RdosPage({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineRdoItem | null>(null)
   const [items, setItems] = useState<OfflineRdoItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [tabFilter, setTabFilter] = useState<'active' | 'archived'>('active')
   const [filter, setFilter] = useState<'all' | Status>('all')
   const [isNew, setIsNew] = useState(false)
+  const [deleteModalRdo, setDeleteModalRdo] = useState<OfflineRdoItem | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const { user } = useAuth()
   const { toast } = useToast()
 
@@ -151,6 +157,7 @@ export function RdosPage({ query }: { query: string }) {
                 syncStatus: 'synced',
                 lastModified: new Date(rec.updated).getTime(),
                 serverUpdatedAt: rec.updated,
+                archived: Boolean(rec.archived),
               }
               await offlineStorage.saveRdo(item)
             }
@@ -215,6 +222,7 @@ export function RdosPage({ query }: { query: string }) {
             },
             syncStatus: 'synced',
             lastModified: Date.now(),
+            archived: false,
           }
           await offlineStorage.saveRdo(item)
         }
@@ -235,11 +243,14 @@ export function RdosPage({ query }: { query: string }) {
     loadRdos()
   }, [])
 
-  const filtered = items.filter(
-    (r) =>
-      (filter === 'all' || r.status === filter) &&
-      `${r.number} ${r.projectName} ${r.activityTitle}`.toLowerCase().includes(query.toLowerCase()),
-  )
+  const filtered = items.filter((r) => {
+    const matchesTab = tabFilter === 'archived' ? Boolean(r.archived) : !r.archived
+    const matchesStatus = filter === 'all' || r.status === filter
+    const matchesQuery = `${r.number} ${r.projectName} ${r.activityTitle}`
+      .toLowerCase()
+      .includes(query.toLowerCase())
+    return matchesTab && matchesStatus && matchesQuery
+  })
 
   const openNew = () => {
     const nextNum = items.length > 0 ? Math.max(...items.map((i) => i.number)) + 1 : 1
@@ -289,19 +300,190 @@ export function RdosPage({ query }: { query: string }) {
         onSaved={() => {
           loadRdos()
         }}
+        onDelete={() => setDeleteModalRdo(editing)}
+        onToggleArchive={() => handleToggleArchiveRdo(editing)}
+        actionLoading={actionLoadingId === editing.id}
       />
     )
   }
 
+  const activeCount = items.filter((r) => !r.archived).length
+  const archivedCount = items.filter((r) => Boolean(r.archived)).length
+
+  const confirmDeleteRdo = async () => {
+    if (!deleteModalRdo) return
+    if (user?.role !== 'admin') {
+      toast({
+        title: 'Você não possui permissão para esta ação.',
+        description: 'Apenas Administradores podem excluir relatórios.',
+        variant: 'destructive',
+      })
+      setDeleteModalRdo(null)
+      return
+    }
+
+    const rdoToDelete = deleteModalRdo
+    setIsDeleting(true)
+    try {
+      // 1. Backend deletion if online: remove child records (wells and photos) first to avoid orphans
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          const wells = await pb.collection('report_wells').getFullList({
+            filter: `report = "${rdoToDelete.id}"`,
+          })
+          for (const w of wells) {
+            try {
+              await pb.collection('report_wells').delete(w.id)
+            } catch (errWell) {
+              console.warn('Error deleting child well:', errWell)
+            }
+          }
+
+          const photos = await pb.collection('report_photos').getFullList({
+            filter: `report = "${rdoToDelete.id}"`,
+          })
+          for (const p of photos) {
+            try {
+              await pb.collection('report_photos').delete(p.id)
+            } catch (errPhoto) {
+              console.warn('Error deleting child photo:', errPhoto)
+            }
+          }
+
+          await pb.collection('reports_rdo').delete(rdoToDelete.id)
+        } catch (pbErr: any) {
+          console.warn('Backend delete error (will delete locally):', pbErr)
+        }
+      }
+
+      // 2. Local deletion (IndexedDB)
+      await offlineStorage.deleteRdo(rdoToDelete.id)
+      setItems((prev) => prev.filter((i) => i.id !== rdoToDelete.id))
+      if (editing?.id === rdoToDelete.id) {
+        setEditing(null)
+      }
+
+      toast({
+        title: 'RDO excluído com sucesso',
+        description: `O RDO #${String(rdoToDelete.number).padStart(3, '0')} e seus registros vinculados foram removidos.`,
+      })
+      setDeleteModalRdo(null)
+    } catch (err: any) {
+      console.error('Delete RDO error:', err)
+      toast({
+        title: 'Erro ao excluir RDO',
+        description: err.message || 'Ocorreu um erro ao excluir o relatório.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleToggleArchiveRdo = async (rdo: OfflineRdoItem) => {
+    const nextArchived = !rdo.archived
+    setActionLoadingId(rdo.id)
+    try {
+      const updated: OfflineRdoItem = {
+        ...rdo,
+        archived: nextArchived,
+        syncStatus: 'pending_update',
+        lastModified: Date.now(),
+      }
+
+      // Update in local IndexedDB
+      await offlineStorage.saveRdo(updated)
+
+      // Update in PocketBase if online
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          await pb.collection('reports_rdo').update(rdo.id, {
+            archived: nextArchived,
+          })
+          updated.syncStatus = 'synced'
+          await offlineStorage.saveRdo(updated)
+        } catch (serverErr: any) {
+          console.warn('Archive update failed on server, queued for sync:', serverErr)
+        }
+      }
+
+      setItems((prev) => prev.map((item) => (item.id === rdo.id ? updated : item)))
+      if (editing?.id === rdo.id) {
+        setEditing(updated)
+      }
+
+      toast({
+        title: nextArchived ? 'RDO arquivado' : 'RDO desarquivado',
+        description: nextArchived
+          ? `O RDO #${String(rdo.number).padStart(3, '0')} foi movido para os arquivados.`
+          : `O RDO #${String(rdo.number).padStart(3, '0')} foi restaurado para a listagem ativa.`,
+      })
+    } catch (err: any) {
+      console.error('Toggle archive error:', err)
+      toast({
+        title: 'Erro ao alterar estado de arquivamento',
+        description: err.message || 'Verifique suas permissões.',
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  const baseItems = items.filter((r) =>
+    tabFilter === 'archived' ? Boolean(r.archived) : !r.archived,
+  )
+
   const counts = {
-    draft: items.filter((r) => r.status === 'draft').length,
-    submitted: items.filter((r) => r.status === 'submitted').length,
-    approved: items.filter((r) => r.status === 'approved').length,
-    returned: items.filter((r) => r.status === 'returned').length,
+    draft: baseItems.filter((r) => r.status === 'draft').length,
+    submitted: baseItems.filter((r) => r.status === 'submitted').length,
+    approved: baseItems.filter((r) => r.status === 'approved').length,
+    returned: baseItems.filter((r) => r.status === 'returned').length,
   }
 
   return (
     <div className="space-y-6">
+      {/* Abas Ativos vs Arquivados */}
+      <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800">
+        <button
+          onClick={() => setTabFilter('active')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+            tabFilter === 'active'
+              ? 'bg-emerald-700 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+          )}
+        >
+          <FileText className="h-4 w-4" />
+          RDOs Ativos ({activeCount})
+        </button>
+        <button
+          onClick={() => setTabFilter('archived')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+            tabFilter === 'archived'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+          )}
+        >
+          <Archive className="h-4 w-4" />
+          Arquivados ({archivedCount})
+        </button>
+      </div>
+
+      {tabFilter === 'archived' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Archive className="h-4 w-4 shrink-0 text-amber-600" />
+            <span>
+              <b>Visualização de RDOs Arquivados:</b> Relatórios arquivados para histórico em modo
+              somente leitura. Você pode desarquivá-los a qualquer momento para retorná-los à
+              listagem ativa.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Counters filter */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -445,18 +627,49 @@ export function RdosPage({ query }: { query: string }) {
                       )}
                     </td>
                     <td className="px-5 py-4 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setEditing(report)
-                          setIsNew(false)
-                        }}
-                        className="text-xs hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-slate-800 min-h-[36px]"
-                      >
-                        <Eye className="mr-1.5 h-4 w-4" />
-                        Abrir / Editar
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleToggleArchiveRdo(report)
+                          }}
+                          disabled={actionLoadingId === report.id}
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                          title={report.archived ? 'Desarquivar RDO' : 'Arquivar RDO'}
+                        >
+                          {actionLoadingId === report.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : report.archived ? (
+                            <ArchiveRestore className="h-4 w-4 text-amber-600" />
+                          ) : (
+                            <Archive className="h-4 w-4" />
+                          )}
+                        </button>
+                        {user?.role === 'admin' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteModalRdo(report)
+                            }}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                            title="Excluir RDO (apenas Admin)"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setEditing(report)
+                            setIsNew(false)
+                          }}
+                          className="text-xs hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-slate-800 min-h-[36px]"
+                        >
+                          <Eye className="mr-1.5 h-4 w-4" />
+                          {report.archived ? 'Visualizar' : 'Abrir / Editar'}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -465,6 +678,58 @@ export function RdosPage({ query }: { query: string }) {
           </div>
         )}
       </section>
+
+      {/* Modal de confirmação de exclusão do RDO */}
+      {deleteModalRdo && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                Excluir RDO #{String(deleteModalRdo.number).padStart(3, '0')}
+              </h3>
+            </div>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+              Tem certeza que deseja excluir o relatório{' '}
+              <b className="text-slate-900 dark:text-white">
+                RDO #{String(deleteModalRdo.number).padStart(3, '0')} — {deleteModalRdo.projectName}
+              </b>
+              ?
+            </p>
+            <div className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              ⚠️ <b>Esta ação não pode ser desfeita.</b> Todos os poços cadastrados e registros
+              fotográficos vinculados a este RDO também serão excluídos definitivamente.
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isDeleting}
+                onClick={() => setDeleteModalRdo(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={isDeleting}
+                onClick={confirmDeleteRdo}
+                className="bg-red-600 hover:bg-red-700 text-white min-w-[100px]"
+              >
+                {isDeleting ? (
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Excluindo...
+                  </span>
+                ) : (
+                  'Confirmar Exclusão'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -480,11 +745,17 @@ function RdoFullPageEditor({
   isNew,
   onBack,
   onSaved,
+  onDelete,
+  onToggleArchive,
+  actionLoading,
 }: {
   report: OfflineRdoItem
   isNew: boolean
   onBack: () => void
   onSaved: () => void
+  onDelete?: () => void
+  onToggleArchive?: () => void
+  actionLoading?: boolean
 }) {
   const [formData, setFormData] = useState<OfflineRdoItem>({ ...initialReport })
   const [isSaving, setIsSaving] = useState(false)
@@ -805,6 +1076,37 @@ function RdoFullPageEditor({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Arquivar / Desarquivar */}
+          {onToggleArchive && (
+            <Button
+              variant="outline"
+              onClick={onToggleArchive}
+              disabled={actionLoading}
+              className="min-h-[44px] text-xs font-semibold dark:border-slate-800"
+            >
+              {actionLoading ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : formData.archived ? (
+                <ArchiveRestore className="mr-1.5 h-4 w-4 text-amber-600" />
+              ) : (
+                <Archive className="mr-1.5 h-4 w-4 text-slate-500" />
+              )}
+              {formData.archived ? 'Desarquivar RDO' : 'Arquivar RDO'}
+            </Button>
+          )}
+
+          {/* Excluir (Admin apenas) */}
+          {isAdmin && onDelete && (
+            <Button
+              variant="ghost"
+              onClick={onDelete}
+              className="min-h-[44px] text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40"
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" />
+              Excluir
+            </Button>
+          )}
+
           {canExportPdf && (
             <Button
               variant="outline"
@@ -826,7 +1128,7 @@ function RdoFullPageEditor({
             </Button>
           )}
 
-          {!isLocked && (
+          {!isLocked && !formData.archived && (
             <>
               <Button
                 variant="outline"
@@ -853,7 +1155,7 @@ function RdoFullPageEditor({
             </>
           )}
 
-          {isAdmin && formData.status === 'submitted' && (
+          {isAdmin && formData.status === 'submitted' && !formData.archived && (
             <>
               <Button
                 onClick={() => handleAdminStatusChange('approved')}
@@ -876,6 +1178,38 @@ function RdoFullPageEditor({
           )}
         </div>
       </div>
+
+      {formData.archived && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                RDO Arquivado
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Este relatório está em modo de leitura nos arquivos. Você pode desarquivá-lo a
+                qualquer momento.
+              </p>
+            </div>
+          </div>
+          {onToggleArchive && (
+            <Button
+              size="sm"
+              onClick={onToggleArchive}
+              disabled={actionLoading}
+              className="bg-amber-700 hover:bg-amber-800 text-white text-xs"
+            >
+              {actionLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <ArchiveRestore className="h-3.5 w-3.5 mr-1" />
+              )}
+              Desarquivar
+            </Button>
+          )}
+        </div>
+      )}
 
       {formData.reviewNotes && formData.status === 'returned' && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
