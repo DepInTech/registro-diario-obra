@@ -246,35 +246,27 @@ export function RdosPage({ query }: { query: string }) {
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
       number: nextNum,
-      projectId: 'u6c77idn7hfi13c',
-      projectName: 'Acompanhamento Ambiental Açailândia',
-      clientName: 'VALE S.A.',
-      contractCode: '5900117667',
-      companyName: 'EPA Engenharia de Proteção Ambiental',
-      location: 'Açailândia - MA',
+      projectId: '',
+      projectName: '',
+      clientName: '',
+      contractCode: '',
+      companyName: '',
+      location: '',
       reportDate: new Date().toISOString().slice(0, 10),
-      weather: 'Ensolarado',
+      weather: 'Sol',
       performedBy: user?.id || '',
-      performedByName: user?.name || 'Rodrigo Bezerra e Evandlier Sampaio',
-      supervisedBy: '2n6he1v3guzt3yt',
-      supervisedByName: 'Karoline Ferreira',
-      activityTitle: 'Tamponamento de poços – Açailândia - MA',
-      activityDescription:
-        'No dia de hoje, a equipe da EPA Engenharia realizou atividades de tamponamento na área.',
-      timeDisplacement: '00h00',
-      timeWaiting: 'Sem ocorrências',
-      interferences: 'Não houve',
-      planChanges: 'Não houve',
-      accidents: 'Não houve',
+      performedByName: user?.name || '',
+      supervisedBy: '',
+      supervisedByName: '',
+      activityTitle: '',
+      activityDescription: '',
+      timeDisplacement: '',
+      timeWaiting: '',
+      interferences: '',
+      planChanges: '',
+      accidents: '',
       status: 'draft',
-      wells: [
-        {
-          well_id: 'PZ-01',
-          depth: 8.5,
-          completion_date: new Date().toISOString().slice(0, 10),
-          diameter: '4 pol.',
-        },
-      ],
+      wells: [],
       photos: [],
       fieldPhoto: undefined,
       syncStatus: 'pending_create',
@@ -912,7 +904,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Cliente</label>
             <Input
-              value={formData.clientName || 'VALE S.A.'}
+              placeholder="Ex.: VALE S.A."
+              value={formData.clientName ?? ''}
               onChange={(e) => handleFieldChange('clientName', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -921,7 +914,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Contrato</label>
             <Input
-              value={formData.contractCode || '5900117667'}
+              placeholder="Ex.: 5900117667"
+              value={formData.contractCode ?? ''}
               onChange={(e) => handleFieldChange('contractCode', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -930,7 +924,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Local</label>
             <Input
-              value={formData.location || 'Açailândia -MA.'}
+              placeholder="Ex.: Açailândia - MA"
+              value={formData.location ?? ''}
               onChange={(e) => handleFieldChange('location', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -939,7 +934,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Projeto EPA</label>
             <Input
-              value={formData.projectName || '24-0234'}
+              placeholder="Ex.: 24-0234"
+              value={formData.projectName ?? ''}
               onChange={(e) => handleFieldChange('projectName', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -948,7 +944,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Empresa Executora</label>
             <Input
-              value={formData.companyName || 'EPA Engenharia de Proteção Ambiental'}
+              placeholder="Ex.: EPA Engenharia de Proteção Ambiental"
+              value={formData.companyName ?? ''}
               onChange={(e) => handleFieldChange('companyName', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -958,7 +955,7 @@ function RdoFullPageEditor({
             <label className="epa-label">Data do Relatório</label>
             <Input
               type="date"
-              value={formData.reportDate}
+              value={formData.reportDate ?? ''}
               onChange={(e) => handleFieldChange('reportDate', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -967,7 +964,7 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Clima</label>
             <select
-              value={formData.weather}
+              value={formData.weather ?? 'Sol'}
               onChange={(e) => handleFieldChange('weather', e.target.value)}
               disabled={isLocked}
               className="epa-input"
@@ -982,7 +979,7 @@ function RdoFullPageEditor({
             <label className="epa-label">Número do RDO</label>
             <Input
               type="number"
-              value={formData.number}
+              value={formData.number ?? ''}
               onChange={(e) => handleFieldChange('number', Number(e.target.value))}
               disabled={isLocked}
               className="mt-1.5 font-mono"
@@ -991,7 +988,8 @@ function RdoFullPageEditor({
           <div className="sm:col-span-2">
             <label className="epa-label">Realizado por (Operador/Executor)</label>
             <Input
-              value={formData.performedByName || ''}
+              placeholder="Nome do operador ou executor"
+              value={formData.performedByName ?? ''}
               onChange={(e) => handleFieldChange('performedByName', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -1000,7 +998,8 @@ function RdoFullPageEditor({
           <div className="sm:col-span-2">
             <label className="epa-label">Supervisionado por (Técnico/Responsável)</label>
             <Input
-              value={formData.supervisedByName || ''}
+              placeholder="Nome do responsável técnico ou supervisor"
+              value={formData.supervisedByName ?? ''}
               onChange={(e) => handleFieldChange('supervisedByName', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -1028,7 +1027,7 @@ function RdoFullPageEditor({
             <div className="p-4 bg-white dark:bg-slate-900">
               <Input
                 placeholder="Ex.: Tamponamento de poços de monitoramento ou Operação de Extração"
-                value={formData.activityTitle}
+                value={formData.activityTitle ?? ''}
                 onChange={(e) => handleFieldChange('activityTitle', e.target.value)}
                 disabled={isLocked}
                 className="font-medium text-sm border-slate-300 dark:border-slate-700"
@@ -1047,7 +1046,7 @@ function RdoFullPageEditor({
               <div>
                 <Textarea
                   placeholder="Descreva minuciosamente os serviços executados, procedimentos e informações de campo..."
-                  value={formData.activityDescription}
+                  value={formData.activityDescription ?? ''}
                   onChange={(e) => handleFieldChange('activityDescription', e.target.value)}
                   disabled={isLocked}
                   className="epa-textarea min-h-[120px] text-xs sm:text-sm"
@@ -1102,7 +1101,7 @@ function RdoFullPageEditor({
                         Legenda da Imagem (Centralizada no topo da foto)
                       </label>
                       <Input
-                        value={formData.fieldPhoto.caption || ''}
+                        value={formData.fieldPhoto.caption ?? ''}
                         onChange={(e) => handleFieldPhotoCaptionChange(e.target.value)}
                         disabled={isLocked}
                         placeholder="Ex.: Figura 01 – Mapa de localização da área de interesse."
@@ -1226,7 +1225,7 @@ function RdoFullPageEditor({
                   <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <td className="p-2">
                       <Input
-                        value={well.well_id}
+                        value={well.well_id ?? ''}
                         onChange={(e) => handleWellFieldChange(index, 'well_id', e.target.value)}
                         disabled={isLocked}
                         placeholder="PZ-01"
@@ -1237,7 +1236,7 @@ function RdoFullPageEditor({
                       <Input
                         type="number"
                         step="0.1"
-                        value={well.depth || ''}
+                        value={well.depth ?? ''}
                         onChange={(e) => handleWellFieldChange(index, 'depth', e.target.value)}
                         disabled={isLocked}
                         placeholder="8.5"
@@ -1247,7 +1246,7 @@ function RdoFullPageEditor({
                     <td className="p-2">
                       <Input
                         type="date"
-                        value={well.completion_date || ''}
+                        value={well.completion_date ?? ''}
                         onChange={(e) =>
                           handleWellFieldChange(index, 'completion_date', e.target.value)
                         }
@@ -1257,7 +1256,7 @@ function RdoFullPageEditor({
                     </td>
                     <td className="p-2">
                       <Input
-                        value={well.diameter || ''}
+                        value={well.diameter ?? ''}
                         onChange={(e) => handleWellFieldChange(index, 'diameter', e.target.value)}
                         disabled={isLocked}
                         placeholder="4 pol."
@@ -1357,7 +1356,7 @@ function RdoFullPageEditor({
                     Legenda da Foto
                   </label>
                   <Input
-                    value={photo.caption}
+                    value={photo.caption ?? ''}
                     onChange={(e) => handlePhotoCaptionChange(index, e.target.value)}
                     disabled={isLocked}
                     placeholder="Legenda descritiva da imagem..."
@@ -1395,7 +1394,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Acidentes / Incidentes</label>
             <Input
-              value={formData.accidents || 'Não houve'}
+              placeholder="Ex.: Não houve"
+              value={formData.accidents ?? ''}
               onChange={(e) => handleFieldChange('accidents', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -1404,7 +1404,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Interferências / Dificuldades</label>
             <Input
-              value={formData.interferences || 'Não houve'}
+              placeholder="Ex.: Não houve"
+              value={formData.interferences ?? ''}
               onChange={(e) => handleFieldChange('interferences', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -1413,7 +1414,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Mudanças no Plano de Trabalho</label>
             <Input
-              value={formData.planChanges || 'Não houve'}
+              placeholder="Ex.: Não houve"
+              value={formData.planChanges ?? ''}
               onChange={(e) => handleFieldChange('planChanges', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -1422,7 +1424,8 @@ function RdoFullPageEditor({
           <div>
             <label className="epa-label">Tempo de Espera</label>
             <Input
-              value={formData.timeWaiting || 'Sem ocorrências'}
+              placeholder="Ex.: Sem ocorrências ou 00h30"
+              value={formData.timeWaiting ?? ''}
               onChange={(e) => handleFieldChange('timeWaiting', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
@@ -1431,7 +1434,8 @@ function RdoFullPageEditor({
           <div className="sm:col-span-2">
             <label className="epa-label">Tempo de Deslocamento</label>
             <Input
-              value={formData.timeDisplacement || '01h20'}
+              placeholder="Ex.: 00h00 ou 01h20"
+              value={formData.timeDisplacement ?? ''}
               onChange={(e) => handleFieldChange('timeDisplacement', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
