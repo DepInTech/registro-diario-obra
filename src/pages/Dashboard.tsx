@@ -73,26 +73,29 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         if (navigator.onLine && pb.authStore.isValid) {
           try {
             const projs = await pb.collection('projects').getFullList({
+              filter: 'deleted = false || deleted:isset = false',
               sort: '-created',
               expand: 'client,contract',
             })
             if (projs.length > 0) {
               setProjectsList(
-                projs.map((p) => {
-                  const clientExp = p.expand?.client as any
-                  const contractExp = p.expand?.contract as any
-                  return {
-                    id: p.id,
-                    name: p.name,
-                    client: clientExp?.name || 'Cliente EPA',
-                    code: p.epa_code || 'EPA-001',
-                    location: p.location || 'Área Industrial',
-                    status: (p.status as any) || 'active',
-                    progress: p.progress ?? 50,
-                    contract: contractExp?.code || 'CT-2025',
-                    team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
-                  }
-                }),
+                projs
+                  .filter((p) => !p.deleted && !p.archived)
+                  .map((p) => {
+                    const clientExp = p.expand?.client as any
+                    const contractExp = p.expand?.contract as any
+                    return {
+                      id: p.id,
+                      name: p.name,
+                      client: clientExp?.name || 'Cliente EPA',
+                      code: p.epa_code || 'EPA-001',
+                      location: p.location || 'Área Industrial',
+                      status: (p.status as any) || 'active',
+                      progress: p.progress ?? 50,
+                      contract: contractExp?.code || 'CT-2025',
+                      team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
+                    }
+                  }),
               )
             }
           } catch (projErr) {

@@ -46,6 +46,11 @@ interface ProjectItem extends EpaProject {
   rawArea?: string
   assignedUsersIds?: string[]
   archived?: boolean
+  deleted?: boolean
+  deletedReason?: string
+  deletedBy?: string
+  deletedByName?: string
+  deletedAt?: string
 }
 
 export function Projects({
@@ -60,11 +65,12 @@ export function Projects({
   const [selected, setSelected] = useState<ProjectItem | null>(null)
   const [projectsList, setProjectsList] = useState<ProjectItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [tabFilter, setTabFilter] = useState<'active' | 'archived'>('active')
+  const [tabFilter, setTabFilter] = useState<'active' | 'archived' | 'deleted'>('active')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'completed'>('all')
 
   // Delete modal state
   const [deleteModalProject, setDeleteModalProject] = useState<ProjectItem | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
 
@@ -128,7 +134,7 @@ export function Projects({
       if (navigator.onLine && pb.authStore.isValid) {
         const records = await pb.collection('projects').getFullList({
           sort: '-created',
-          expand: 'client,contract,company,area,assigned_users',
+          expand: 'client,contract,company,area,assigned_users,deleted_by',
         })
 
         if (records.length > 0) {
@@ -136,6 +142,7 @@ export function Projects({
             const expClient = rec.expand?.client as Client | undefined
             const expContract = rec.expand?.contract as Contract | undefined
             const expAssigned = rec.expand?.assigned_users as EpaUser[] | undefined
+            const expDeletedBy = rec.expand?.deleted_by as EpaUser | undefined
             const assignedIds: string[] = Array.isArray(rec.assigned_users)
               ? rec.assigned_users
               : rec.assigned_users
@@ -163,6 +170,11 @@ export function Projects({
               rawArea: rec.area,
               assignedUsersIds: assignedIds,
               archived: Boolean(rec.archived),
+              deleted: Boolean(rec.deleted),
+              deletedReason: rec.deleted_reason || undefined,
+              deletedBy: rec.deleted_by || undefined,
+              deletedByName: expDeletedBy?.name || undefined,
+              deletedAt: rec.deleted_at || undefined,
             }
           })
           setProjectsList(mapped)
@@ -303,16 +315,33 @@ export function Projects({
         variant: 'destructive',
       })
       setDeleteModalProject(null)
+      setDeleteReason('')
+      return
+    }
+
+    const trimmedReason = deleteReason.trim()
+    if (trimmedReason.length < 10) {
+      toast({
+        title: 'Justificativa insuficiente',
+        description: 'Por favor, informe uma justificativa com no mínimo 10 caracteres.',
+        variant: 'destructive',
+      })
       return
     }
 
     const p = deleteModalProject
+    const nowIso = new Date().toISOString()
     setIsDeleting(true)
     try {
       if (navigator.onLine && pb.authStore.isValid) {
-        await pb.collection('projects').delete(p.id)
+        await pb.collection('projects').update(p.id, {
+          deleted: true,
+          deleted_reason: trimmedReason,
+          deleted_by: user?.id || null,
+          deleted_at: nowIso,
+        })
       }
-      // Limpeza offline (IndexedDB) de RDOs e Planilhas associados ao projeto
+      // Limpeza offline (IndexedDB) de RDOs e Planilhas associados ao projeto para não manter órfãos locais
       try {
         await Promise.all([
           offlineStorage.deleteRdosByProject(p.id),
@@ -322,20 +351,30 @@ export function Projects({
         console.warn('Erro ao limpar cache offline do projeto:', storageErr)
       }
 
-      setProjectsList((prev) => prev.filter((item) => item.id !== p.id))
+      const updatedProject: ProjectItem = {
+        ...p,
+        deleted: true,
+        deletedReason: trimmedReason,
+        deletedBy: user?.id,
+        deletedByName: user?.name,
+        deletedAt: nowIso,
+      }
+
+      setProjectsList((prev) => prev.map((item) => (item.id === p.id ? updatedProject : item)))
       if (selected?.id === p.id) {
-        setSelected(null)
+        setSelected(updatedProject)
       }
       toast({
         title: 'Projeto excluído com sucesso',
-        description: `O projeto ${p.name} foi removido.`,
+        description: `O projeto "${p.name}" foi movido para os itens excluídos com justificativa registrada.`,
       })
       setDeleteModalProject(null)
+      setDeleteReason('')
     } catch (err: any) {
       console.error('Delete project error:', err)
       toast({
         title: 'Erro ao excluir projeto',
-        description: err.message || 'Verifique se há relatórios vinculados.',
+        description: err.message || 'Verifique se há relatórios vinculados ou permissões.',
         variant: 'destructive',
       })
     } finally {
@@ -529,49 +568,96 @@ export function Projects({
     }
   }
 
-  const activeCount = projectsList.filter((p) => !p.archived).length
-  const archivedCount = projectsList.filter((p) => p.archived).length
+  const activeCount = projectsList.filter((p) => !p.deleted && !p.archived).length
+  const archivedCount = projectsList.filter((p) => !p.deleted && Boolean(p.archived)).length
+  const deletedCount = projectsList.filter((p) => Boolean(p.deleted)).length
 
   const filtered = projectsList.filter((p) => {
-    const matchesTab = tabFilter === 'archived' ? Boolean(p.archived) : !p.archived
-    const matchesSearch = `${p.name} ${p.client} ${p.code} ${p.location}`
+    let matchesTab = false
+    if (tabFilter === 'deleted') {
+      matchesTab = Boolean(p.deleted)
+    } else if (tabFilter === 'archived') {
+      matchesTab = !p.deleted && Boolean(p.archived)
+    } else {
+      matchesTab = !p.deleted && !p.archived
+    }
+
+    const matchesSearch = `${p.name} ${p.client} ${p.code} ${p.location} ${p.deletedReason || ''}`
       .toLowerCase()
       .includes(query.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || p.status === statusFilter
+    const matchesStatus =
+      tabFilter === 'deleted' ? true : statusFilter === 'all' || p.status === statusFilter
     return matchesTab && matchesSearch && matchesStatus
   })
 
   const deleteModalJSX = deleteModalProject && (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
         <div className="flex items-center gap-3 text-red-600">
           <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
             <Trash2 className="h-5 w-5" />
           </div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white">Excluir Projeto</h3>
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              Excluir Projeto {deleteModalProject.code}
+            </h3>
+            <p className="text-xs text-slate-500">Exclusão com método de segurança e auditoria</p>
+          </div>
         </div>
+
         <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-          Tem certeza que deseja excluir o projeto{' '}
-          <b className="text-slate-900 dark:text-white">"{deleteModalProject.name}"</b>?
+          Você está prestes a excluir o projeto{' '}
+          <b className="text-slate-900 dark:text-white">
+            "{deleteModalProject.name}" ({deleteModalProject.code})
+          </b>
+          .
         </p>
-        <div className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-          ⚠️ <b>Esta ação não pode ser desfeita.</b> Somente administradores têm permissão para
-          exclusão definitiva.
+
+        <div className="mt-3 rounded-lg bg-blue-50 p-3 text-xs text-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+          🛡️ <b>Registro e Arquivamento:</b> O projeto não desaparecerá do banco de dados. Ele será
+          marcado como excluído logicamente e ficará arquivado na aba <b>"Excluídos"</b> (visível
+          apenas para Administradores), preservando o histórico e dados vinculados para trilha de
+          auditoria.
         </div>
+
+        <div className="mt-4 space-y-1.5">
+          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Justificativa da Exclusão <span className="text-red-500">* (mínimo 10 caracteres)</span>
+          </label>
+          <textarea
+            value={deleteReason}
+            onChange={(e) => setDeleteReason(e.target.value)}
+            placeholder="Explique detalhadamente por que este projeto está sendo excluído..."
+            rows={3}
+            className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+          />
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span>
+              {deleteReason.trim().length < 10
+                ? `Faltam ${10 - deleteReason.trim().length} caractere(s)`
+                : '✓ Justificativa atende ao requisito mínimo'}
+            </span>
+            <span>{deleteReason.length} caracteres</span>
+          </div>
+        </div>
+
         <div className="mt-6 flex justify-end gap-2">
           <Button
             variant="outline"
             size="sm"
             disabled={isDeleting}
-            onClick={() => setDeleteModalProject(null)}
+            onClick={() => {
+              setDeleteModalProject(null)
+              setDeleteReason('')
+            }}
           >
             Cancelar
           </Button>
           <Button
             size="sm"
-            disabled={isDeleting}
+            disabled={isDeleting || deleteReason.trim().length < 10}
             onClick={confirmDeleteProject}
-            className="bg-red-600 hover:bg-red-700 text-white min-w-[100px]"
+            className="bg-red-600 hover:bg-red-700 text-white min-w-[130px] disabled:opacity-50"
           >
             {isDeleting ? (
               <span className="flex items-center gap-1.5">
@@ -633,8 +719,8 @@ export function Projects({
         )}
       </div>
 
-      {/* Abas Ativos vs Arquivados */}
-      <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800">
+      {/* Abas Ativos vs Arquivados vs Excluídos */}
+      <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800 flex-wrap">
         <button
           onClick={() => setTabFilter('active')}
           className={cn(
@@ -659,6 +745,20 @@ export function Projects({
           <Archive className="h-4 w-4" />
           Arquivados ({archivedCount})
         </button>
+        {isAdmin && (
+          <button
+            onClick={() => setTabFilter('deleted')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+              tabFilter === 'deleted'
+                ? 'bg-red-700 text-white shadow-sm'
+                : 'text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40',
+            )}
+          >
+            <Trash2 className="h-4 w-4" />
+            Excluídos ({deletedCount})
+          </button>
+        )}
       </div>
 
       {tabFilter === 'archived' && (
@@ -673,11 +773,28 @@ export function Projects({
         </div>
       )}
 
+      {tabFilter === 'deleted' && (
+        <div className="rounded-xl border border-red-200 bg-red-50/60 p-3.5 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 shrink-0 text-red-600" />
+            <span>
+              <b>Itens Excluídos pelo Administrador:</b> Projetos excluídos logicamente permanecem
+              preservados para auditoria junto à justificativa do responsável.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Filter and stats row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <p className="text-sm text-slate-500 dark:text-slate-400">
           <b className="text-slate-800 dark:text-slate-100">{filtered.length}</b> projeto(s){' '}
-          {tabFilter === 'archived' ? 'arquivado(s)' : 'ativo(s)'} visíveis para seu perfil
+          {tabFilter === 'deleted'
+            ? 'excluído(s)'
+            : tabFilter === 'archived'
+              ? 'arquivado(s)'
+              : 'ativo(s)'}{' '}
+          visíveis para seu perfil
         </p>
         <div className="flex rounded-lg border bg-white p-1 text-xs dark:bg-slate-900 dark:border-slate-800">
           <button
@@ -790,24 +907,26 @@ export function Projects({
                           ? 'Ⅱ Pausado'
                           : '✓ Concluído'}
                     </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleToggleArchiveProject(project)
-                      }}
-                      disabled={actionLoadingId === project.id}
-                      className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                      title={project.archived ? 'Desarquivar projeto' : 'Arquivar projeto'}
-                    >
-                      {actionLoadingId === project.id ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : project.archived ? (
-                        <ArchiveRestore className="h-3.5 w-3.5 text-amber-600" />
-                      ) : (
-                        <Archive className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    {isAdmin && (
+                    {!project.deleted && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleToggleArchiveProject(project)
+                        }}
+                        disabled={actionLoadingId === project.id}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                        title={project.archived ? 'Desarquivar projeto' : 'Arquivar projeto'}
+                      >
+                        {actionLoadingId === project.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : project.archived ? (
+                          <ArchiveRestore className="h-3.5 w-3.5 text-amber-600" />
+                        ) : (
+                          <Archive className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    )}
+                    {isAdmin && !project.deleted && (
                       <>
                         <button
                           onClick={(e) => {
@@ -825,11 +944,16 @@ export function Projects({
                             setDeleteModalProject(project)
                           }}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                          title="Excluir projeto"
+                          title="Excluir projeto (apenas Admin com justificativa)"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </>
+                    )}
+                    {project.deleted && (
+                      <span className="rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800 dark:bg-red-900/40 dark:text-red-300">
+                        Excluído
+                      </span>
                     )}
                   </div>
                 </div>
@@ -896,12 +1020,18 @@ export function Projects({
                     onClick={() => setSelected(project)}
                     className={cn(
                       'text-xs font-semibold',
-                      project.archived
-                        ? 'text-amber-700 hover:bg-amber-50 dark:text-amber-400'
-                        : 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-slate-800',
+                      project.deleted
+                        ? 'text-red-700 hover:bg-red-50 dark:text-red-400'
+                        : project.archived
+                          ? 'text-amber-700 hover:bg-amber-50 dark:text-amber-400'
+                          : 'text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:hover:bg-slate-800',
                     )}
                   >
-                    {project.archived ? 'Ver arquivado' : 'Abrir projeto'}
+                    {project.deleted
+                      ? 'Ver arquivado (Excluído)'
+                      : project.archived
+                        ? 'Ver arquivado'
+                        : 'Abrir projeto'}
                     <ArrowRight className="ml-1 h-3.5 w-3.5 transition group-hover:translate-x-1" />
                   </Button>
                 </div>
@@ -1333,24 +1463,26 @@ function ProjectDetail({
         </button>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onToggleArchive}
-            disabled={actionLoading}
-            className="text-xs min-h-[38px] dark:border-slate-800"
-          >
-            {actionLoading ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : project.archived ? (
-              <ArchiveRestore className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
-            ) : (
-              <Archive className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
-            )}
-            {project.archived ? 'Desarquivar Projeto' : 'Arquivar Projeto'}
-          </Button>
+          {!project.deleted && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToggleArchive}
+              disabled={actionLoading}
+              className="text-xs min-h-[38px] dark:border-slate-800"
+            >
+              {actionLoading ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : project.archived ? (
+                <ArchiveRestore className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
+              ) : (
+                <Archive className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
+              )}
+              {project.archived ? 'Desarquivar Projeto' : 'Arquivar Projeto'}
+            </Button>
+          )}
 
-          {isAdmin && (
+          {isAdmin && !project.deleted && (
             <>
               <Button
                 variant="outline"
@@ -1375,7 +1507,37 @@ function ProjectDetail({
         </div>
       </div>
 
-      {project.archived && (
+      {project.deleted && (
+        <div className="rounded-2xl border border-red-300 bg-red-50 p-5 dark:border-red-800 dark:bg-red-950/40 space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-200">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-bold text-red-900 dark:text-red-200 text-sm">
+                Projeto Excluído pelo Administrador
+              </p>
+              <p className="text-xs text-red-700 dark:text-red-300">
+                Excluído em:{' '}
+                {project.deletedAt
+                  ? new Date(project.deletedAt).toLocaleString('pt-BR')
+                  : 'Data registrada no servidor'}{' '}
+                {project.deletedByName ? `· por ${project.deletedByName}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="rounded-xl bg-white/80 p-3.5 text-xs text-slate-800 dark:bg-slate-900/80 dark:text-slate-200 border border-red-200 dark:border-red-900">
+            <span className="font-semibold text-red-800 dark:text-red-300">
+              Justificativa registrada:{' '}
+            </span>
+            <span className="italic">
+              {project.deletedReason || '(Sem justificativa fornecida)'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {project.archived && !project.deleted && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />

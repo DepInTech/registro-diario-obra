@@ -32,12 +32,17 @@ export type Project = RecordModel & {
   status: 'active' | 'paused' | 'completed'
   assigned_users?: string[]
   archived?: boolean
+  deleted?: boolean
+  deleted_reason?: string
+  deleted_by?: string
+  deleted_at?: string
   expand?: {
     client?: Client
     contract?: Contract
     company?: Company
     area?: Area
     assigned_users?: EpaUser[]
+    deleted_by?: EpaUser
   }
 }
 export type Well = RecordModel & {
