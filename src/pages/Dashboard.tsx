@@ -6,7 +6,6 @@ import {
   ArrowUpRight,
   CheckCircle2,
   ClipboardList,
-  CloudSun,
   Droplets,
   FileSpreadsheet,
   FolderKanban,
@@ -244,8 +243,8 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
           })}
       </section>
 
-      {/* Projects Progress & Field Conditions */}
-      <section className="grid gap-5 xl:grid-cols-[1.55fr_.85fr]">
+      {/* Projects Progress */}
+      <section>
         <article className="epa-card overflow-hidden">
           <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
             <div>
@@ -263,12 +262,12 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               Ver todos <ArrowRight className="ml-1 h-3.5 w-3.5" />
             </Button>
           </div>
-          <div className="space-y-5 p-5">
+          <div className="grid gap-5 p-5 md:grid-cols-2">
             {projectsList.map((project) => (
               <button
                 onClick={() => navigate('projects')}
                 key={project.id}
-                className="group block w-full text-left"
+                className="group block w-full text-left rounded-lg p-2 transition hover:bg-slate-50 dark:hover:bg-slate-900/50"
               >
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -291,51 +290,6 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                 </div>
               </button>
             ))}
-          </div>
-        </article>
-
-        <article className="epa-card overflow-hidden">
-          <div className="border-b bg-gradient-to-br from-[#064a44] to-[#086B63] p-5 text-white">
-            <div className="flex items-start justify-between">
-              <div className="flex gap-3">
-                <div className="grid h-11 w-11 place-items-center rounded-xl bg-white/15">
-                  <CloudSun className="h-6 w-6" />
-                </div>
-                <div>
-                  <p className="text-xs text-emerald-200">Condições Operacionais em Campo</p>
-                  <p className="font-semibold text-sm">Açailândia — MA / Refinaria Sul</p>
-                </div>
-              </div>
-              <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-medium">
-                Tempo Real
-              </span>
-            </div>
-            <div className="mt-6 flex items-end justify-between">
-              <div>
-                <span className="text-4xl font-light tracking-tight">29°C</span>
-                <p className="mt-1 text-xs text-emerald-100">Sol com poucas nuvens</p>
-              </div>
-              <div className="space-y-1 text-right text-xs text-emerald-100">
-                <p>
-                  Umidade: <b className="text-white">65%</b>
-                </p>
-                <p>
-                  Vento: <b className="text-white">10 km/h</b>
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-4 divide-x p-4 text-center dark:divide-slate-800">
-            {['Manhã|27°|☀️', '12h|31°|🌤️', '15h|30°|🌥️', '18h|26°|🌧️'].map((item) => {
-              const [time, temp, emoji] = item.split('|')
-              return (
-                <div key={time}>
-                  <p className="text-[10px] text-slate-400">{time}</p>
-                  <p className="my-1 text-base">{emoji}</p>
-                  <p className="font-mono text-xs font-semibold">{temp}</p>
-                </div>
-              )
-            })}
           </div>
         </article>
       </section>
