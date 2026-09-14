@@ -67,7 +67,16 @@ export function AuditPage() {
 
               let actionText = r.action
               let color = 'slate'
-              if (r.action === 'archive') {
+              if (r.action === 'soft_delete') {
+                const reason = (r.details as any)?.deleted_reason
+                actionText = reason
+                  ? `excluiu e arquivou (Motivo: "${reason}")`
+                  : 'excluiu e arquivou o registro'
+                color = 'rose'
+              } else if (r.action === 'restore') {
+                actionText = 'restaurou o registro excluído'
+                color = 'emerald'
+              } else if (r.action === 'archive') {
                 actionText = 'arquivou o registro'
                 color = 'amber'
               } else if (r.action === 'unarchive') {

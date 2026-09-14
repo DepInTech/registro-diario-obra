@@ -45,10 +45,11 @@ export function FieldSpreadsheets({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineFieldSheetItem | null>(null)
   const [items, setItems] = useState<OfflineFieldSheetItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [tabFilter, setTabFilter] = useState<'active' | 'archived'>('active')
+  const [tabFilter, setTabFilter] = useState<'active' | 'archived' | 'deleted'>('active')
   const [filter, setFilter] = useState<'all' | Status>('all')
   const [isNew, setIsNew] = useState(false)
   const [deleteModalSheet, setDeleteModalSheet] = useState<OfflineFieldSheetItem | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const { user } = useAuth()
@@ -75,7 +76,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         try {
           const records = await pb.collection('field_spreadsheets').getFullList({
             sort: '-date',
-            expand: 'project,operator',
+            expand: 'project,operator,deleted_by',
           })
 
           for (const rec of records) {
@@ -120,6 +121,11 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 lastModified: new Date(rec.updated).getTime(),
                 serverUpdatedAt: rec.updated,
                 archived: Boolean(rec.archived),
+                deleted: Boolean(rec.deleted),
+                deletedReason: rec.deleted_reason || undefined,
+                deletedBy: rec.deleted_by || undefined,
+                deletedByName: (rec.expand?.deleted_by as any)?.name || undefined,
+                deletedAt: rec.deleted_at || undefined,
               }
               await offlineStorage.saveFieldSheet(item)
             }
@@ -200,16 +206,24 @@ export function FieldSpreadsheets({ query }: { query: string }) {
   }, [])
 
   const filtered = items.filter((s) => {
-    const matchesTab = tabFilter === 'archived' ? Boolean(s.archived) : !s.archived
-    const matchesStatus = filter === 'all' || s.status === filter
-    const matchesQuery = `${s.projectName} ${s.area} ${s.date}`
+    let matchesTab = false
+    if (tabFilter === 'deleted') {
+      matchesTab = Boolean(s.deleted)
+    } else if (tabFilter === 'archived') {
+      matchesTab = !s.deleted && Boolean(s.archived)
+    } else {
+      matchesTab = !s.deleted && !s.archived
+    }
+    const matchesStatus = tabFilter === 'deleted' ? true : filter === 'all' || s.status === filter
+    const matchesQuery = `${s.projectName} ${s.area} ${s.date} ${s.deletedReason || ''}`
       .toLowerCase()
       .includes(query.toLowerCase())
     return matchesTab && matchesStatus && matchesQuery
   })
 
-  const activeCount = items.filter((s) => !s.archived).length
-  const archivedCount = items.filter((s) => Boolean(s.archived)).length
+  const activeCount = items.filter((s) => !s.deleted && !s.archived).length
+  const archivedCount = items.filter((s) => !s.deleted && Boolean(s.archived)).length
+  const deletedCount = items.filter((s) => Boolean(s.deleted)).length
 
   const confirmDeleteSheet = async () => {
     if (!deleteModalSheet) return
@@ -220,31 +234,65 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         variant: 'destructive',
       })
       setDeleteModalSheet(null)
+      setDeleteReason('')
+      return
+    }
+
+    const trimmedReason = deleteReason.trim()
+    if (trimmedReason.length < 10) {
+      toast({
+        title: 'Justificativa insuficiente',
+        description: 'Por favor, informe uma justificativa com no mínimo 10 caracteres.',
+        variant: 'destructive',
+      })
       return
     }
 
     const sheetToDelete = deleteModalSheet
     setIsDeleting(true)
     try {
+      const nowIso = new Date().toISOString()
+      const updatedItem: OfflineFieldSheetItem = {
+        ...sheetToDelete,
+        deleted: true,
+        deletedReason: trimmedReason,
+        deletedBy: user?.id,
+        deletedByName: user?.name,
+        deletedAt: nowIso,
+        syncStatus: 'pending_update',
+        lastModified: Date.now(),
+      }
+
+      // Save soft delete locally
+      await offlineStorage.saveFieldSheet(updatedItem)
+
+      // Sync to PocketBase backend if online
       if (navigator.onLine && pb.authStore.isValid) {
         try {
-          await pb.collection('field_spreadsheets').delete(sheetToDelete.id)
+          await pb.collection('field_spreadsheets').update(sheetToDelete.id, {
+            deleted: true,
+            deleted_reason: trimmedReason,
+            deleted_by: user?.id || null,
+            deleted_at: nowIso,
+          })
+          updatedItem.syncStatus = 'synced'
+          await offlineStorage.saveFieldSheet(updatedItem)
         } catch (pbErr: any) {
-          console.warn('Backend delete error (will delete locally):', pbErr)
+          console.warn('Backend soft delete error (saved locally for sync):', pbErr)
         }
       }
 
-      await offlineStorage.deleteFieldSheet(sheetToDelete.id)
-      setItems((prev) => prev.filter((i) => i.id !== sheetToDelete.id))
+      setItems((prev) => prev.map((item) => (item.id === sheetToDelete.id ? updatedItem : item)))
       if (editing?.id === sheetToDelete.id) {
         setEditing(null)
       }
 
       toast({
-        title: 'Planilha de campo excluída com sucesso',
-        description: `A planilha de ${sheetToDelete.date} (${sheetToDelete.area}) foi removida.`,
+        title: 'Planilha de campo excluída e arquivada com sucesso',
+        description: `A planilha de ${sheetToDelete.date} (${sheetToDelete.area}) foi movida para os itens excluídos com justificativa registrada.`,
       })
       setDeleteModalSheet(null)
+      setDeleteReason('')
     } catch (err: any) {
       console.error('Delete sheet error:', err)
       toast({
@@ -399,7 +447,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Abas Ativas vs Arquivadas */}
+      {/* Abas Ativas vs Arquivadas vs Excluídos (Admin) */}
       <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800">
         <button
           onClick={() => setTabFilter('active')}
@@ -425,6 +473,20 @@ export function FieldSpreadsheets({ query }: { query: string }) {
           <Archive className="h-4 w-4" />
           Arquivadas ({archivedCount})
         </button>
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => setTabFilter('deleted')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+              tabFilter === 'deleted'
+                ? 'bg-red-700 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+            )}
+          >
+            <Trash2 className="h-4 w-4" />
+            Excluídas ({deletedCount})
+          </button>
+        )}
       </div>
 
       {tabFilter === 'archived' && (
@@ -435,6 +497,20 @@ export function FieldSpreadsheets({ query }: { query: string }) {
               <b>Visualização de Planilhas Arquivadas:</b> Registros arquivados para histórico em
               modo somente leitura. Você pode desarquivá-los a qualquer momento para retorná-los à
               listagem ativa.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {tabFilter === 'deleted' && (
+        <div className="rounded-xl border border-red-200 bg-red-50/60 p-3.5 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 shrink-0 text-red-600" />
+            <span>
+              <b>Arquivo de Planilhas Excluídas (Acesso Restrito a Administrador):</b> Registros
+              excluídos logicamente do sistema. Seus dados operacionais, de extração, infiltração e
+              compressores permanecem preservados para auditoria junto à justificativa do
+              responsável.
             </span>
           </div>
         </div>
@@ -544,34 +620,44 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                           Offline
                         </span>
                       )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleToggleArchiveSheet(sheet)
-                        }}
-                        disabled={actionLoadingId === sheet.id}
-                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                        title={sheet.archived ? 'Desarquivar planilha' : 'Arquivar planilha'}
-                      >
-                        {actionLoadingId === sheet.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : sheet.archived ? (
-                          <ArchiveRestore className="h-3.5 w-3.5 text-amber-600" />
-                        ) : (
-                          <Archive className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                      {user?.role === 'admin' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setDeleteModalSheet(sheet)
-                          }}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                          title="Excluir planilha (apenas Admin)"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                      {!sheet.deleted && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleToggleArchiveSheet(sheet)
+                            }}
+                            disabled={actionLoadingId === sheet.id}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                            title={sheet.archived ? 'Desarquivar planilha' : 'Arquivar planilha'}
+                          >
+                            {actionLoadingId === sheet.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : sheet.archived ? (
+                              <ArchiveRestore className="h-3.5 w-3.5 text-amber-600" />
+                            ) : (
+                              <Archive className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                          {user?.role === 'admin' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDeleteModalSheet(sheet)
+                                setDeleteReason('')
+                              }}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                              title="Excluir planilha (apenas Admin com justificativa)"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {sheet.deleted && (
+                        <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                          Excluída
+                        </span>
                       )}
                     </div>
                   </div>
@@ -602,7 +688,11 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                   <div className="mt-4 flex items-center justify-between text-xs">
                     <span className="text-slate-400">Por {sheet.operatorName || 'Operador'}</span>
                     <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                      {sheet.archived ? 'Visualizar arquivada →' : 'Abrir Planilha →'}
+                      {sheet.deleted
+                        ? 'Ver Arquivada →'
+                        : sheet.archived
+                          ? 'Visualizar arquivada →'
+                          : 'Abrir Planilha →'}
                     </span>
                   </div>
                 </div>
@@ -613,44 +703,78 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         )}
       </section>
 
-      {/* Modal de confirmação de exclusão da Planilha de Campo */}
+      {/* Modal de confirmação de exclusão da Planilha de Campo com justificativa obrigatória */}
       {deleteModalSheet && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center gap-3 text-red-600">
               <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
                 <Trash2 className="h-5 w-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Excluir Planilha de Campo
-              </h3>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Excluir Planilha de Campo
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Exclusão com método de segurança e auditoria
+                </p>
+              </div>
             </div>
+
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-              Tem certeza que deseja excluir a planilha de{' '}
+              Você está prestes a excluir a planilha de{' '}
               <b className="text-slate-900 dark:text-white">
                 {deleteModalSheet.date} — {deleteModalSheet.projectName} ({deleteModalSheet.area})
               </b>
-              ?
+              .
             </p>
-            <div className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-              ⚠️ <b>Esta ação não pode ser desfeita.</b> Todos os registros operacionais diários,
-              dados de extração, infiltração e compressores vinculados a esta planilha serão
-              removidos em definitivo.
+
+            <div className="mt-3 rounded-lg bg-blue-50 p-3 text-xs text-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+              🛡️ <b>Registro e Arquivamento:</b> O item não desaparecerá do banco de dados. Ele será
+              marcado como excluído logicamente e ficará arquivado na aba <b>"Excluídas"</b>{' '}
+              (visível apenas para Administradores), preservando os dados operacionais para trilha
+              de auditoria.
             </div>
+
+            <div className="mt-4 space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Justificativa da Exclusão{' '}
+                <span className="text-red-500">* (mínimo 10 caracteres)</span>
+              </label>
+              <textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Explique detalhadamente por que esta planilha está sendo excluída..."
+                rows={3}
+                className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>
+                  {deleteReason.trim().length < 10
+                    ? `Faltam ${10 - deleteReason.trim().length} caractere(s)`
+                    : '✓ Justificativa atende ao requisito mínimo'}
+                </span>
+                <span>{deleteReason.length} caracteres</span>
+              </div>
+            </div>
+
             <div className="mt-6 flex justify-end gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 disabled={isDeleting}
-                onClick={() => setDeleteModalSheet(null)}
+                onClick={() => {
+                  setDeleteModalSheet(null)
+                  setDeleteReason('')
+                }}
               >
                 Cancelar
               </Button>
               <Button
                 size="sm"
-                disabled={isDeleting}
+                disabled={isDeleting || deleteReason.trim().length < 10}
                 onClick={confirmDeleteSheet}
-                className="bg-red-600 hover:bg-red-700 text-white min-w-[100px]"
+                className="bg-red-600 hover:bg-red-700 text-white min-w-[130px] disabled:opacity-50"
               >
                 {isDeleting ? (
                   <span className="flex items-center gap-1.5">
@@ -697,7 +821,8 @@ function FieldFullEditor({
   const { toast } = useToast()
 
   const isAdmin = user?.role === 'admin'
-  const isLocked = formData.status === 'approved' && !isAdmin
+  const isDeleted = Boolean(formData.deleted)
+  const isLocked = (formData.status === 'approved' && !isAdmin) || isDeleted
 
   const handleFieldChange = (field: keyof OfflineFieldSheetItem, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -904,12 +1029,17 @@ function FieldFullEditor({
               Planilha de Campo · {formData.date}
             </h2>
             <StatusBadge status={formData.status} />
+            {isDeleted && (
+              <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold text-red-800 dark:bg-red-950 dark:text-red-300">
+                Item Excluído (Arquivado para auditoria)
+              </span>
+            )}
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Arquivar / Desarquivar */}
-          {onToggleArchive && (
+          {/* Arquivar / Desarquivar (não aplicável se excluído) */}
+          {!isDeleted && onToggleArchive && (
             <Button
               variant="outline"
               onClick={onToggleArchive}
@@ -927,8 +1057,8 @@ function FieldFullEditor({
             </Button>
           )}
 
-          {/* Excluir (Admin apenas) */}
-          {isAdmin && onDelete && (
+          {/* Excluir (Admin apenas, se ainda não estiver excluído) */}
+          {!isDeleted && isAdmin && onDelete && (
             <Button
               variant="ghost"
               onClick={onDelete}
@@ -1010,7 +1140,37 @@ function FieldFullEditor({
         </div>
       </div>
 
-      {formData.archived && (
+      {isDeleted && (
+        <div className="rounded-2xl border border-red-300 bg-red-50 p-5 dark:border-red-800 dark:bg-red-950/40 space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-200">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-bold text-red-900 dark:text-red-200 text-sm">
+                Planilha de Campo Excluída pelo Administrador
+              </p>
+              <p className="text-xs text-red-700 dark:text-red-300">
+                Excluída em:{' '}
+                {formData.deletedAt
+                  ? new Date(formData.deletedAt).toLocaleString('pt-BR')
+                  : 'Data registrada no servidor'}{' '}
+                {formData.deletedByName ? `· por ${formData.deletedByName}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="rounded-xl bg-white/80 p-3.5 text-xs text-slate-800 dark:bg-slate-900/80 dark:text-slate-200 border border-red-200 dark:border-red-900">
+            <span className="font-semibold text-red-800 dark:text-red-300">
+              Justificativa registrada:{' '}
+            </span>
+            <span className="italic">
+              {formData.deletedReason || '(Sem justificativa fornecida)'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {formData.archived && !isDeleted && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />

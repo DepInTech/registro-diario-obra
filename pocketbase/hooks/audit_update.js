@@ -9,10 +9,15 @@ onRecordUpdateRequest(
       log.set('actor', e.auth.id)
       let action = 'update'
       const entity = e.record.collection().name
+
+      const previousDeleted = e.record.original().getBool('deleted')
+      const currentDeleted = e.record.getBool('deleted')
       const previousArchived = e.record.original().getBool('archived')
       const currentArchived = e.record.getBool('archived')
 
-      if (previousArchived !== currentArchived) {
+      if (previousDeleted !== currentDeleted) {
+        action = currentDeleted ? 'soft_delete' : 'restore'
+      } else if (previousArchived !== currentArchived) {
         action = currentArchived ? 'archive' : 'unarchive'
       } else if (
         (entity === 'reports_rdo' || entity === 'field_spreadsheets') &&
@@ -25,6 +30,11 @@ onRecordUpdateRequest(
       log.set('entity', entity)
       log.set('entity_record', e.record.id)
       log.set('details', {
+        deleted: currentDeleted,
+        previousDeleted: previousDeleted,
+        deleted_reason: e.record.getString('deleted_reason') || '',
+        deleted_by: e.record.getString('deleted_by') || '',
+        deleted_at: e.record.getString('deleted_at') || '',
         archived: currentArchived,
         previousArchived: previousArchived,
         status: e.record.getString('status') || '',

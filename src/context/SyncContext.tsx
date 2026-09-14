@@ -84,6 +84,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               status: rdo.status,
               review_notes: rdo.reviewNotes || '',
               archived: Boolean(rdo.archived),
+              deleted: Boolean(rdo.deleted),
+              deleted_reason: rdo.deletedReason || '',
+              deleted_by: rdo.deletedBy || undefined,
+              deleted_at: rdo.deletedAt || undefined,
             }
             const record = await pb.collection('reports_rdo').create(payload)
 
@@ -212,6 +216,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               status: rdo.status,
               review_notes: rdo.reviewNotes || '',
               archived: Boolean(rdo.archived),
+              deleted: Boolean(rdo.deleted),
+              deleted_reason: rdo.deletedReason || '',
+              deleted_by: rdo.deletedBy || undefined,
+              deleted_at: rdo.deletedAt || undefined,
             }
             const updated = await pb.collection('reports_rdo').update(rdo.id, payload)
 
@@ -312,6 +320,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               status: sheet.status,
               review_notes: sheet.reviewNotes || '',
               archived: Boolean(sheet.archived),
+              deleted: Boolean(sheet.deleted),
+              deleted_reason: sheet.deletedReason || '',
+              deleted_by: sheet.deletedBy || undefined,
+              deleted_at: sheet.deletedAt || undefined,
             }
             const created = await pb.collection('field_spreadsheets').create(payload)
             await offlineStorage.deleteFieldSheet(sheet.id)
@@ -376,6 +388,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               status: sheet.status,
               review_notes: sheet.reviewNotes || '',
               archived: Boolean(sheet.archived),
+              deleted: Boolean(sheet.deleted),
+              deleted_reason: sheet.deletedReason || '',
+              deleted_by: sheet.deletedBy || undefined,
+              deleted_at: sheet.deletedAt || undefined,
             }
             const updated = await pb.collection('field_spreadsheets').update(sheet.id, payload)
             sheet.syncStatus = 'synced'

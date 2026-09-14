@@ -62,11 +62,13 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
     const loadStats = async () => {
       try {
         const rdos = await offlineStorage.getAllRdos()
-        setRdoCount(rdos.length)
-        setPendingRdos(rdos.filter((r) => r.status === 'submitted').length)
+        const activeRdos = rdos.filter((r) => !r.deleted)
+        setRdoCount(activeRdos.length)
+        setPendingRdos(activeRdos.filter((r) => r.status === 'submitted').length)
 
         const sheets = await offlineStorage.getAllFieldSheets()
-        setSheetCount(sheets.length)
+        const activeSheets = sheets.filter((s) => !s.deleted)
+        setSheetCount(activeSheets.length)
 
         if (navigator.onLine && pb.authStore.isValid) {
           try {

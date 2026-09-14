@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-11T18:21:46.068Z",
+  "generatedAt": "2026-09-14T13:30:22.145Z",
   "collections": [
     {
       "name": "users",
@@ -410,10 +410,10 @@
       "name": "reports_rdo",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id))",
-        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id))",
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && (deleted = false || deleted:isset = false) && project.assigned_users ?~ @request.auth.id))",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && (deleted = false || deleted:isset = false) && project.assigned_users ?~ @request.auth.id))",
         "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id))",
-        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id && (status != 'approved' || (@request.body.activity_title:isset = false && @request.body.activity_description:isset = false && @request.body.weather:isset = false && @request.body.status:isset = false && @request.body.number:isset = false && @request.body.report_date:isset = false))) || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id && @request.body.activity_title:isset = false && @request.body.activity_description:isset = false && @request.body.weather:isset = false && @request.body.status:isset = false && @request.body.number:isset = false && @request.body.report_date:isset = false && @request.body.time_displacement:isset = false && @request.body.time_waiting:isset = false && @request.body.interferences:isset = false && @request.body.plan_changes:isset = false && @request.body.accidents:isset = false && @request.body.review_notes:isset = false))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'operator' && (deleted = false || deleted:isset = false) && @request.body.deleted:isset = false && @request.body.deleted_reason:isset = false && @request.body.deleted_by:isset = false && @request.body.deleted_at:isset = false && project.assigned_users ?~ @request.auth.id && (status != 'approved' || (@request.body.activity_title:isset = false && @request.body.activity_description:isset = false && @request.body.weather:isset = false && @request.body.status:isset = false && @request.body.number:isset = false && @request.body.report_date:isset = false))) || (@request.auth.role = 'technician' && (deleted = false || deleted:isset = false) && @request.body.deleted:isset = false && @request.body.deleted_reason:isset = false && @request.body.deleted_by:isset = false && @request.body.deleted_at:isset = false && project.assigned_users ?~ @request.auth.id && @request.body.activity_title:isset = false && @request.body.activity_description:isset = false && @request.body.weather:isset = false && @request.body.status:isset = false && @request.body.number:isset = false && @request.body.report_date:isset = false && @request.body.time_displacement:isset = false && @request.body.time_waiting:isset = false && @request.body.interferences:isset = false && @request.body.plan_changes:isset = false && @request.body.accidents:isset = false && @request.body.review_notes:isset = false))",
         "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
       },
       "fields": [
@@ -541,6 +541,31 @@
         {
           "name": "archived",
           "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deleted",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deleted_reason",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deleted_by",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "deleted_at",
+          "type": "date",
           "required": false,
           "system": false
         }
@@ -673,10 +698,10 @@
       "name": "field_spreadsheets",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id))",
-        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id))",
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && (deleted = false || deleted:isset = false) && project.assigned_users ?~ @request.auth.id))",
+        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && (deleted = false || deleted:isset = false) && project.assigned_users ?~ @request.auth.id))",
         "create": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id))",
-        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && project.assigned_users ?~ @request.auth.id && (status != 'approved' || (@request.body.area:isset = false && @request.body.extraction_data:isset = false && @request.body.infiltration_data:isset = false && @request.body.status:isset = false && @request.body.date:isset = false))) || (@request.auth.role = 'operator' && project.assigned_users ?~ @request.auth.id && @request.body.area:isset = false && @request.body.extraction_data:isset = false && @request.body.infiltration_data:isset = false && @request.body.status:isset = false && @request.body.date:isset = false && @request.body.weather:isset = false && @request.body.pluviometer:isset = false && @request.body.observations:isset = false && @request.body.review_notes:isset = false))",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (@request.auth.role = 'technician' && (deleted = false || deleted:isset = false) && @request.body.deleted:isset = false && @request.body.deleted_reason:isset = false && @request.body.deleted_by:isset = false && @request.body.deleted_at:isset = false && project.assigned_users ?~ @request.auth.id && (status != 'approved' || (@request.body.area:isset = false && @request.body.extraction_data:isset = false && @request.body.infiltration_data:isset = false && @request.body.status:isset = false && @request.body.date:isset = false))) || (@request.auth.role = 'operator' && (deleted = false || deleted:isset = false) && @request.body.deleted:isset = false && @request.body.deleted_reason:isset = false && @request.body.deleted_by:isset = false && @request.body.deleted_at:isset = false && project.assigned_users ?~ @request.auth.id && @request.body.area:isset = false && @request.body.extraction_data:isset = false && @request.body.infiltration_data:isset = false && @request.body.status:isset = false && @request.body.date:isset = false && @request.body.weather:isset = false && @request.body.pluviometer:isset = false && @request.body.observations:isset = false && @request.body.review_notes:isset = false))",
         "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
       },
       "fields": [
@@ -846,6 +871,31 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "deleted",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deleted_reason",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deleted_by",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "deleted_at",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE INDEX idx_field_project_date ON field_spreadsheets (project, date)"]
@@ -877,6 +927,8 @@
             "create",
             "update",
             "delete",
+            "soft_delete",
+            "restore",
             "export_pdf",
             "export_excel",
             "approve",

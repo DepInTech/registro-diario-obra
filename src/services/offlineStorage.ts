@@ -27,6 +27,11 @@ export interface OfflineRdoItem {
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   reviewNotes?: string
   archived?: boolean
+  deleted?: boolean
+  deletedReason?: string
+  deletedBy?: string
+  deletedByName?: string
+  deletedAt?: string
   wells: Array<{
     id?: string
     well_id: string
@@ -90,6 +95,11 @@ export interface OfflineFieldSheetItem {
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   reviewNotes?: string
   archived?: boolean
+  deleted?: boolean
+  deletedReason?: string
+  deletedBy?: string
+  deletedByName?: string
+  deletedAt?: string
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict'
   lastModified: number
   serverUpdatedAt?: string

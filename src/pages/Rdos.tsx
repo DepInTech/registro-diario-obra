@@ -48,10 +48,11 @@ export function RdosPage({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineRdoItem | null>(null)
   const [items, setItems] = useState<OfflineRdoItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [tabFilter, setTabFilter] = useState<'active' | 'archived'>('active')
+  const [tabFilter, setTabFilter] = useState<'active' | 'archived' | 'deleted'>('active')
   const [filter, setFilter] = useState<'all' | Status>('all')
   const [isNew, setIsNew] = useState(false)
   const [deleteModalRdo, setDeleteModalRdo] = useState<OfflineRdoItem | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const { user } = useAuth()
@@ -81,7 +82,7 @@ export function RdosPage({ query }: { query: string }) {
           const records = await pb.collection('reports_rdo').getFullList({
             sort: '-number',
             expand:
-              'project,project.client,project.contract,project.company,performed_by,supervised_by',
+              'project,project.client,project.contract,project.company,performed_by,supervised_by,deleted_by',
           })
 
           for (const rec of records) {
@@ -158,6 +159,11 @@ export function RdosPage({ query }: { query: string }) {
                 lastModified: new Date(rec.updated).getTime(),
                 serverUpdatedAt: rec.updated,
                 archived: Boolean(rec.archived),
+                deleted: Boolean(rec.deleted),
+                deletedReason: rec.deleted_reason || undefined,
+                deletedBy: rec.deleted_by || undefined,
+                deletedByName: (rec.expand?.deleted_by as any)?.name || undefined,
+                deletedAt: rec.deleted_at || undefined,
               }
               await offlineStorage.saveRdo(item)
             }
@@ -244,9 +250,16 @@ export function RdosPage({ query }: { query: string }) {
   }, [])
 
   const filtered = items.filter((r) => {
-    const matchesTab = tabFilter === 'archived' ? Boolean(r.archived) : !r.archived
-    const matchesStatus = filter === 'all' || r.status === filter
-    const matchesQuery = `${r.number} ${r.projectName} ${r.activityTitle}`
+    let matchesTab = false
+    if (tabFilter === 'deleted') {
+      matchesTab = Boolean(r.deleted)
+    } else if (tabFilter === 'archived') {
+      matchesTab = !r.deleted && Boolean(r.archived)
+    } else {
+      matchesTab = !r.deleted && !r.archived
+    }
+    const matchesStatus = tabFilter === 'deleted' ? true : filter === 'all' || r.status === filter
+    const matchesQuery = `${r.number} ${r.projectName} ${r.activityTitle} ${r.deletedReason || ''}`
       .toLowerCase()
       .includes(query.toLowerCase())
     return matchesTab && matchesStatus && matchesQuery
@@ -307,8 +320,9 @@ export function RdosPage({ query }: { query: string }) {
     )
   }
 
-  const activeCount = items.filter((r) => !r.archived).length
-  const archivedCount = items.filter((r) => Boolean(r.archived)).length
+  const activeCount = items.filter((r) => !r.deleted && !r.archived).length
+  const archivedCount = items.filter((r) => !r.deleted && Boolean(r.archived)).length
+  const deletedCount = items.filter((r) => Boolean(r.deleted)).length
 
   const confirmDeleteRdo = async () => {
     if (!deleteModalRdo) return
@@ -319,55 +333,65 @@ export function RdosPage({ query }: { query: string }) {
         variant: 'destructive',
       })
       setDeleteModalRdo(null)
+      setDeleteReason('')
+      return
+    }
+
+    const trimmedReason = deleteReason.trim()
+    if (trimmedReason.length < 10) {
+      toast({
+        title: 'Justificativa insuficiente',
+        description: 'Por favor, informe uma justificativa com no mínimo 10 caracteres.',
+        variant: 'destructive',
+      })
       return
     }
 
     const rdoToDelete = deleteModalRdo
     setIsDeleting(true)
     try {
-      // 1. Backend deletion if online: remove child records (wells and photos) first to avoid orphans
+      const nowIso = new Date().toISOString()
+      const updatedItem: OfflineRdoItem = {
+        ...rdoToDelete,
+        deleted: true,
+        deletedReason: trimmedReason,
+        deletedBy: user?.id,
+        deletedByName: user?.name,
+        deletedAt: nowIso,
+        syncStatus: 'pending_update',
+        lastModified: Date.now(),
+      }
+
+      // Save soft-deleted in local IndexedDB
+      await offlineStorage.saveRdo(updatedItem)
+
+      // Sync to PocketBase backend if online
       if (navigator.onLine && pb.authStore.isValid) {
         try {
-          const wells = await pb.collection('report_wells').getFullList({
-            filter: `report = "${rdoToDelete.id}"`,
+          await pb.collection('reports_rdo').update(rdoToDelete.id, {
+            deleted: true,
+            deleted_reason: trimmedReason,
+            deleted_by: user?.id || null,
+            deleted_at: nowIso,
           })
-          for (const w of wells) {
-            try {
-              await pb.collection('report_wells').delete(w.id)
-            } catch (errWell) {
-              console.warn('Error deleting child well:', errWell)
-            }
-          }
-
-          const photos = await pb.collection('report_photos').getFullList({
-            filter: `report = "${rdoToDelete.id}"`,
-          })
-          for (const p of photos) {
-            try {
-              await pb.collection('report_photos').delete(p.id)
-            } catch (errPhoto) {
-              console.warn('Error deleting child photo:', errPhoto)
-            }
-          }
-
-          await pb.collection('reports_rdo').delete(rdoToDelete.id)
+          updatedItem.syncStatus = 'synced'
+          await offlineStorage.saveRdo(updatedItem)
         } catch (pbErr: any) {
-          console.warn('Backend delete error (will delete locally):', pbErr)
+          console.warn('Backend soft delete error (saved locally for sync):', pbErr)
         }
       }
 
-      // 2. Local deletion (IndexedDB)
-      await offlineStorage.deleteRdo(rdoToDelete.id)
-      setItems((prev) => prev.filter((i) => i.id !== rdoToDelete.id))
+      setItems((prev) => prev.map((item) => (item.id === rdoToDelete.id ? updatedItem : item)))
       if (editing?.id === rdoToDelete.id) {
         setEditing(null)
       }
 
       toast({
-        title: 'RDO excluído com sucesso',
-        description: `O RDO #${String(rdoToDelete.number).padStart(3, '0')} e seus registros vinculados foram removidos.`,
+        title: 'RDO excluído e arquivado com sucesso',
+        description: `O RDO #${String(rdoToDelete.number).padStart(3, '0')} foi movido para os itens excluídos com justificativa registrada.`,
       })
       setDeleteModalRdo(null)
+      setDeleteReason('')
     } catch (err: any) {
       console.error('Delete RDO error:', err)
       toast({
@@ -431,7 +455,11 @@ export function RdosPage({ query }: { query: string }) {
   }
 
   const baseItems = items.filter((r) =>
-    tabFilter === 'archived' ? Boolean(r.archived) : !r.archived,
+    tabFilter === 'deleted'
+      ? Boolean(r.deleted)
+      : tabFilter === 'archived'
+        ? !r.deleted && Boolean(r.archived)
+        : !r.deleted && !r.archived,
   )
 
   const counts = {
@@ -443,7 +471,7 @@ export function RdosPage({ query }: { query: string }) {
 
   return (
     <div className="space-y-6">
-      {/* Abas Ativos vs Arquivados */}
+      {/* Abas Ativos vs Arquivados vs Excluídos (Admin) */}
       <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800">
         <button
           onClick={() => setTabFilter('active')}
@@ -469,6 +497,20 @@ export function RdosPage({ query }: { query: string }) {
           <Archive className="h-4 w-4" />
           Arquivados ({archivedCount})
         </button>
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => setTabFilter('deleted')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+              tabFilter === 'deleted'
+                ? 'bg-red-700 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+            )}
+          >
+            <Trash2 className="h-4 w-4" />
+            Excluídos ({deletedCount})
+          </button>
+        )}
       </div>
 
       {tabFilter === 'archived' && (
@@ -479,6 +521,19 @@ export function RdosPage({ query }: { query: string }) {
               <b>Visualização de RDOs Arquivados:</b> Relatórios arquivados para histórico em modo
               somente leitura. Você pode desarquivá-los a qualquer momento para retorná-los à
               listagem ativa.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {tabFilter === 'deleted' && (
+        <div className="rounded-xl border border-red-200 bg-red-50/60 p-3.5 text-xs text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4 shrink-0 text-red-600" />
+            <span>
+              <b>Arquivo de RDOs Excluídos (Acesso Restrito a Administrador):</b> Registros
+              excluídos logicamente do sistema. Seus dados, poços vinculados e fotografias
+              permanecem preservados para auditoria junto à justificativa do responsável.
             </span>
           </div>
         </div>
@@ -628,34 +683,44 @@ export function RdosPage({ query }: { query: string }) {
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleToggleArchiveRdo(report)
-                          }}
-                          disabled={actionLoadingId === report.id}
-                          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                          title={report.archived ? 'Desarquivar RDO' : 'Arquivar RDO'}
-                        >
-                          {actionLoadingId === report.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : report.archived ? (
-                            <ArchiveRestore className="h-4 w-4 text-amber-600" />
-                          ) : (
-                            <Archive className="h-4 w-4" />
-                          )}
-                        </button>
-                        {user?.role === 'admin' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setDeleteModalRdo(report)
-                            }}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-                            title="Excluir RDO (apenas Admin)"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                        {!report.deleted && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleToggleArchiveRdo(report)
+                              }}
+                              disabled={actionLoadingId === report.id}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                              title={report.archived ? 'Desarquivar RDO' : 'Arquivar RDO'}
+                            >
+                              {actionLoadingId === report.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : report.archived ? (
+                                <ArchiveRestore className="h-4 w-4 text-amber-600" />
+                              ) : (
+                                <Archive className="h-4 w-4" />
+                              )}
+                            </button>
+                            {user?.role === 'admin' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setDeleteModalRdo(report)
+                                  setDeleteReason('')
+                                }}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                                title="Excluir RDO (apenas Admin com justificativa)"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {report.deleted && (
+                          <span className="rounded bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-950 dark:text-red-300">
+                            Excluído
+                          </span>
                         )}
                         <Button
                           variant="ghost"
@@ -667,7 +732,11 @@ export function RdosPage({ query }: { query: string }) {
                           className="text-xs hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-slate-800 min-h-[36px]"
                         >
                           <Eye className="mr-1.5 h-4 w-4" />
-                          {report.archived ? 'Visualizar' : 'Abrir / Editar'}
+                          {report.deleted
+                            ? 'Ver Arquivado'
+                            : report.archived
+                              ? 'Visualizar'
+                              : 'Abrir / Editar'}
                         </Button>
                       </div>
                     </td>
@@ -679,43 +748,78 @@ export function RdosPage({ query }: { query: string }) {
         )}
       </section>
 
-      {/* Modal de confirmação de exclusão do RDO */}
+      {/* Modal de confirmação de exclusão do RDO com justificativa obrigatória */}
       {deleteModalRdo && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center gap-3 text-red-600">
               <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
                 <Trash2 className="h-5 w-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Excluir RDO #{String(deleteModalRdo.number).padStart(3, '0')}
-              </h3>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Excluir RDO #{String(deleteModalRdo.number).padStart(3, '0')}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Exclusão com método de segurança e auditoria
+                </p>
+              </div>
             </div>
+
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-              Tem certeza que deseja excluir o relatório{' '}
+              Você está prestes a excluir o relatório{' '}
               <b className="text-slate-900 dark:text-white">
                 RDO #{String(deleteModalRdo.number).padStart(3, '0')} — {deleteModalRdo.projectName}
               </b>
-              ?
+              .
             </p>
-            <div className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-              ⚠️ <b>Esta ação não pode ser desfeita.</b> Todos os poços cadastrados e registros
-              fotográficos vinculados a este RDO também serão excluídos definitivamente.
+
+            <div className="mt-3 rounded-lg bg-blue-50 p-3 text-xs text-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
+              🛡️ <b>Registro e Arquivamento:</b> O item não desaparecerá do banco de dados. Ele será
+              marcado como excluído logicamente e ficará arquivado na aba <b>"Excluídos"</b>{' '}
+              (visível apenas para Administradores), preservando os poços e fotos para trilha de
+              auditoria.
             </div>
+
+            <div className="mt-4 space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Justificativa da Exclusão{' '}
+                <span className="text-red-500">* (mínimo 10 caracteres)</span>
+              </label>
+              <textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Explique detalhadamente por que este RDO está sendo excluído..."
+                rows={3}
+                className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>
+                  {deleteReason.trim().length < 10
+                    ? `Faltam ${10 - deleteReason.trim().length} caractere(s)`
+                    : '✓ Justificativa atende ao requisito mínimo'}
+                </span>
+                <span>{deleteReason.length} caracteres</span>
+              </div>
+            </div>
+
             <div className="mt-6 flex justify-end gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 disabled={isDeleting}
-                onClick={() => setDeleteModalRdo(null)}
+                onClick={() => {
+                  setDeleteModalRdo(null)
+                  setDeleteReason('')
+                }}
               >
                 Cancelar
               </Button>
               <Button
                 size="sm"
-                disabled={isDeleting}
+                disabled={isDeleting || deleteReason.trim().length < 10}
                 onClick={confirmDeleteRdo}
-                className="bg-red-600 hover:bg-red-700 text-white min-w-[100px]"
+                className="bg-red-600 hover:bg-red-700 text-white min-w-[130px] disabled:opacity-50"
               >
                 {isDeleting ? (
                   <span className="flex items-center gap-1.5">
@@ -770,7 +874,8 @@ function RdoFullPageEditor({
   const { toast } = useToast()
 
   const isAdmin = user?.role === 'admin'
-  const isLocked = formData.status === 'approved' && !isAdmin
+  const isDeleted = Boolean(formData.deleted)
+  const isLocked = (formData.status === 'approved' && !isAdmin) || isDeleted
 
   const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -1066,18 +1171,22 @@ function RdoFullPageEditor({
               RDO #{String(formData.number).padStart(3, '0')}
             </h2>
             <StatusBadge status={formData.status} />
-            {isLocked && (
+            {isDeleted ? (
+              <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold text-red-800 dark:bg-red-950 dark:text-red-300">
+                Item Excluído (Arquivado para auditoria)
+              </span>
+            ) : isLocked ? (
               <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                 Bloqueado após aprovação
               </span>
-            )}
+            ) : null}
           </div>
         </div>
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Arquivar / Desarquivar */}
-          {onToggleArchive && (
+          {/* Arquivar / Desarquivar (não aplicável a itens excluídos) */}
+          {!isDeleted && onToggleArchive && (
             <Button
               variant="outline"
               onClick={onToggleArchive}
@@ -1095,8 +1204,8 @@ function RdoFullPageEditor({
             </Button>
           )}
 
-          {/* Excluir (Admin apenas) */}
-          {isAdmin && onDelete && (
+          {/* Excluir (Admin apenas, quando ainda não estiver excluído) */}
+          {!isDeleted && isAdmin && onDelete && (
             <Button
               variant="ghost"
               onClick={onDelete}
@@ -1179,7 +1288,37 @@ function RdoFullPageEditor({
         </div>
       </div>
 
-      {formData.archived && (
+      {isDeleted && (
+        <div className="rounded-2xl border border-red-300 bg-red-50 p-5 dark:border-red-800 dark:bg-red-950/40 space-y-2">
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-red-100 text-red-700 dark:bg-red-900/60 dark:text-red-200">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-bold text-red-900 dark:text-red-200 text-sm">
+                RDO Excluído pelo Administrador
+              </p>
+              <p className="text-xs text-red-700 dark:text-red-300">
+                Excluído em:{' '}
+                {formData.deletedAt
+                  ? new Date(formData.deletedAt).toLocaleString('pt-BR')
+                  : 'Data registrada no servidor'}{' '}
+                {formData.deletedByName ? `· por ${formData.deletedByName}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="rounded-xl bg-white/80 p-3.5 text-xs text-slate-800 dark:bg-slate-900/80 dark:text-slate-200 border border-red-200 dark:border-red-900">
+            <span className="font-semibold text-red-800 dark:text-red-300">
+              Justificativa registrada:{' '}
+            </span>
+            <span className="italic">
+              {formData.deletedReason || '(Sem justificativa fornecida)'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {formData.archived && !isDeleted && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Archive className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />

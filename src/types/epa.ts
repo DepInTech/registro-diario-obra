@@ -79,7 +79,16 @@ export type ReportRdo = RecordModel & {
   status: RdoStatus
   review_notes?: string
   archived?: boolean
-  expand?: { project?: Project; performed_by?: EpaUser; supervised_by?: EpaUser }
+  deleted?: boolean
+  deleted_reason?: string
+  deleted_by?: string
+  deleted_at?: string
+  expand?: {
+    project?: Project
+    performed_by?: EpaUser
+    supervised_by?: EpaUser
+    deleted_by?: EpaUser
+  }
 }
 export type ExtractionRow = {
   well: string
@@ -115,7 +124,15 @@ export type FieldSheet = RecordModel & {
   observations?: string
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   archived?: boolean
-  expand?: { project?: Project; operator?: EpaUser }
+  deleted?: boolean
+  deleted_reason?: string
+  deleted_by?: string
+  deleted_at?: string
+  expand?: {
+    project?: Project
+    operator?: EpaUser
+    deleted_by?: EpaUser
+  }
 }
 export type AuditLog = RecordModel & {
   actor?: string
