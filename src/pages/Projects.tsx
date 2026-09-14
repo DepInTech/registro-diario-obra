@@ -36,6 +36,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
+import { offlineStorage } from '@/services/offlineStorage'
 import type { Client, Contract, Company, Area, EpaUser } from '@/types/epa'
 
 interface ProjectItem extends EpaProject {
@@ -311,6 +312,16 @@ export function Projects({
       if (navigator.onLine && pb.authStore.isValid) {
         await pb.collection('projects').delete(p.id)
       }
+      // Limpeza offline (IndexedDB) de RDOs e Planilhas associados ao projeto
+      try {
+        await Promise.all([
+          offlineStorage.deleteRdosByProject(p.id),
+          offlineStorage.deleteFieldSheetsByProject(p.id),
+        ])
+      } catch (storageErr) {
+        console.warn('Erro ao limpar cache offline do projeto:', storageErr)
+      }
+
       setProjectsList((prev) => prev.filter((item) => item.id !== p.id))
       if (selected?.id === p.id) {
         setSelected(null)
@@ -530,6 +541,52 @@ export function Projects({
     return matchesTab && matchesSearch && matchesStatus
   })
 
+  const deleteModalJSX = deleteModalProject && (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-3 text-red-600">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
+            <Trash2 className="h-5 w-5" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">Excluir Projeto</h3>
+        </div>
+        <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
+          Tem certeza que deseja excluir o projeto{' '}
+          <b className="text-slate-900 dark:text-white">"{deleteModalProject.name}"</b>?
+        </p>
+        <div className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+          ⚠️ <b>Esta ação não pode ser desfeita.</b> Somente administradores têm permissão para
+          exclusão definitiva.
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isDeleting}
+            onClick={() => setDeleteModalProject(null)}
+          >
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            disabled={isDeleting}
+            onClick={confirmDeleteProject}
+            className="bg-red-600 hover:bg-red-700 text-white min-w-[100px]"
+          >
+            {isDeleting ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Excluindo...
+              </span>
+            ) : (
+              'Confirmar Exclusão'
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+
   if (selected) {
     return (
       <>
@@ -546,53 +603,7 @@ export function Projects({
           onOpenRdo={onOpenRdo}
           onOpenField={onOpenField}
         />
-        {deleteModalProject && (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex items-center gap-3 text-red-600">
-                <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
-                  <Trash2 className="h-5 w-5" />
-                </div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Excluir Projeto
-                </h3>
-              </div>
-              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-                Tem certeza que deseja excluir o projeto{' '}
-                <b className="text-slate-900 dark:text-white">"{deleteModalProject.name}"</b>?
-              </p>
-              <div className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                ⚠️ <b>Esta ação não pode ser desfeita.</b> Somente administradores têm permissão
-                para exclusão definitiva.
-              </div>
-              <div className="mt-6 flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isDeleting}
-                  onClick={() => setDeleteModalProject(null)}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={isDeleting}
-                  onClick={confirmDeleteProject}
-                  className="bg-red-600 hover:bg-red-700 text-white min-w-[100px]"
-                >
-                  {isDeleting ? (
-                    <span className="flex items-center gap-1.5">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Excluindo...
-                    </span>
-                  ) : (
-                    'Confirmar Exclusão'
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {deleteModalJSX}
       </>
     )
   }
@@ -1205,6 +1216,8 @@ export function Projects({
           </div>
         </div>
       )}
+
+      {deleteModalJSX}
     </div>
   )
 }

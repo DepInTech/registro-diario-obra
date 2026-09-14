@@ -175,6 +175,26 @@ export const offlineStorage = {
     })
   },
 
+  async deleteRdosByProject(projectId: string): Promise<void> {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('rdos', 'readwrite')
+      const store = tx.objectStore('rdos')
+      const index = store.index('projectId')
+      const req = index.openKeyCursor(IDBKeyRange.only(projectId))
+      req.onsuccess = () => {
+        const cursor = req.result
+        if (cursor) {
+          store.delete(cursor.primaryKey)
+          cursor.continue()
+        } else {
+          resolve()
+        }
+      }
+      req.onerror = () => reject(req.error)
+    })
+  },
+
   // Field Sheets
   async saveFieldSheet(sheet: OfflineFieldSheetItem): Promise<void> {
     const db = await openDB()
@@ -216,6 +236,26 @@ export const offlineStorage = {
       const store = tx.objectStore('field_sheets')
       const req = store.delete(id)
       req.onsuccess = () => resolve()
+      req.onerror = () => reject(req.error)
+    })
+  },
+
+  async deleteFieldSheetsByProject(projectId: string): Promise<void> {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('field_sheets', 'readwrite')
+      const store = tx.objectStore('field_sheets')
+      const index = store.index('projectId')
+      const req = index.openKeyCursor(IDBKeyRange.only(projectId))
+      req.onsuccess = () => {
+        const cursor = req.result
+        if (cursor) {
+          store.delete(cursor.primaryKey)
+          cursor.continue()
+        } else {
+          resolve()
+        }
+      }
       req.onerror = () => reject(req.error)
     })
   },
