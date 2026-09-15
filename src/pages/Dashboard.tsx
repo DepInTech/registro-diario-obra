@@ -29,6 +29,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
   const [rdoCount, setRdoCount] = useState<number>(0)
   const [pendingRdos, setPendingRdos] = useState<number>(0)
   const [sheetCount, setSheetCount] = useState<number>(0)
+  const [userCount, setUserCount] = useState<number>(4)
   const [projectsList, setProjectsList] = useState(staticProjects)
 
   // Automatic greeting based on real local time
@@ -68,6 +69,19 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         const sheets = await offlineStorage.getAllFieldSheets()
         const activeSheets = sheets.filter((s) => !s.deleted)
         setSheetCount(activeSheets.length)
+
+        if (navigator.onLine && pb.authStore.isValid && user?.role === 'admin') {
+          try {
+            const users = await pb.collection('users').getList(1, 1, {
+              filter: 'deleted = false || deleted:isset = false',
+            })
+            if (users.totalItems > 0) {
+              setUserCount(users.totalItems)
+            }
+          } catch (userErr) {
+            console.warn('Dashboard users count fetch error:', userErr)
+          }
+        }
 
         if (navigator.onLine && pb.authStore.isValid) {
           try {
@@ -194,9 +208,9 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
           },
           {
             label: 'Usuários cadastrados',
-            value: user?.role === 'admin' ? '4' : 'Ativo',
+            value: user?.role === 'admin' ? String(userCount) : 'Ativo',
             helper: user?.role === 'admin' ? 'gestão de acessos' : 'seu perfil ativo',
-            trend: user?.role === 'admin' ? '3 no campo' : 'Operação OK',
+            trend: user?.role === 'admin' ? 'acessos do sistema' : 'Operação OK',
             icon: Users,
             color: 'amber',
             up: true,
