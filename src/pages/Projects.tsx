@@ -36,7 +36,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
-import { offlineStorage } from '@/services/offlineStorage'
+import { offlineStorage, OfflineProjectItem } from '@/services/offlineStorage'
+import { SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
 import type { Client, Contract, Company, Area, EpaUser } from '@/types/epa'
 
 interface ProjectItem extends EpaProject {
@@ -131,6 +132,9 @@ export function Projects({
   const loadProjects = async () => {
     setLoading(true)
     try {
+      // 1. Check local offline projects first
+      const localOffline = await offlineStorage.getAllProjects()
+
       if (navigator.onLine && pb.authStore.isValid) {
         const records = await pb.collection('projects').getFullList({
           sort: '-created',
@@ -177,10 +181,80 @@ export function Projects({
               deletedAt: rec.deleted_at || undefined,
             }
           })
-          setProjectsList(mapped)
+
+          // Save server copy in local storage for offline use
+          for (const m of mapped) {
+            const existingLocal = localOffline.find((l) => l.id === m.id)
+            if (!existingLocal || existingLocal.syncStatus === 'synced') {
+              await offlineStorage.saveProject({
+                ...m,
+                syncStatus: 'synced',
+                lastModified: Date.now(),
+              })
+            }
+          }
+
+          // Combine with any pending local creates
+          const pendingCreates = localOffline
+            .filter((l) => l.syncStatus === 'pending_create')
+            .map((l) => ({
+              id: l.id,
+              name: l.name,
+              client: l.client,
+              code: l.code,
+              location: l.location,
+              status: l.status,
+              progress: l.progress,
+              contract: l.contract,
+              team: l.team,
+              rawClient: l.rawClient,
+              rawContract: l.rawContract,
+              rawCompany: l.rawCompany,
+              rawArea: l.rawArea,
+              assignedUsersIds: l.assignedUsersIds,
+              archived: l.archived,
+              deleted: l.deleted,
+              deletedReason: l.deletedReason,
+              deletedBy: l.deletedBy,
+              deletedByName: l.deletedByName,
+              deletedAt: l.deletedAt,
+            }))
+
+          const combined = [...pendingCreates, ...mapped]
+          setProjectsList(combined)
           setLoading(false)
           return
         }
+      }
+
+      // If offline or no server records, use local IndexedDB
+      if (localOffline.length > 0) {
+        setProjectsList(
+          localOffline.map((l) => ({
+            id: l.id,
+            name: l.name,
+            client: l.client,
+            code: l.code,
+            location: l.location,
+            status: l.status,
+            progress: l.progress,
+            contract: l.contract,
+            team: l.team,
+            rawClient: l.rawClient,
+            rawContract: l.rawContract,
+            rawCompany: l.rawCompany,
+            rawArea: l.rawArea,
+            assignedUsersIds: l.assignedUsersIds,
+            archived: l.archived,
+            deleted: l.deleted,
+            deletedReason: l.deletedReason,
+            deletedBy: l.deletedBy,
+            deletedByName: l.deletedByName,
+            deletedAt: l.deletedAt,
+          })),
+        )
+        setLoading(false)
+        return
       }
 
       // Fallback to static mock projects
@@ -208,6 +282,14 @@ export function Projects({
   useEffect(() => {
     loadProjects()
     loadAuxiliaryData()
+
+    const handleSyncComplete = () => {
+      loadProjects()
+    }
+    window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    return () => {
+      window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    }
   }, [])
 
   const openNewProjectModal = () => {
@@ -521,35 +603,46 @@ export function Projects({
         await loadProjects()
         setModalOpen(false)
       } else {
-        // Offline simulation / fallback
+        // Offline persistence in IndexedDB with pending queue
         const clientObj = clients.find((c) => c.id === formClientId)
         const contractObj = contracts.find((c) => c.id === formContractId)
 
-        const simulatedItem: ProjectItem = {
+        const offlineItem: OfflineProjectItem = {
           id: editingProject ? editingProject.id : 'proj_' + Date.now(),
           name: formName.trim(),
-          client: clientObj?.name || 'Petrobras — Refinaria Sul',
+          client: clientObj?.name || 'Cliente EPA',
           code: formEpaCode.trim(),
-          location: formLocation.trim() || 'Área Industrial',
+          location: formLocation.trim() || 'Área Operacional',
           status: formStatus,
           progress: Number(formProgress) || 0,
-          contract: contractObj?.code || 'CT-EPA-2025',
+          contract: contractObj?.code || 'CT-2025',
           team: ['Annik Almeida', 'Carlos Oliveira'],
           rawClient: formClientId,
           rawContract: formContractId,
           rawCompany: formCompanyId,
           rawArea: formAreaId,
           assignedUsersIds: formAssignedUsers,
+          syncStatus: editingProject ? 'pending_update' : 'pending_create',
+          lastModified: Date.now(),
         }
+
+        await offlineStorage.saveProject(offlineItem)
 
         if (editingProject) {
           setProjectsList((prev) =>
-            prev.map((item) => (item.id === editingProject.id ? simulatedItem : item)),
+            prev.map((item) => (item.id === editingProject.id ? offlineItem : item)),
           )
-          toast({ title: 'Projeto atualizado localmente' })
+          toast({
+            title: 'Projeto salvo localmente (offline)',
+            description:
+              'As alterações serão sincronizadas com o servidor assim que a conexão retornar.',
+          })
         } else {
-          setProjectsList((prev) => [simulatedItem, ...prev])
-          toast({ title: 'Projeto criado localmente' })
+          setProjectsList((prev) => [offlineItem, ...prev])
+          toast({
+            title: 'Projeto criado localmente (offline)',
+            description: 'Será enviado ao servidor PocketBase na próxima sincronização.',
+          })
         }
         setModalOpen(false)
       }

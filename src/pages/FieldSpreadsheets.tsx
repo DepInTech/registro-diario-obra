@@ -34,7 +34,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/context/AuthContext'
-import { useSync } from '@/context/SyncContext'
+import { useSync, SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
 import { offlineStorage, OfflineFieldSheetItem } from '@/services/offlineStorage'
 import { authHeaders, exportUrl, updateFieldStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
@@ -203,6 +203,14 @@ export function FieldSpreadsheets({ query }: { query: string }) {
 
   useEffect(() => {
     loadSheets()
+
+    const handleSyncComplete = () => {
+      loadSheets()
+    }
+    window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    return () => {
+      window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    }
   }, [])
 
   const filtered = items.filter((s) => {

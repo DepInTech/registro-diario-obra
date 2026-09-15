@@ -1,22 +1,42 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import pb from '@/lib/pocketbase/client'
-import type { EpaUser } from '@/types/epa'
-import { offlineStorage, OfflineRdoItem, OfflineFieldSheetItem } from '@/services/offlineStorage'
+import {
+  offlineStorage,
+  OfflineRdoItem,
+  OfflineFieldSheetItem,
+  OfflineProjectItem,
+} from '@/services/offlineStorage'
 import { useToast } from '@/hooks/use-toast'
 
-interface ConflictItem {
+export const SYNC_BROADCAST_EVENT = 'epa_sync_complete'
+
+export interface ConflictItem {
   id: string
-  type: 'rdo' | 'field'
-  localData: OfflineRdoItem | OfflineFieldSheetItem
+  type: 'rdo' | 'field' | 'project'
+  localData: OfflineRdoItem | OfflineFieldSheetItem | OfflineProjectItem
   serverData: Record<string, unknown>
+}
+
+export interface FailedSyncItem {
+  id: string
+  type: 'rdo' | 'field' | 'project'
+  title: string
+  error: string
+  attempts: number
+  lastAttempt: number
 }
 
 interface SyncContextType {
   isOnline: boolean
   isSyncing: boolean
   pendingCount: number
+  failedCount: number
+  failedItems: FailedSyncItem[]
+  lastSyncTime: Date | null
+  syncError: string | null
   conflicts: ConflictItem[]
   syncNow: () => Promise<void>
+  retryFailed: () => Promise<void>
   resolveConflict: (
     conflict: ConflictItem,
     resolution: 'keep_local' | 'keep_server',
@@ -27,61 +47,220 @@ const SyncContext = createContext<SyncContextType>({
   isOnline: true,
   isSyncing: false,
   pendingCount: 0,
+  failedCount: 0,
+  failedItems: [],
+  lastSyncTime: null,
+  syncError: null,
   conflicts: [],
   syncNow: async () => {},
+  retryFailed: async () => {},
   resolveConflict: async () => {},
 })
+
+// Helper to convert base64 dataUrl to File/Blob safely with timeout
+async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
+  const res = await fetch(dataUrl)
+  const blob = await res.blob()
+  const mime = blob.type || 'image/jpeg'
+  return new File([blob], filename, { type: mime })
+}
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine)
   const [isSyncing, setIsSyncing] = useState<boolean>(false)
   const [pendingCount, setPendingCount] = useState<number>(0)
+  const [failedCount, setFailedCount] = useState<number>(0)
+  const [failedItems, setFailedItems] = useState<FailedSyncItem[]>([])
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(() => {
+    const saved = localStorage.getItem('epa_last_sync_time')
+    return saved ? new Date(saved) : null
+  })
+  const [syncError, setSyncError] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<ConflictItem[]>([])
   const { toast } = useToast()
 
+  const syncInProgressRef = useRef(false)
+  const backoffDelayRef = useRef(0)
+
   const checkPending = useCallback(async () => {
     try {
-      const rdos = await offlineStorage.getAllRdos()
-      const fields = await offlineStorage.getAllFieldSheets()
+      const [rdos, fields, projects] = await Promise.all([
+        offlineStorage.getAllRdos(),
+        offlineStorage.getAllFieldSheets(),
+        offlineStorage.getAllProjects(),
+      ])
+
       const pendingRdos = rdos.filter(
         (r) => r.syncStatus === 'pending_create' || r.syncStatus === 'pending_update',
       )
       const pendingFields = fields.filter(
         (f) => f.syncStatus === 'pending_create' || f.syncStatus === 'pending_update',
       )
-      setPendingCount(pendingRdos.length + pendingFields.length)
+      const pendingProjects = projects.filter(
+        (p) => p.syncStatus === 'pending_create' || p.syncStatus === 'pending_update',
+      )
+
+      const failedRdos = rdos.filter((r) => r.syncStatus === 'failed')
+      const failedFields = fields.filter((f) => f.syncStatus === 'failed')
+      const failedProjects = projects.filter((p) => p.syncStatus === 'failed')
+
+      setPendingCount(pendingRdos.length + pendingFields.length + pendingProjects.length)
+      setFailedCount(failedRdos.length + failedFields.length + failedProjects.length)
+
+      const fails: FailedSyncItem[] = [
+        ...failedRdos.map((r) => ({
+          id: r.id,
+          type: 'rdo' as const,
+          title: `RDO #${r.number} (${r.activityTitle || 'Sem título'})`,
+          error: r.syncError || 'Erro desconhecido',
+          attempts: r.syncAttempts || 1,
+          lastAttempt: r.lastModified,
+        })),
+        ...failedFields.map((f) => ({
+          id: f.id,
+          type: 'field' as const,
+          title: `Planilha ${f.date} (${f.area || 'Geral'})`,
+          error: f.syncError || 'Erro desconhecido',
+          attempts: f.syncAttempts || 1,
+          lastAttempt: f.lastModified,
+        })),
+        ...failedProjects.map((p) => ({
+          id: p.id,
+          type: 'project' as const,
+          title: `Projeto ${p.name || p.code}`,
+          error: p.syncError || 'Erro desconhecido',
+          attempts: p.syncAttempts || 1,
+          lastAttempt: p.lastModified,
+        })),
+      ]
+      setFailedItems(fails)
     } catch {
       // ignore
     }
   }, [])
 
   const syncNow = useCallback(async () => {
-    if (!navigator.onLine || !pb.authStore.isValid || isSyncing) return
+    // Prevent overlapping syncs across multiple triggers
+    if (syncInProgressRef.current) return
+    if (!navigator.onLine || !pb.authStore.isValid) return
+
+    syncInProgressRef.current = true
     setIsSyncing(true)
-    let syncedCount = 0
+    setSyncError(null)
+
+    let totalSynced = 0
+    let totalErrors = 0
+    const errorsList: string[] = []
 
     try {
-      // 1. Sync RDOs
+      // -------------------------------------------------------------
+      // 1. Sync Offline Projects first (so RDOs/Fields can link to real ID)
+      // -------------------------------------------------------------
+      const projects = await offlineStorage.getAllProjects()
+      for (const proj of projects) {
+        if (proj.syncStatus === 'pending_create') {
+          try {
+            const payload: Record<string, unknown> = {
+              name: proj.name,
+              epa_code: proj.code,
+              location: proj.location || 'Área Operacional',
+              progress: proj.progress || 0,
+              status: proj.status || 'active',
+              assigned_users: proj.assignedUsersIds || [],
+              archived: Boolean(proj.archived),
+              deleted: Boolean(proj.deleted),
+              deleted_reason: proj.deletedReason || '',
+              deleted_by: proj.deletedBy || undefined,
+              deleted_at: proj.deletedAt || undefined,
+            }
+            if (proj.rawClient) payload.client = proj.rawClient
+            if (proj.rawContract) payload.contract = proj.rawContract
+            if (proj.rawCompany) payload.company = proj.rawCompany
+            if (proj.rawArea) payload.area = proj.rawArea
+
+            const created = await pb.collection('projects').create(payload)
+
+            const oldId = proj.id
+            await offlineStorage.deleteProject(oldId)
+            proj.id = created.id
+            proj.syncStatus = 'synced'
+            proj.serverUpdatedAt = created.updated
+            delete proj.syncError
+            proj.syncAttempts = 0
+            await offlineStorage.saveProject(proj)
+            totalSynced++
+          } catch (err: any) {
+            console.error('Project create sync failed for', proj.id, err)
+            totalErrors++
+            const errMsg = err?.message || 'Falha ao sincronizar criação de projeto'
+            errorsList.push(errMsg)
+            proj.syncStatus = 'failed'
+            proj.syncError = errMsg
+            proj.syncAttempts = (proj.syncAttempts || 0) + 1
+            await offlineStorage.saveProject(proj)
+          }
+        } else if (proj.syncStatus === 'pending_update') {
+          try {
+            const payload: Record<string, unknown> = {
+              name: proj.name,
+              epa_code: proj.code,
+              location: proj.location || 'Área Operacional',
+              progress: proj.progress || 0,
+              status: proj.status || 'active',
+              assigned_users: proj.assignedUsersIds || [],
+              archived: Boolean(proj.archived),
+              deleted: Boolean(proj.deleted),
+              deleted_reason: proj.deletedReason || '',
+              deleted_by: proj.deletedBy || undefined,
+              deleted_at: proj.deletedAt || undefined,
+            }
+            if (proj.rawClient) payload.client = proj.rawClient
+            if (proj.rawContract) payload.contract = proj.rawContract
+            if (proj.rawCompany) payload.company = proj.rawCompany
+            if (proj.rawArea) payload.area = proj.rawArea
+
+            const updated = await pb.collection('projects').update(proj.id, payload)
+            proj.syncStatus = 'synced'
+            proj.serverUpdatedAt = updated.updated
+            delete proj.syncError
+            proj.syncAttempts = 0
+            await offlineStorage.saveProject(proj)
+            totalSynced++
+          } catch (err: any) {
+            console.error('Project update sync failed for', proj.id, err)
+            totalErrors++
+            const errMsg = err?.message || 'Falha ao sincronizar alteração de projeto'
+            errorsList.push(errMsg)
+            proj.syncStatus = 'failed'
+            proj.syncError = errMsg
+            proj.syncAttempts = (proj.syncAttempts || 0) + 1
+            await offlineStorage.saveProject(proj)
+          }
+        }
+      }
+
+      // -------------------------------------------------------------
+      // 2. Sync RDOs
+      // -------------------------------------------------------------
       const rdos = await offlineStorage.getAllRdos()
       for (const rdo of rdos) {
         if (rdo.syncStatus === 'pending_create') {
           try {
-            // Check if server already has this RDO or create
+            // Validate project id if possible
             const payload: Record<string, unknown> = {
               number: rdo.number,
-              project: rdo.projectId,
               report_date: rdo.reportDate,
-              weather: rdo.weather,
+              weather: rdo.weather || 'Sol',
               performed_by: rdo.performedBy,
               supervised_by: rdo.supervisedBy || undefined,
-              activity_title: rdo.activityTitle,
-              activity_description: rdo.activityDescription,
+              activity_title: rdo.activityTitle || 'Sem título',
+              activity_description: rdo.activityDescription || '',
               time_displacement: rdo.timeDisplacement || '',
               time_waiting: rdo.timeWaiting || '',
               interferences: rdo.interferences || '',
               plan_changes: rdo.planChanges || '',
               accidents: rdo.accidents || '',
-              status: rdo.status,
+              status: rdo.status || 'draft',
               review_notes: rdo.reviewNotes || '',
               archived: Boolean(rdo.archived),
               deleted: Boolean(rdo.deleted),
@@ -89,22 +268,30 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
             }
+            if (rdo.projectId && rdo.projectId.trim()) {
+              payload.project = rdo.projectId
+            }
+
             const record = await pb.collection('reports_rdo').create(payload)
 
             // create wells
             for (const well of rdo.wells || []) {
               if (well.well_id) {
-                await pb.collection('report_wells').create({
-                  report: record.id,
-                  well_id: well.well_id,
-                  depth: well.depth ? Number(well.depth) : undefined,
-                  completion_date: well.completion_date || undefined,
-                  diameter: well.diameter || undefined,
-                })
+                try {
+                  await pb.collection('report_wells').create({
+                    report: record.id,
+                    well_id: well.well_id,
+                    depth: well.depth ? Number(well.depth) : undefined,
+                    completion_date: well.completion_date || undefined,
+                    diameter: well.diameter || undefined,
+                  })
+                } catch (wellErr) {
+                  console.warn('Failed to sync well for RDO:', wellErr)
+                }
               }
             }
 
-            // Sync photos (field photo and general photos)
+            // Sync photos (field photo + general photos)
             const allPhotosToSync: Array<{
               id?: string
               image?: string
@@ -135,12 +322,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             for (const p of allPhotosToSync) {
               try {
                 if (p.dataUrl && p.dataUrl.startsWith('data:image/')) {
-                  const blob = await (await fetch(p.dataUrl)).blob()
                   const ext =
                     p.dataUrl.substring('data:image/'.length, p.dataUrl.indexOf(';')) || 'jpeg'
-                  const file = new File([blob], `photo_${Date.now()}.${ext}`, {
-                    type: blob.type || 'image/jpeg',
-                  })
+                  const file = await dataUrlToFile(p.dataUrl, `photo_${Date.now()}.${ext}`)
                   const photoFd = new FormData()
                   photoFd.append('report', record.id)
                   photoFd.append('image', file)
@@ -160,26 +344,47 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
-            // update local offline item to synced
+            // Update local offline item to synced
             await offlineStorage.deleteRdo(rdo.id)
             rdo.id = record.id
             rdo.syncStatus = 'synced'
             rdo.serverUpdatedAt = record.updated
+            delete rdo.syncError
+            rdo.syncAttempts = 0
             await offlineStorage.saveRdo(rdo)
-            syncedCount++
-          } catch (err) {
+            totalSynced++
+          } catch (err: any) {
             console.error('Error syncing offline RDO create:', err)
+            totalErrors++
+            const errMsg = err?.message || 'Falha ao sincronizar criação de RDO'
+            errorsList.push(errMsg)
+            rdo.syncStatus = 'failed'
+            rdo.syncError = errMsg
+            rdo.syncAttempts = (rdo.syncAttempts || 0) + 1
+            await offlineStorage.saveRdo(rdo)
           }
         } else if (rdo.syncStatus === 'pending_update') {
           try {
-            // Check conflict: fetch server record first
-            const serverRecord = await pb.collection('reports_rdo').getOne(rdo.id)
+            // Check conflict
+            let serverRecord: any = null
+            try {
+              serverRecord = await pb.collection('reports_rdo').getOne(rdo.id)
+            } catch (fetchErr: any) {
+              if (fetchErr?.status === 404) {
+                // Server record was deleted; recreate or skip
+                console.warn('Server record not found, converting to pending_create:', rdo.id)
+                rdo.syncStatus = 'pending_create'
+                await offlineStorage.saveRdo(rdo)
+                continue
+              }
+              throw fetchErr
+            }
+
             if (
               rdo.serverUpdatedAt &&
               serverRecord.updated !== rdo.serverUpdatedAt &&
               new Date(serverRecord.updated).getTime() > rdo.lastModified
             ) {
-              // Conflict detected!
               rdo.syncStatus = 'conflict'
               await offlineStorage.saveRdo(rdo)
               setConflicts((prev) => [
@@ -201,7 +406,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
             const payload: Record<string, unknown> = {
               number: rdo.number,
-              project: rdo.projectId,
               report_date: rdo.reportDate,
               weather: rdo.weather,
               performed_by: rdo.performedBy,
@@ -221,9 +425,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
             }
+            if (rdo.projectId && rdo.projectId.trim()) {
+              payload.project = rdo.projectId
+            }
+
             const updated = await pb.collection('reports_rdo').update(rdo.id, payload)
 
-            // Sync newly added local dataUrl photos if any
+            // Sync photos with dataUrl
             const photosToSync: Array<{
               id?: string
               image?: string
@@ -254,12 +462,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             for (const p of photosToSync) {
               try {
                 if (p.dataUrl && p.dataUrl.startsWith('data:image/')) {
-                  const blob = await (await fetch(p.dataUrl)).blob()
                   const ext =
                     p.dataUrl.substring('data:image/'.length, p.dataUrl.indexOf(';')) || 'jpeg'
-                  const file = new File([blob], `photo_${Date.now()}.${ext}`, {
-                    type: blob.type || 'image/jpeg',
-                  })
+                  const file = await dataUrlToFile(p.dataUrl, `photo_${Date.now()}.${ext}`)
                   const photoFd = new FormData()
                   photoFd.append('report', rdo.id)
                   photoFd.append('image', file)
@@ -281,24 +486,34 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
             rdo.syncStatus = 'synced'
             rdo.serverUpdatedAt = updated.updated
+            delete rdo.syncError
+            rdo.syncAttempts = 0
             await offlineStorage.saveRdo(rdo)
-            syncedCount++
-          } catch (err) {
+            totalSynced++
+          } catch (err: any) {
             console.error('Error syncing offline RDO update:', err)
+            totalErrors++
+            const errMsg = err?.message || 'Falha ao sincronizar atualização de RDO'
+            errorsList.push(errMsg)
+            rdo.syncStatus = 'failed'
+            rdo.syncError = errMsg
+            rdo.syncAttempts = (rdo.syncAttempts || 0) + 1
+            await offlineStorage.saveRdo(rdo)
           }
         }
       }
 
-      // 2. Sync Field Sheets
+      // -------------------------------------------------------------
+      // 3. Sync Field Sheets
+      // -------------------------------------------------------------
       const fields = await offlineStorage.getAllFieldSheets()
       for (const sheet of fields) {
         if (sheet.syncStatus === 'pending_create') {
           try {
             const payload: Record<string, unknown> = {
-              project: sheet.projectId,
               operator: sheet.operator,
               date: sheet.date,
-              area: sheet.area,
+              area: sheet.area || 'Geral',
               weather: sheet.weather || 'Sol',
               pluviometer: sheet.pluviometer || 0,
               morning_time: sheet.morning_time || '',
@@ -307,17 +522,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               infiltration_afternoon_time: sheet.infiltration_afternoon_time || '',
               extraction_data: sheet.extraction_data || [],
               infiltration_data: sheet.infiltration_data || {},
-              nutrient_done: sheet.nutrient_done || false,
+              nutrient_done: Boolean(sheet.nutrient_done),
               nutrient_map_kg: sheet.nutrient_map_kg || 0,
               nutrient_ureia_kg: sheet.nutrient_ureia_kg || 0,
               compressor_data: sheet.compressor_data || {},
               oil_removal_data: sheet.oil_removal_data || {},
               waste_liquid_qty: sheet.waste_liquid_qty || 0,
               waste_solid_qty: sheet.waste_solid_qty || 0,
-              env_5s_check: sheet.env_5s_check || false,
-              env_checklist_monthly: sheet.env_checklist_monthly || false,
+              env_5s_check: Boolean(sheet.env_5s_check),
+              env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
               observations: sheet.observations || '',
-              status: sheet.status,
+              status: sheet.status || 'draft',
               review_notes: sheet.reviewNotes || '',
               archived: Boolean(sheet.archived),
               deleted: Boolean(sheet.deleted),
@@ -325,19 +540,44 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: sheet.deletedBy || undefined,
               deleted_at: sheet.deletedAt || undefined,
             }
+            if (sheet.projectId && sheet.projectId.trim()) {
+              payload.project = sheet.projectId
+            }
+
             const created = await pb.collection('field_spreadsheets').create(payload)
             await offlineStorage.deleteFieldSheet(sheet.id)
             sheet.id = created.id
             sheet.syncStatus = 'synced'
             sheet.serverUpdatedAt = created.updated
+            delete sheet.syncError
+            sheet.syncAttempts = 0
             await offlineStorage.saveFieldSheet(sheet)
-            syncedCount++
-          } catch (err) {
+            totalSynced++
+          } catch (err: any) {
             console.error('Error syncing offline FieldSheet create:', err)
+            totalErrors++
+            const errMsg = err?.message || 'Falha ao sincronizar planilha de campo'
+            errorsList.push(errMsg)
+            sheet.syncStatus = 'failed'
+            sheet.syncError = errMsg
+            sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+            await offlineStorage.saveFieldSheet(sheet)
           }
         } else if (sheet.syncStatus === 'pending_update') {
           try {
-            const serverRecord = await pb.collection('field_spreadsheets').getOne(sheet.id)
+            let serverRecord: any = null
+            try {
+              serverRecord = await pb.collection('field_spreadsheets').getOne(sheet.id)
+            } catch (fetchErr: any) {
+              if (fetchErr?.status === 404) {
+                console.warn('Server sheet not found, converting to pending_create:', sheet.id)
+                sheet.syncStatus = 'pending_create'
+                await offlineStorage.saveFieldSheet(sheet)
+                continue
+              }
+              throw fetchErr
+            }
+
             if (
               sheet.serverUpdatedAt &&
               serverRecord.updated !== sheet.serverUpdatedAt &&
@@ -363,10 +603,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
 
             const payload: Record<string, unknown> = {
-              project: sheet.projectId,
               operator: sheet.operator,
               date: sheet.date,
-              area: sheet.area,
+              area: sheet.area || 'Geral',
               weather: sheet.weather || 'Sol',
               pluviometer: sheet.pluviometer || 0,
               morning_time: sheet.morning_time || '',
@@ -375,15 +614,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               infiltration_afternoon_time: sheet.infiltration_afternoon_time || '',
               extraction_data: sheet.extraction_data || [],
               infiltration_data: sheet.infiltration_data || {},
-              nutrient_done: sheet.nutrient_done || false,
+              nutrient_done: Boolean(sheet.nutrient_done),
               nutrient_map_kg: sheet.nutrient_map_kg || 0,
               nutrient_ureia_kg: sheet.nutrient_ureia_kg || 0,
               compressor_data: sheet.compressor_data || {},
               oil_removal_data: sheet.oil_removal_data || {},
               waste_liquid_qty: sheet.waste_liquid_qty || 0,
               waste_solid_qty: sheet.waste_solid_qty || 0,
-              env_5s_check: sheet.env_5s_check || false,
-              env_checklist_monthly: sheet.env_checklist_monthly || false,
+              env_5s_check: Boolean(sheet.env_5s_check),
+              env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
               observations: sheet.observations || '',
               status: sheet.status,
               review_notes: sheet.reviewNotes || '',
@@ -393,30 +632,99 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: sheet.deletedBy || undefined,
               deleted_at: sheet.deletedAt || undefined,
             }
+            if (sheet.projectId && sheet.projectId.trim()) {
+              payload.project = sheet.projectId
+            }
+
             const updated = await pb.collection('field_spreadsheets').update(sheet.id, payload)
             sheet.syncStatus = 'synced'
             sheet.serverUpdatedAt = updated.updated
+            delete sheet.syncError
+            sheet.syncAttempts = 0
             await offlineStorage.saveFieldSheet(sheet)
-            syncedCount++
-          } catch (err) {
+            totalSynced++
+          } catch (err: any) {
             console.error('Error syncing offline FieldSheet update:', err)
+            totalErrors++
+            const errMsg = err?.message || 'Falha ao sincronizar atualização de planilha'
+            errorsList.push(errMsg)
+            sheet.syncStatus = 'failed'
+            sheet.syncError = errMsg
+            sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+            await offlineStorage.saveFieldSheet(sheet)
           }
         }
       }
 
       await checkPending()
-      if (syncedCount > 0) {
+
+      if (totalSynced > 0) {
+        const now = new Date()
+        setLastSyncTime(now)
+        localStorage.setItem('epa_last_sync_time', now.toISOString())
+        backoffDelayRef.current = 0
+
+        // Broadcast to all active pages (Dashboard, Rdos, FieldSpreadsheets, Projects) to revalidate server data
+        window.dispatchEvent(
+          new CustomEvent(SYNC_BROADCAST_EVENT, {
+            detail: { syncedCount: totalSynced, timestamp: now.getTime() },
+          }),
+        )
+
         toast({
-          title: 'Dados sincronizados',
-          description: `${syncedCount} registro(s) sincronizado(s) com o servidor com sucesso.`,
+          title: 'Sincronização concluída',
+          description: `${totalSynced} registro(s) sincronizado(s) com o servidor com sucesso.`,
         })
       }
-    } catch (err) {
+
+      if (totalErrors > 0) {
+        setSyncError(`${totalErrors} item(ns) falharam ao sincronizar.`)
+        // Exponential backoff capped at 60s
+        backoffDelayRef.current = Math.min(
+          backoffDelayRef.current ? backoffDelayRef.current * 2 : 5000,
+          60000,
+        )
+      }
+    } catch (err: any) {
       console.error('Sync error:', err)
+      setSyncError(err?.message || 'Erro durante a sincronização.')
     } finally {
+      syncInProgressRef.current = false
       setIsSyncing(false)
     }
-  }, [isSyncing, checkPending, toast])
+  }, [checkPending, toast])
+
+  // Explicit retry for failed items
+  const retryFailed = useCallback(async () => {
+    try {
+      const [rdos, fields, projects] = await Promise.all([
+        offlineStorage.getAllRdos(),
+        offlineStorage.getAllFieldSheets(),
+        offlineStorage.getAllProjects(),
+      ])
+
+      for (const r of rdos.filter((i) => i.syncStatus === 'failed')) {
+        r.syncStatus = 'pending_update'
+        delete r.syncError
+        await offlineStorage.saveRdo(r)
+      }
+      for (const f of fields.filter((i) => i.syncStatus === 'failed')) {
+        f.syncStatus = 'pending_update'
+        delete f.syncError
+        await offlineStorage.saveFieldSheet(f)
+      }
+      for (const p of projects.filter((i) => i.syncStatus === 'failed')) {
+        p.syncStatus = 'pending_update'
+        delete p.syncError
+        await offlineStorage.saveProject(p)
+      }
+
+      await checkPending()
+      await syncNow()
+    } catch (err) {
+      console.error('Error retrying failed items:', err)
+    }
+  }, [checkPending, syncNow])
 
   const resolveConflict = async (
     conflict: ConflictItem,
@@ -431,7 +739,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setConflicts((prev) => prev.filter((c) => c.id !== conflict.id))
         await syncNow()
       } else {
-        // keep server
         const s = conflict.serverData
         rdo.status = (s.status as 'draft' | 'submitted' | 'approved' | 'returned') || 'draft'
         rdo.activityTitle = String(s.activity_title || '')
@@ -441,7 +748,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         await offlineStorage.saveRdo(rdo)
         setConflicts((prev) => prev.filter((c) => c.id !== conflict.id))
       }
-    } else {
+    } else if (conflict.type === 'field') {
       const sheet = conflict.localData as OfflineFieldSheetItem
       if (resolution === 'keep_local') {
         sheet.syncStatus = 'pending_update'
@@ -457,6 +764,22 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         await offlineStorage.saveFieldSheet(sheet)
         setConflicts((prev) => prev.filter((c) => c.id !== conflict.id))
       }
+    } else {
+      const proj = conflict.localData as OfflineProjectItem
+      if (resolution === 'keep_local') {
+        proj.syncStatus = 'pending_update'
+        proj.lastModified = Date.now()
+        await offlineStorage.saveProject(proj)
+        setConflicts((prev) => prev.filter((c) => c.id !== conflict.id))
+        await syncNow()
+      } else {
+        const s = conflict.serverData
+        proj.name = String(s.name || proj.name)
+        proj.syncStatus = 'synced'
+        proj.serverUpdatedAt = String(s.updated || '')
+        await offlineStorage.saveProject(proj)
+        setConflicts((prev) => prev.filter((c) => c.id !== conflict.id))
+      }
     }
     toast({
       title: 'Conflito resolvido',
@@ -464,15 +787,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
+  // Network and window lifecycle listeners (online event, window focus, periodic tick)
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true)
       toast({
         title: '🟢 Conexão restabelecida',
-        description: 'Você está online. Sincronizando dados...',
+        description: 'Você está online. Sincronizando dados com o sistema...',
       })
       syncNow()
     }
+
     const handleOffline = () => {
       setIsOnline(false)
       toast({
@@ -481,19 +806,59 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       })
     }
 
+    const handleWindowFocus = () => {
+      if (navigator.onLine && pb.authStore.isValid) {
+        checkPending().then(() => syncNow())
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && pb.authStore.isValid) {
+        checkPending().then(() => syncNow())
+      }
+    }
+
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Initial check
     checkPending()
+
+    // Periodic sync attempt every 30s when online
+    const interval = setInterval(() => {
+      if (navigator.onLine && pb.authStore.isValid && !syncInProgressRef.current) {
+        checkPending().then(() => {
+          syncNow()
+        })
+      }
+    }, 30000)
 
     return () => {
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(interval)
     }
   }, [syncNow, checkPending, toast])
 
   return (
     <SyncContext.Provider
-      value={{ isOnline, isSyncing, pendingCount, conflicts, syncNow, resolveConflict }}
+      value={{
+        isOnline,
+        isSyncing,
+        pendingCount,
+        failedCount,
+        failedItems,
+        lastSyncTime,
+        syncError,
+        conflicts,
+        syncNow,
+        retryFailed,
+        resolveConflict,
+      }}
     >
       {children}
     </SyncContext.Provider>

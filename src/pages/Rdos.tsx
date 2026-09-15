@@ -36,7 +36,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/context/AuthContext'
-import { useSync } from '@/context/SyncContext'
+import { useSync, SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
 import { offlineStorage, OfflineRdoItem } from '@/services/offlineStorage'
 import { authHeaders, exportUrl, updateRdoStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
@@ -247,6 +247,14 @@ export function RdosPage({ query }: { query: string }) {
 
   useEffect(() => {
     loadRdos()
+
+    const handleSyncComplete = () => {
+      loadRdos()
+    }
+    window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    return () => {
+      window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    }
   }, [])
 
   const filtered = items.filter((r) => {

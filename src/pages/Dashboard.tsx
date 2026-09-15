@@ -17,7 +17,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { useSync } from '@/context/SyncContext'
+import { useSync, SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
 import { offlineStorage } from '@/services/offlineStorage'
 import { Page } from '@/components/Layout'
 import { projects as staticProjects, auditEvents } from '@/data/epa'
@@ -58,70 +58,78 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
     })
   }
 
-  useEffect(() => {
-    const loadStats = async () => {
-      try {
-        const rdos = await offlineStorage.getAllRdos()
-        const activeRdos = rdos.filter((r) => !r.deleted)
-        setRdoCount(activeRdos.length)
-        setPendingRdos(activeRdos.filter((r) => r.status === 'submitted').length)
+  const loadStats = async () => {
+    try {
+      const rdos = await offlineStorage.getAllRdos()
+      const activeRdos = rdos.filter((r) => !r.deleted)
+      setRdoCount(activeRdos.length)
+      setPendingRdos(activeRdos.filter((r) => r.status === 'submitted').length)
 
-        const sheets = await offlineStorage.getAllFieldSheets()
-        const activeSheets = sheets.filter((s) => !s.deleted)
-        setSheetCount(activeSheets.length)
+      const sheets = await offlineStorage.getAllFieldSheets()
+      const activeSheets = sheets.filter((s) => !s.deleted)
+      setSheetCount(activeSheets.length)
 
-        if (navigator.onLine && pb.authStore.isValid && user?.role === 'admin') {
-          try {
-            const users = await pb.collection('users').getList(1, 1, {
-              filter: 'deleted = false || deleted:isset = false',
-            })
-            if (users.totalItems > 0) {
-              setUserCount(users.totalItems)
-            }
-          } catch (userErr) {
-            console.warn('Dashboard users count fetch error:', userErr)
+      if (navigator.onLine && pb.authStore.isValid && user?.role === 'admin') {
+        try {
+          const users = await pb.collection('users').getList(1, 1, {
+            filter: 'deleted = false || deleted:isset = false',
+          })
+          if (users.totalItems > 0) {
+            setUserCount(users.totalItems)
           }
+        } catch (userErr) {
+          console.warn('Dashboard users count fetch error:', userErr)
         }
-
-        if (navigator.onLine && pb.authStore.isValid) {
-          try {
-            const projs = await pb.collection('projects').getFullList({
-              filter: 'deleted = false || deleted:isset = false',
-              sort: '-created',
-              expand: 'client,contract',
-            })
-            if (projs.length > 0) {
-              setProjectsList(
-                projs
-                  .filter((p) => !p.deleted && !p.archived)
-                  .map((p) => {
-                    const clientExp = p.expand?.client as any
-                    const contractExp = p.expand?.contract as any
-                    return {
-                      id: p.id,
-                      name: p.name,
-                      client: clientExp?.name || 'Cliente EPA',
-                      code: p.epa_code || 'EPA-001',
-                      location: p.location || 'Área Industrial',
-                      status: (p.status as any) || 'active',
-                      progress: p.progress ?? 50,
-                      contract: contractExp?.code || 'CT-2025',
-                      team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
-                    }
-                  }),
-              )
-            }
-          } catch (projErr) {
-            console.warn('Projects fetch error:', projErr)
-          }
-        }
-      } catch (err) {
-        console.warn('Dashboard stats error:', err)
       }
-    }
 
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          const projs = await pb.collection('projects').getFullList({
+            filter: 'deleted = false || deleted:isset = false',
+            sort: '-created',
+            expand: 'client,contract',
+          })
+          if (projs.length > 0) {
+            setProjectsList(
+              projs
+                .filter((p) => !p.deleted && !p.archived)
+                .map((p) => {
+                  const clientExp = p.expand?.client as any
+                  const contractExp = p.expand?.contract as any
+                  return {
+                    id: p.id,
+                    name: p.name,
+                    client: clientExp?.name || 'Cliente EPA',
+                    code: p.epa_code || 'EPA-001',
+                    location: p.location || 'Área Industrial',
+                    status: (p.status as any) || 'active',
+                    progress: p.progress ?? 50,
+                    contract: contractExp?.code || 'CT-2025',
+                    team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
+                  }
+                }),
+            )
+          }
+        } catch (projErr) {
+          console.warn('Projects fetch error:', projErr)
+        }
+      }
+    } catch (err) {
+      console.warn('Dashboard stats error:', err)
+    }
+  }
+
+  useEffect(() => {
     loadStats()
-  }, [])
+
+    const handleSyncComplete = () => {
+      loadStats()
+    }
+    window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    return () => {
+      window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    }
+  }, [user])
 
   return (
     <div className="space-y-6">

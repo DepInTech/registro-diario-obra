@@ -1,6 +1,6 @@
 // IndexedDB Storage Service for offline-first EPA operations
 const DB_NAME = 'epa_offline_db'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 export interface OfflineRdoItem {
   id: string
@@ -53,7 +53,9 @@ export interface OfflineRdoItem {
     caption?: string
     dataUrl?: string
   }
-  syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict'
+  syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
+  syncError?: string
+  syncAttempts?: number
   lastModified: number
   serverUpdatedAt?: string
 }
@@ -100,7 +102,37 @@ export interface OfflineFieldSheetItem {
   deletedBy?: string
   deletedByName?: string
   deletedAt?: string
-  syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict'
+  syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
+  syncError?: string
+  syncAttempts?: number
+  lastModified: number
+  serverUpdatedAt?: string
+}
+
+export interface OfflineProjectItem {
+  id: string
+  name: string
+  client: string
+  code: string
+  location: string
+  status: 'active' | 'paused' | 'completed'
+  progress: number
+  contract: string
+  team: string[]
+  rawClient?: string
+  rawContract?: string
+  rawCompany?: string
+  rawArea?: string
+  assignedUsersIds?: string[]
+  archived?: boolean
+  deleted?: boolean
+  deletedReason?: string
+  deletedBy?: string
+  deletedByName?: string
+  deletedAt?: string
+  syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
+  syncError?: string
+  syncAttempts?: number
   lastModified: number
   serverUpdatedAt?: string
 }
@@ -119,6 +151,10 @@ function openDB(): Promise<IDBDatabase> {
         const fieldStore = db.createObjectStore('field_sheets', { keyPath: 'id' })
         fieldStore.createIndex('syncStatus', 'syncStatus', { unique: false })
         fieldStore.createIndex('projectId', 'projectId', { unique: false })
+      }
+      if (!db.objectStoreNames.contains('projects')) {
+        const projectStore = db.createObjectStore('projects', { keyPath: 'id' })
+        projectStore.createIndex('syncStatus', 'syncStatus', { unique: false })
       }
       if (!db.objectStoreNames.contains('cache')) {
         db.createObjectStore('cache', { keyPath: 'key' })
@@ -256,6 +292,51 @@ export const offlineStorage = {
           resolve()
         }
       }
+      req.onerror = () => reject(req.error)
+    })
+  },
+
+  // Projects
+  async saveProject(project: OfflineProjectItem): Promise<void> {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('projects', 'readwrite')
+      const store = tx.objectStore('projects')
+      const req = store.put(project)
+      req.onsuccess = () => resolve()
+      req.onerror = () => reject(req.error)
+    })
+  },
+
+  async getProject(id: string): Promise<OfflineProjectItem | null> {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('projects', 'readonly')
+      const store = tx.objectStore('projects')
+      const req = store.get(id)
+      req.onsuccess = () => resolve(req.result || null)
+      req.onerror = () => reject(req.error)
+    })
+  },
+
+  async getAllProjects(): Promise<OfflineProjectItem[]> {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('projects', 'readonly')
+      const store = tx.objectStore('projects')
+      const req = store.getAll()
+      req.onsuccess = () => resolve(req.result || [])
+      req.onerror = () => reject(req.error)
+    })
+  },
+
+  async deleteProject(id: string): Promise<void> {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('projects', 'readwrite')
+      const store = tx.objectStore('projects')
+      const req = store.delete(id)
+      req.onsuccess = () => resolve()
       req.onerror = () => reject(req.error)
     })
   },
