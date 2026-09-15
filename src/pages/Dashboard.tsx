@@ -60,14 +60,57 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
   const loadStats = async () => {
     try {
-      const rdos = await offlineStorage.getAllRdos()
-      const activeRdos = rdos.filter((r) => !r.deleted)
-      setRdoCount(activeRdos.length)
-      setPendingRdos(activeRdos.filter((r) => r.status === 'submitted').length)
+      // 1. If online and PocketBase available, fetch latest RDOs and FieldSheets to ensure fresh server data
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          const [serverRdos, serverSheets] = await Promise.all([
+            pb.collection('reports_rdo').getFullList({ sort: '-created' }),
+            pb.collection('field_spreadsheets').getFullList({ sort: '-created' }),
+          ])
 
-      const sheets = await offlineStorage.getAllFieldSheets()
-      const activeSheets = sheets.filter((s) => !s.deleted)
-      setSheetCount(activeSheets.length)
+          if (serverRdos.length > 0) {
+            const activeServerRdos = serverRdos.filter((r) => !r.deleted)
+            setRdoCount(activeServerRdos.length)
+            setPendingRdos(activeServerRdos.filter((r) => r.status === 'submitted').length)
+          } else {
+            const rdos = await offlineStorage.getAllRdos()
+            const activeRdos = rdos.filter((r) => !r.deleted)
+            setRdoCount(activeRdos.length)
+            setPendingRdos(activeRdos.filter((r) => r.status === 'submitted').length)
+          }
+
+          if (serverSheets.length > 0) {
+            const activeServerSheets = serverSheets.filter((s) => !s.deleted)
+            setSheetCount(activeServerSheets.length)
+          } else {
+            const sheets = await offlineStorage.getAllFieldSheets()
+            const activeSheets = sheets.filter((s) => !s.deleted)
+            setSheetCount(activeSheets.length)
+          }
+        } catch (serverFetchErr) {
+          console.warn(
+            'Could not fetch server counts directly, using offline cache:',
+            serverFetchErr,
+          )
+          const rdos = await offlineStorage.getAllRdos()
+          const activeRdos = rdos.filter((r) => !r.deleted)
+          setRdoCount(activeRdos.length)
+          setPendingRdos(activeRdos.filter((r) => r.status === 'submitted').length)
+
+          const sheets = await offlineStorage.getAllFieldSheets()
+          const activeSheets = sheets.filter((s) => !s.deleted)
+          setSheetCount(activeSheets.length)
+        }
+      } else {
+        const rdos = await offlineStorage.getAllRdos()
+        const activeRdos = rdos.filter((r) => !r.deleted)
+        setRdoCount(activeRdos.length)
+        setPendingRdos(activeRdos.filter((r) => r.status === 'submitted').length)
+
+        const sheets = await offlineStorage.getAllFieldSheets()
+        const activeSheets = sheets.filter((s) => !s.deleted)
+        setSheetCount(activeSheets.length)
+      }
 
       if (navigator.onLine && pb.authStore.isValid && user?.role === 'admin') {
         try {

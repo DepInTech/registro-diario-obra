@@ -45,6 +45,11 @@ import { useSync } from '@/context/SyncContext'
 import { cn } from '@/lib/utils'
 import logoEpa from '@/assets/logo-epa-3e647.png'
 
+function formatSyncTime(date: Date | null): string {
+  if (!date) return 'Não sincronizado'
+  return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
 export type Page = 'dashboard' | 'projects' | 'rdos' | 'fields' | 'users' | 'audit'
 
 const allPrimary = [
@@ -91,7 +96,17 @@ export function Layout({
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const { user, logout, hasUnsavedChanges } = useAuth()
   const { theme, toggleTheme } = useTheme()
-  const { isOnline, isSyncing, pendingCount, syncNow, conflicts, resolveConflict } = useSync()
+  const {
+    isOnline,
+    isSyncing,
+    pendingCount,
+    failedCount,
+    lastSyncTime,
+    syncNow,
+    retryFailed,
+    conflicts,
+    resolveConflict,
+  } = useSync()
 
   const navigate = (id: Page) => {
     setPage(id)
@@ -166,27 +181,58 @@ export function Layout({
               <span
                 className={cn(
                   'h-2.5 w-2.5 rounded-full',
-                  isOnline
-                    ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
-                    : 'bg-amber-400 shadow-[0_0_8px_#fbbf24]',
+                  !isOnline
+                    ? 'bg-amber-400 shadow-[0_0_8px_#fbbf24]'
+                    : failedCount > 0
+                      ? 'bg-rose-400 shadow-[0_0_8px_#f43f5e]'
+                      : isSyncing
+                        ? 'bg-teal-300 animate-pulse'
+                        : 'bg-emerald-400 shadow-[0_0_8px_#34d399]',
                 )}
               />
-              <span className="font-medium">{isOnline ? '🟢 Conectado' : '🟠 Offline'}</span>
+              <span className="font-medium">
+                {!isOnline
+                  ? '🟠 Offline'
+                  : failedCount > 0
+                    ? '🔴 Erro de Sync'
+                    : isSyncing
+                      ? 'Sincronizando...'
+                      : '🟢 Conectado'}
+              </span>
             </div>
             {isOnline && (
               <button
-                onClick={() => syncNow()}
+                onClick={() => (failedCount > 0 ? retryFailed() : syncNow())}
                 disabled={isSyncing}
-                title="Sincronizar agora"
-                className="text-emerald-300 hover:text-white disabled:opacity-50"
+                title={
+                  failedCount > 0 ? 'Tentar novamente itens que falharam' : 'Sincronizar agora'
+                }
+                className="text-emerald-300 hover:text-white disabled:opacity-50 transition"
               >
                 <RefreshCw className={cn('h-3.5 w-3.5', isSyncing && 'animate-spin')} />
               </button>
             )}
           </div>
-          {pendingCount > 0 && (
+
+          {/* Detailed status lines in sidebar */}
+          {failedCount > 0 ? (
+            <div className="flex items-center justify-between gap-1 text-[11px] text-rose-200 bg-rose-950/40 border border-rose-500/30 rounded-lg px-2 py-1">
+              <span className="truncate">Falhou ({failedCount})</span>
+              <button
+                onClick={() => retryFailed()}
+                disabled={isSyncing}
+                className="font-semibold underline hover:text-white shrink-0 disabled:opacity-50"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          ) : pendingCount > 0 ? (
             <p className="text-[11px] text-amber-200">
-              {pendingCount} alteraç{pendingCount > 1 ? 'ões' : 'ão'} para sincronizar
+              {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
+            </p>
+          ) : (
+            <p className="text-[11px] text-emerald-200/80">
+              Sincronizado {formatSyncTime(lastSyncTime)}
             </p>
           )}
           <p className="text-[10px] text-emerald-200/50">v2.4.0 · PWA & IndexedDB</p>
@@ -237,30 +283,68 @@ export function Layout({
             </p>
           </div>
 
-          {/* Online/Offline pill indicator */}
-          <div
-            className={cn(
-              'hidden sm:flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border',
-              isOnline
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300'
-                : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300',
-            )}
-            title={
-              isOnline
-                ? 'Conexão ativa com o servidor'
-                : 'Modo offline ativado — salvando no IndexedDB'
-            }
-          >
-            {isOnline ? (
-              <Wifi className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+          {/* Sync Status Interactive Pill Indicator (Desktop & Mobile header) */}
+          <div className="flex items-center">
+            {failedCount > 0 ? (
+              <button
+                onClick={() => retryFailed()}
+                disabled={isSyncing}
+                title="Clique para tentar novamente a sincronização dos itens com falha"
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:border-rose-800/50 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-900/50 transition cursor-pointer"
+              >
+                <AlertTriangle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                <span className="truncate">Falhou ({failedCount}) — Tentar novamente</span>
+                <RefreshCw className={cn('h-3 w-3 ml-0.5', isSyncing && 'animate-spin')} />
+              </button>
+            ) : pendingCount > 0 ? (
+              <button
+                onClick={() => isOnline && syncNow()}
+                disabled={!isOnline || isSyncing}
+                title={
+                  isOnline ? 'Clique para sincronizar agora' : 'Alterações pendentes salvas offline'
+                }
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/50 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/50 transition"
+              >
+                {!isOnline ? (
+                  <WifiOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                ) : (
+                  <RefreshCw
+                    className={cn(
+                      'h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0',
+                      isSyncing && 'animate-spin',
+                    )}
+                  />
+                )}
+                <span>
+                  {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
+                </span>
+              </button>
             ) : (
-              <WifiOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-            )}
-            <span>{isOnline ? 'Online' : 'Offline'}</span>
-            {pendingCount > 0 && (
-              <span className="ml-1 rounded-full bg-amber-500 px-1.5 py-0.2 text-[10px] text-white">
-                {pendingCount}
-              </span>
+              <div
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition',
+                  isOnline
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300'
+                    : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300',
+                )}
+                title={
+                  isOnline
+                    ? `Todos os dados sincronizados com o servidor às ${formatSyncTime(lastSyncTime)}`
+                    : 'Modo offline ativado — salvando no IndexedDB'
+                }
+              >
+                {isOnline ? (
+                  <Wifi className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                ) : (
+                  <WifiOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                )}
+                <span className="hidden sm:inline">
+                  {isOnline ? `Sincronizado ${formatSyncTime(lastSyncTime)}` : 'Offline'}
+                </span>
+                <span className="sm:hidden">
+                  {isOnline ? formatSyncTime(lastSyncTime) : 'Offline'}
+                </span>
+              </div>
             )}
           </div>
 
