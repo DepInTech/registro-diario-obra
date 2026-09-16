@@ -31,6 +31,7 @@ export function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState<string | null>(null)
   const { login } = useAuth()
+  void rememberMe
   const { theme, toggleTheme } = useTheme()
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -305,9 +305,8 @@ export function RdosPage({ query }: { query: string }) {
       if (activeProj) {
         initialProjectId = activeProj.id
         initialProjectName = activeProj.name
-        initialClientName = activeProj.clientName || initialClientName
-        initialContractCode = activeProj.contractCode || initialContractCode
-        initialCompanyName = activeProj.companyName || initialCompanyName
+        initialClientName = activeProj.client || initialClientName
+        initialContractCode = activeProj.contract || initialContractCode
         initialLocation = activeProj.location || initialLocation
       }
     } catch (e) {
