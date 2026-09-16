@@ -57,7 +57,7 @@ export function LoginPage() {
   }
 
   const handleQuickFill = (email: string) => {
-    setIdentity(email)
+    setIdentity(email.trim())
     setPassword('Skip@Pass')
     setError(null)
     setForgotPasswordMessage(null)
@@ -401,6 +401,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => handleQuickFill('annik_almeida@grupoepa.com.br')}
+                  title="Entrar como Annik Almeida (Administrador)"
                   className="group rounded-xl border border-emerald-200/80 bg-emerald-50/40 py-2 px-1.5 text-center transition-all hover:border-[#008F68] hover:bg-emerald-50 hover:shadow-sm cursor-pointer"
                 >
                   <p className="font-bold text-[#005B4F] text-xs">Admin</p>
@@ -409,6 +410,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => handleQuickFill('tecnico@grupoepa.com.br')}
+                  title="Entrar como Marina Santos (Técnico)"
                   className="group rounded-xl border border-blue-200/80 bg-blue-50/40 py-2 px-1.5 text-center transition-all hover:border-blue-600 hover:bg-blue-50 hover:shadow-sm cursor-pointer"
                 >
                   <p className="font-bold text-blue-700 text-xs">Técnico</p>
@@ -417,6 +419,7 @@ export function LoginPage() {
                 <button
                   type="button"
                   onClick={() => handleQuickFill('operador@grupoepa.com.br')}
+                  title="Entrar como Carlos Oliveira (Operador)"
                   className="group rounded-xl border border-teal-200/80 bg-teal-50/40 py-2 px-1.5 text-center transition-all hover:border-teal-600 hover:bg-teal-50 hover:shadow-sm cursor-pointer"
                 >
                   <p className="font-bold text-teal-800 text-xs">Operador</p>

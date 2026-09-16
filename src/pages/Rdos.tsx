@@ -44,6 +44,19 @@ import pb from '@/lib/pocketbase/client'
 import { rdos as mockRdos, type Status } from '@/data/epa'
 import { EPA_LOGO_BASE64 } from '@/components/epaLogoBase64'
 
+function isProvisionalId(id?: string | null): boolean {
+  if (!id) return false
+  return (
+    id.startsWith('rdo_') ||
+    id.startsWith('field_') ||
+    id.startsWith('proj_') ||
+    id.startsWith('user_') ||
+    id.startsWith('photo_') ||
+    id.startsWith('temp_') ||
+    id.startsWith('p_')
+  )
+}
+
 export function RdosPage({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineRdoItem | null>(null)
   const [items, setItems] = useState<OfflineRdoItem[]>([])
@@ -273,23 +286,49 @@ export function RdosPage({ query }: { query: string }) {
     return matchesTab && matchesStatus && matchesQuery
   })
 
-  const openNew = () => {
+  const openNew = async () => {
     const nextNum = items.length > 0 ? Math.max(...items.map((i) => i.number)) + 1 : 1
+
+    // Look up an active project to prefill project references
+    let initialProjectId = ''
+    let initialProjectName = ''
+    let initialClientName = 'Petrobras — Refinaria Sul'
+    let initialContractCode = 'CT-EPA-2025-017'
+    let initialCompanyName = 'EPA Engenharia de Proteção Ambiental'
+    let initialLocation = 'Refinaria Sul — Área Operacional'
+
+    try {
+      const localProjects = await offlineStorage.getAllProjects()
+      const activeProj =
+        localProjects.find((p) => !p.deleted && !p.archived && p.status === 'active') ||
+        localProjects[0]
+      if (activeProj) {
+        initialProjectId = activeProj.id
+        initialProjectName = activeProj.name
+        initialClientName = activeProj.clientName || initialClientName
+        initialContractCode = activeProj.contractCode || initialContractCode
+        initialCompanyName = activeProj.companyName || initialCompanyName
+        initialLocation = activeProj.location || initialLocation
+      }
+    } catch (e) {
+      console.warn('Could not read cached projects for new RDO:', e)
+    }
+
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
       number: nextNum,
-      projectId: '',
-      projectName: '',
-      clientName: '',
-      contractCode: '',
-      companyName: '',
-      location: '',
+      projectId: initialProjectId,
+      projectName: initialProjectName,
+      clientName: initialClientName,
+      contractCode: initialContractCode,
+      companyName: initialCompanyName,
+      location: initialLocation,
       reportDate: new Date().toISOString().slice(0, 10),
       weather: 'Sol',
       performedBy: user?.id || '',
       performedByName: user?.name || '',
-      supervisedBy: '',
-      supervisedByName: '',
+      supervisedBy: user?.id || '',
+      supervisedByName: user?.name || '',
       activityTitle: '',
       activityDescription: '',
       timeDisplacement: '',
@@ -1010,12 +1049,37 @@ function RdoFullPageEditor({
 
   // Save logic (Draft or Submitted)
   const saveReport = async (targetStatus?: Status) => {
+    // Check project association
+    if (!formData.projectId || isProvisionalId(formData.projectId)) {
+      try {
+        const localProjects = await offlineStorage.getAllProjects()
+        const activeProj =
+          localProjects.find((p) => !p.deleted && !p.archived && p.status === 'active') ||
+          localProjects[0]
+        if (activeProj && !isProvisionalId(activeProj.id)) {
+          formData.projectId = activeProj.id
+          formData.projectName = formData.projectName || activeProj.name
+        }
+      } catch (e) {
+        console.warn('Error resolving active project on RDO save:', e)
+      }
+    }
+
+    if (!formData.projectId) {
+      toast({
+        title: 'Projeto obrigatório não selecionado para o RDO',
+        description: 'Vincule um projeto ao relatório antes de salvar.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setIsSaving(true)
     const statusToSave = targetStatus || formData.status
     const updatedItem: OfflineRdoItem = {
       ...formData,
       status: statusToSave,
-      syncStatus: isOnline ? 'pending_update' : isNew ? 'pending_create' : 'pending_update',
+      syncStatus: isNew || isProvisionalId(formData.id) ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
 

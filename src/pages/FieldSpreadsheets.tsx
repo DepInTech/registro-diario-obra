@@ -361,11 +361,27 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     }
   }
 
-  const openNew = () => {
+  const openNew = async () => {
+    let initialProjectId = '6699p05pm2uv1x2'
+    let initialProjectName = 'Recuperação Ambiental Lote A'
+
+    try {
+      const localProjects = await offlineStorage.getAllProjects()
+      const activeProj =
+        localProjects.find((p) => !p.deleted && !p.archived && p.status === 'active') ||
+        localProjects[0]
+      if (activeProj) {
+        initialProjectId = activeProj.id
+        initialProjectName = activeProj.name
+      }
+    } catch (e) {
+      console.warn('Could not read cached projects for new field spreadsheet:', e)
+    }
+
     const newSheet: OfflineFieldSheetItem = {
       id: 'field_' + Date.now(),
-      projectId: '6699p05pm2uv1x2',
-      projectName: 'Recuperação Ambiental Lote A',
+      projectId: initialProjectId,
+      projectName: initialProjectName,
       date: new Date().toISOString().slice(0, 10),
       area: 'Oficina Central',
       operator: user?.id || 'cfpekk93zx4j1pr',

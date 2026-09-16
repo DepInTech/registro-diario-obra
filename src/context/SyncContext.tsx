@@ -57,6 +57,68 @@ const SyncContext = createContext<SyncContextType>({
   resolveConflict: async () => {},
 })
 
+// Helper to check whether an ID is provisional/offline-generated
+function isProvisionalId(id?: string | null): boolean {
+  if (!id) return false
+  return (
+    id.startsWith('rdo_') ||
+    id.startsWith('field_') ||
+    id.startsWith('proj_') ||
+    id.startsWith('user_') ||
+    id.startsWith('photo_') ||
+    id.startsWith('temp_') ||
+    id.startsWith('p_')
+  )
+}
+
+// Friendly translation for PocketBase server errors to Portuguese
+function translateServerErrorMessage(err: unknown, entity: 'rdo' | 'field' | 'project'): string {
+  if (!err) return 'Erro desconhecido durante a sincronização.'
+  const rawMsg = err instanceof Error ? err.message : String(err)
+  const errObj = (err as any)?.data?.data || {}
+
+  if (rawMsg.includes('Failed to create record') || rawMsg.includes('Failed to update record')) {
+    if (errObj.project) {
+      return 'Projeto obrigatório não selecionado ou inválido.'
+    }
+    if (errObj.performed_by) {
+      return 'Responsável pela execução (performer) obrigatório não encontrado.'
+    }
+    if (errObj.operator) {
+      return 'Operador responsável pela planilha não encontrado.'
+    }
+    if (errObj.weather) {
+      return 'Condição climática informada é inválida.'
+    }
+    if (errObj.number) {
+      return 'Número de relatório inválido ou duplicado.'
+    }
+    if (errObj.date || errObj.report_date) {
+      return 'Data do relatório/planilha inválida ou obrigatória.'
+    }
+    if (entity === 'rdo') {
+      return 'Falha ao registrar RDO. Verifique se o projeto e os responsáveis estão preenchidos.'
+    }
+    if (entity === 'field') {
+      return 'Falha ao registrar Planilha de Campo. Verifique os dados operacionais e o projeto.'
+    }
+    return 'Falha na validação dos campos obrigatórios no servidor.'
+  }
+
+  if (rawMsg.includes("The requested resource wasn't found") || rawMsg.includes('404')) {
+    return 'Registro não encontrado no servidor.'
+  }
+  if (
+    rawMsg.includes('Only admins can') ||
+    rawMsg.includes('403') ||
+    rawMsg.includes('Failed to authenticate')
+  ) {
+    return 'Permissão insuficiente para sincronizar este registro com o servidor.'
+  }
+
+  return rawMsg
+}
+
 // Helper to convert base64 dataUrl to File/Blob safely with timeout
 async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
   const res = await fetch(dataUrl)
@@ -153,6 +215,35 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     const errorsList: string[] = []
 
     try {
+      // Helper to find an active server project ID fallback
+      let fallbackProjectId: string | null = null
+      const resolveFallbackProjectId = async (): Promise<string | null> => {
+        if (fallbackProjectId) return fallbackProjectId
+        try {
+          // 1. Try to get first active project from PocketBase
+          const serverProjects = await pb.collection('projects').getList(1, 1, {
+            filter: 'deleted = false && archived = false && status = "active"',
+            sort: '-created',
+          })
+          if (serverProjects.items.length > 0) {
+            fallbackProjectId = serverProjects.items[0].id
+            return fallbackProjectId
+          }
+          // 2. Any non-deleted project
+          const anyProj = await pb.collection('projects').getList(1, 1, {
+            filter: 'deleted = false',
+            sort: '-created',
+          })
+          if (anyProj.items.length > 0) {
+            fallbackProjectId = anyProj.items[0].id
+            return fallbackProjectId
+          }
+        } catch (e) {
+          console.warn('Could not query active project for sync fallback:', e)
+        }
+        return null
+      }
+
       // -------------------------------------------------------------
       // 1. Sync Offline Projects first (so RDOs/Fields can link to real ID)
       // -------------------------------------------------------------
@@ -192,7 +283,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Project create sync failed for', proj.id, err)
             totalErrors++
-            const errMsg = err?.message || 'Falha ao sincronizar criação de projeto'
+            const friendly = translateServerErrorMessage(err, 'project')
+            const errMsg = friendly || err?.message || 'Falha ao sincronizar criação de projeto'
             errorsList.push(errMsg)
             proj.syncStatus = 'failed'
             proj.syncError = errMsg
@@ -229,7 +321,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Project update sync failed for', proj.id, err)
             totalErrors++
-            const errMsg = err?.message || 'Falha ao sincronizar alteração de projeto'
+            const friendly = translateServerErrorMessage(err, 'project')
+            const errMsg = friendly || err?.message || 'Falha ao sincronizar alteração de projeto'
             errorsList.push(errMsg)
             proj.syncStatus = 'failed'
             proj.syncError = errMsg
@@ -244,15 +337,49 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // -------------------------------------------------------------
       const rdos = await offlineStorage.getAllRdos()
       for (const rdo of rdos) {
+        // Defensive check: if item has a provisional ID but syncStatus is pending_update, treat as pending_create
+        if (rdo.syncStatus === 'pending_update' && isProvisionalId(rdo.id)) {
+          rdo.syncStatus = 'pending_create'
+          await offlineStorage.saveRdo(rdo)
+        }
+
         if (rdo.syncStatus === 'pending_create') {
           try {
-            // Validate project id if possible
+            // Resolve project ID
+            let targetProjectId = rdo.projectId?.trim() || ''
+            if (!targetProjectId || isProvisionalId(targetProjectId)) {
+              // Try to find an active server project
+              const resolved = await resolveFallbackProjectId()
+              if (resolved) {
+                targetProjectId = resolved
+                rdo.projectId = resolved
+              } else {
+                throw new Error(
+                  'Projeto obrigatório não selecionado para o RDO. Selecione um projeto válido.',
+                )
+              }
+            }
+
+            // Resolve performed_by and supervised_by with logged-in user fallback
+            const currentUserId = pb.authStore.record?.id || ''
+            const targetPerformedBy =
+              rdo.performedBy && !isProvisionalId(rdo.performedBy) ? rdo.performedBy : currentUserId
+            const targetSupervisedBy =
+              rdo.supervisedBy && !isProvisionalId(rdo.supervisedBy)
+                ? rdo.supervisedBy
+                : currentUserId
+
+            if (!targetPerformedBy) {
+              throw new Error('Responsável pela execução (performed_by) é obrigatório.')
+            }
+
             const payload: Record<string, unknown> = {
+              project: targetProjectId,
               number: rdo.number,
-              report_date: rdo.reportDate,
+              report_date: rdo.reportDate || new Date().toISOString().slice(0, 10),
               weather: rdo.weather || 'Sol',
-              performed_by: rdo.performedBy,
-              supervised_by: rdo.supervisedBy || undefined,
+              performed_by: targetPerformedBy,
+              supervised_by: targetSupervisedBy || undefined,
               activity_title: rdo.activityTitle || 'Sem título',
               activity_description: rdo.activityDescription || '',
               time_displacement: rdo.timeDisplacement || '',
@@ -268,12 +395,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
             }
-            if (rdo.projectId && rdo.projectId.trim()) {
-              payload.project = rdo.projectId
-            }
 
             const record = await pb.collection('reports_rdo').create(payload)
-
             // create wells
             for (const well of rdo.wells || []) {
               if (well.well_id) {
@@ -356,7 +479,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Error syncing offline RDO create:', err)
             totalErrors++
-            const errMsg = err?.message || 'Falha ao sincronizar criação de RDO'
+            const friendly = translateServerErrorMessage(err, 'rdo')
+            const errMsg = friendly || err?.message || 'Falha ao sincronizar criação de RDO'
             errorsList.push(errMsg)
             rdo.syncStatus = 'failed'
             rdo.syncError = errMsg
@@ -364,6 +488,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             await offlineStorage.saveRdo(rdo)
           }
         } else if (rdo.syncStatus === 'pending_update') {
+          // If the ID is provisional, it never existed on the server: route directly to pending_create
+          if (isProvisionalId(rdo.id)) {
+            rdo.syncStatus = 'pending_create'
+            await offlineStorage.saveRdo(rdo)
+            continue
+          }
+
           try {
             // Check conflict
             let serverRecord: any = null
@@ -371,7 +502,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               serverRecord = await pb.collection('reports_rdo').getOne(rdo.id)
             } catch (fetchErr: any) {
               if (fetchErr?.status === 404) {
-                // Server record was deleted; recreate or skip
+                // Server record was deleted; recreate with new ID
                 console.warn('Server record not found, converting to pending_create:', rdo.id)
                 rdo.syncStatus = 'pending_create'
                 await offlineStorage.saveRdo(rdo)
@@ -493,7 +624,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Error syncing offline RDO update:', err)
             totalErrors++
-            const errMsg = err?.message || 'Falha ao sincronizar atualização de RDO'
+            const friendly = translateServerErrorMessage(err, 'rdo')
+            const errMsg = friendly || err?.message || 'Falha ao sincronizar atualização de RDO'
             errorsList.push(errMsg)
             rdo.syncStatus = 'failed'
             rdo.syncError = errMsg
@@ -508,11 +640,34 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // -------------------------------------------------------------
       const fields = await offlineStorage.getAllFieldSheets()
       for (const sheet of fields) {
+        // Defensive check: if item has a provisional ID but syncStatus is pending_update, treat as pending_create
+        if (sheet.syncStatus === 'pending_update' && isProvisionalId(sheet.id)) {
+          sheet.syncStatus = 'pending_create'
+          await offlineStorage.saveFieldSheet(sheet)
+        }
+
         if (sheet.syncStatus === 'pending_create') {
           try {
+            // Resolve project ID
+            let targetProjectId = sheet.projectId?.trim() || ''
+            if (!targetProjectId || isProvisionalId(targetProjectId)) {
+              const resolved = await resolveFallbackProjectId()
+              if (resolved) {
+                targetProjectId = resolved
+                sheet.projectId = resolved
+              } else {
+                throw new Error('Projeto obrigatório não selecionado para a Planilha de Campo.')
+              }
+            }
+
+            const currentUserId = pb.authStore.record?.id || ''
+            const targetOperator =
+              sheet.operator && !isProvisionalId(sheet.operator) ? sheet.operator : currentUserId
+
             const payload: Record<string, unknown> = {
-              operator: sheet.operator,
-              date: sheet.date,
+              project: targetProjectId,
+              operator: targetOperator,
+              date: sheet.date || new Date().toISOString().slice(0, 10),
               area: sheet.area || 'Geral',
               weather: sheet.weather || 'Sol',
               pluviometer: sheet.pluviometer || 0,
@@ -540,9 +695,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: sheet.deletedBy || undefined,
               deleted_at: sheet.deletedAt || undefined,
             }
-            if (sheet.projectId && sheet.projectId.trim()) {
-              payload.project = sheet.projectId
-            }
 
             const created = await pb.collection('field_spreadsheets').create(payload)
             await offlineStorage.deleteFieldSheet(sheet.id)
@@ -556,7 +708,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Error syncing offline FieldSheet create:', err)
             totalErrors++
-            const errMsg = err?.message || 'Falha ao sincronizar planilha de campo'
+            const friendly = translateServerErrorMessage(err, 'field')
+            const errMsg = friendly || err?.message || 'Falha ao sincronizar planilha de campo'
             errorsList.push(errMsg)
             sheet.syncStatus = 'failed'
             sheet.syncError = errMsg
@@ -564,6 +717,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             await offlineStorage.saveFieldSheet(sheet)
           }
         } else if (sheet.syncStatus === 'pending_update') {
+          // If the ID is provisional, it never existed on the server: route directly to pending_create
+          if (isProvisionalId(sheet.id)) {
+            sheet.syncStatus = 'pending_create'
+            await offlineStorage.saveFieldSheet(sheet)
+            continue
+          }
+
           try {
             let serverRecord: any = null
             try {
@@ -646,7 +806,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Error syncing offline FieldSheet update:', err)
             totalErrors++
-            const errMsg = err?.message || 'Falha ao sincronizar atualização de planilha'
+            const friendly = translateServerErrorMessage(err, 'field')
+            const errMsg =
+              friendly || err?.message || 'Falha ao sincronizar atualização de planilha'
             errorsList.push(errMsg)
             sheet.syncStatus = 'failed'
             sheet.syncError = errMsg
@@ -704,17 +866,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       ])
 
       for (const r of rdos.filter((i) => i.syncStatus === 'failed')) {
-        r.syncStatus = 'pending_update'
+        // If the ID has a provisional prefix, requeue as 'pending_create'; only real PocketBase 15-char IDs may be 'pending_update'.
+        r.syncStatus = isProvisionalId(r.id) ? 'pending_create' : 'pending_update'
         delete r.syncError
         await offlineStorage.saveRdo(r)
       }
       for (const f of fields.filter((i) => i.syncStatus === 'failed')) {
-        f.syncStatus = 'pending_update'
+        f.syncStatus = isProvisionalId(f.id) ? 'pending_create' : 'pending_update'
         delete f.syncError
         await offlineStorage.saveFieldSheet(f)
       }
       for (const p of projects.filter((i) => i.syncStatus === 'failed')) {
-        p.syncStatus = 'pending_update'
+        p.syncStatus = isProvisionalId(p.id) ? 'pending_create' : 'pending_update'
         delete p.syncError
         await offlineStorage.saveProject(p)
       }
