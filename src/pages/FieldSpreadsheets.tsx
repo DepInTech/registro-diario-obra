@@ -706,7 +706,6 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 </div>
               )
             })}
-            =======
           </div>
         )}
       </section>
