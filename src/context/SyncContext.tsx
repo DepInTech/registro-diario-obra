@@ -374,9 +374,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
 
             const payload: Record<string, unknown> = {
-              project: targetProjectId,
               number: rdo.number,
-              report_date: rdo.reportDate || new Date().toISOString().slice(0, 10),
+              project: targetProjectId,
+              empresa_executora: rdo.companyName || 'EPA Gestão Ambiental',
+              report_date: rdo.reportDate,
               weather: rdo.weather || 'Sol',
               performed_by: targetPerformedBy,
               supervised_by: targetSupervisedBy || undefined,
@@ -395,7 +396,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
             }
-
             const record = await pb.collection('reports_rdo').create(payload)
             // create wells
             for (const well of rdo.wells || []) {
@@ -555,6 +555,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_reason: rdo.deletedReason || '',
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
+            }
+            if (rdo.companyName !== undefined && pb.authStore.record?.role !== 'technician') {
+              payload.empresa_executora = rdo.companyName
             }
             if (rdo.projectId && rdo.projectId.trim()) {
               payload.project = rdo.projectId

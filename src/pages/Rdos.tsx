@@ -134,7 +134,8 @@ export function RdosPage({ query }: { query: string }) {
                 projectName: proj?.name || 'Recuperação Ambiental Lote A',
                 clientName: client?.name || 'Petrobras — Refinaria Sul',
                 contractCode: contract?.code || 'CT-EPA-2025-017',
-                companyName: company?.name || 'EPA Gestão Ambiental',
+                companyName:
+                  (rec as any).empresa_executora || company?.name || 'EPA Gestão Ambiental',
                 location: proj?.location || 'Refinaria Sul — Área Industrial',
                 reportDate: rec.report_date ? rec.report_date.slice(0, 10) : '2025-05-28',
                 weather: rec.weather || 'Sol',
@@ -1542,10 +1543,7 @@ function RdoFullPageEditor({
         />
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="epa-label flex items-center gap-1">
-              <span>Cliente</span>
-              {isTechnician && <span title="Campo bloqueado pelo Administrador">🔒</span>}
-            </label>
+            <label className="epa-label">Cliente</label>
             <Input
               placeholder="Ex.: VALE S.A."
               value={formData.clientName ?? ''}
@@ -1559,10 +1557,7 @@ function RdoFullPageEditor({
             />
           </div>
           <div>
-            <label className="epa-label flex items-center gap-1">
-              <span>Contrato</span>
-              {isTechnician && <span title="Campo bloqueado pelo Administrador">🔒</span>}
-            </label>
+            <label className="epa-label">Contrato</label>
             <Input
               placeholder="Ex.: 5900117667"
               value={formData.contractCode ?? ''}
@@ -1586,10 +1581,7 @@ function RdoFullPageEditor({
             />
           </div>
           <div>
-            <label className="epa-label flex items-center gap-1">
-              <span>Projeto EPA</span>
-              {isTechnician && <span title="Campo bloqueado pelo Administrador">🔒</span>}
-            </label>
+            <label className="epa-label">Projeto EPA</label>
             <Input
               placeholder="Ex.: 24-0234"
               value={formData.projectName ?? ''}
@@ -1608,8 +1600,12 @@ function RdoFullPageEditor({
               placeholder="Ex.: EPA Engenharia de Proteção Ambiental"
               value={formData.companyName ?? ''}
               onChange={(e) => handleFieldChange('companyName', e.target.value)}
-              disabled={isLocked}
-              className="mt-1.5"
+              disabled={isLocked || isTechnician}
+              className={cn(
+                'mt-1.5',
+                isTechnician &&
+                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+              )}
             />
           </div>
           <div>
@@ -1637,10 +1633,7 @@ function RdoFullPageEditor({
             </select>
           </div>
           <div>
-            <label className="epa-label flex items-center gap-1">
-              <span>Número do RDO</span>
-              {isTechnician && <span title="Campo bloqueado pelo Administrador">🔒</span>}
-            </label>
+            <label className="epa-label">Número do RDO</label>
             <Input
               type="number"
               value={formData.number ?? ''}
@@ -1875,7 +1868,7 @@ function RdoFullPageEditor({
           <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
             <div className="leading-relaxed">
-              🔒 Poços definidos pelo Administrador. Se o poço necessário não constar na lista,
+              Poços definidos pelo Administrador. Se o poço necessário não constar na lista,
               solicite o cadastro prévio ao Administrador.
             </div>
           </div>
@@ -1910,7 +1903,6 @@ function RdoFullPageEditor({
                     <td className="p-2">
                       {isTechnician ? (
                         <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
-                          <span>🔒</span>
                           <span>{well.well_id || 'Não especificado'}</span>
                         </div>
                       ) : (
@@ -1977,7 +1969,7 @@ function RdoFullPageEditor({
         {/* Aviso abaixo da tabela para o Técnico */}
         {isTechnician && (
           <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 italic">
-            * 🔒 Poços definidos pelo Administrador. Se o poço necessário não constar na lista,
+            * Poços definidos pelo Administrador. Se o poço necessário não constar na lista,
             solicite o cadastro prévio ao Administrador.
           </p>
         )}

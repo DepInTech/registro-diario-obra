@@ -1362,82 +1362,6 @@ function FieldFullEditor({
           </div>
         </div>
 
-        {/* Metadados de contexto: Projeto EPA, Cliente e Contrato (🔒 para Técnico, livre para Admin) */}
-        <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4 border-b pb-5 dark:border-slate-800">
-          <div>
-            <label className="epa-label flex items-center gap-1">
-              <span>Projeto EPA</span>
-              {isTechnician && <span>🔒</span>}
-            </label>
-            {isAdmin ? (
-              <select
-                value={formData.projectId || ''}
-                onChange={(e) => {
-                  const pid = e.target.value
-                  const selectedProj = projectList.find((p) => p.id === pid)
-                  setFormData((prev) => ({
-                    ...prev,
-                    projectId: pid,
-                    projectName: selectedProj?.name || prev.projectName,
-                    clientName: selectedProj?.client || prev.clientName,
-                    contractCode: selectedProj?.contract || selectedProj?.code || prev.contractCode,
-                  }))
-                  setHasUnsavedChanges(true)
-                }}
-                disabled={isLocked}
-                className="epa-input mt-1"
-              >
-                <option value="">-- Selecione o Projeto --</option>
-                {projectList.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <Input
-                value={formData.projectName || 'Recuperação Ambiental Lote A'}
-                disabled
-                className="mt-1 font-medium bg-slate-100 text-slate-700 cursor-not-allowed dark:bg-slate-800 dark:text-slate-300"
-              />
-            )}
-          </div>
-          <div>
-            <label className="epa-label flex items-center gap-1">
-              <span>Cliente</span>
-              {isTechnician && <span>🔒</span>}
-            </label>
-            <Input
-              value={formData.clientName || 'Petrobras — Refinaria Sul'}
-              onChange={(e) => handleFieldChange('clientName', e.target.value)}
-              disabled={isLocked || isTechnician}
-              placeholder="Ex.: Petrobras — Refinaria Sul"
-              className={cn(
-                'mt-1 font-medium',
-                isTechnician &&
-                  'bg-slate-100 text-slate-700 cursor-not-allowed dark:bg-slate-800 dark:text-slate-300',
-              )}
-            />
-          </div>
-          <div>
-            <label className="epa-label flex items-center gap-1">
-              <span>Contrato</span>
-              {isTechnician && <span>🔒</span>}
-            </label>
-            <Input
-              value={formData.contractCode || 'CT-EPA-2025-017'}
-              onChange={(e) => handleFieldChange('contractCode', e.target.value)}
-              disabled={isLocked || isTechnician}
-              placeholder="Ex.: CT-EPA-2025-017"
-              className={cn(
-                'mt-1 font-medium',
-                isTechnician &&
-                  'bg-slate-100 text-slate-700 cursor-not-allowed dark:bg-slate-800 dark:text-slate-300',
-              )}
-            />
-          </div>
-        </div>
-
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
             <label className="epa-label">OPERADOR</label>
@@ -1525,8 +1449,8 @@ function FieldFullEditor({
           <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
             <div className="leading-relaxed">
-              🔒 <b>Poços definidos pelo Administrador.</b> Se o poço necessário não constar na
-              lista, solicite o cadastro prévio ao Administrador.
+              <b>Poços definidos pelo Administrador.</b> Se o poço necessário não constar na lista,
+              solicite o cadastro prévio ao Administrador.
             </div>
           </div>
         )}
@@ -1595,12 +1519,6 @@ function FieldFullEditor({
                     {isTechnician ? (
                       <div className="flex items-center justify-center gap-1.5 py-1 px-2 font-semibold text-xs text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded">
                         <span>{row.well || '—'}</span>
-                        <span
-                          className="text-[11px]"
-                          title="Poço definido pelo Administrador (somente leitura)"
-                        >
-                          🔒
-                        </span>
                       </div>
                     ) : (
                       <Input

@@ -223,7 +223,7 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
           <td><b>Projeto EPA:</b> ${project.getString('name')}</td>
         </tr>
         <tr>
-          <td colspan="2"><b>Empresa:</b> ${company.getString('name')}</td>
+          <td colspan="2"><b>Empresa:</b> ${rdo.getString('empresa_executora') || company.getString('name') || 'EPA Engenharia de Proteção Ambiental'}</td>
         </tr>
         <tr>
           <td colspan="2"><b>Realizado por:</b> ${performer.getString('name')}</td>

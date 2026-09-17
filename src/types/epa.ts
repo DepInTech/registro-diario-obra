@@ -69,6 +69,7 @@ export type RdoStatus = 'draft' | 'submitted' | 'approved' | 'returned'
 export type ReportRdo = RecordModel & {
   number: number
   project: string
+  empresa_executora?: string
   report_date: string
   weather: string
   performed_by: string
