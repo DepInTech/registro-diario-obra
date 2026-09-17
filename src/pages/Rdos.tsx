@@ -924,8 +924,70 @@ function RdoFullPageEditor({
   const { toast } = useToast()
 
   const isAdmin = user?.role === 'admin'
+  const isTechnician = user?.role === 'technician'
   const isDeleted = Boolean(formData.deleted)
   const isLocked = (formData.status === 'approved' && !isAdmin) || isDeleted
+
+  const [availableWells, setAvailableWells] = useState<
+    Array<{ id: string; identification: string; depth?: number; diameter?: string }>
+  >([])
+  const [loadingWells, setLoadingWells] = useState(false)
+
+  // Fetch active wells for the selected project
+  useEffect(() => {
+    let isMounted = true
+    const fetchWells = async () => {
+      setLoadingWells(true)
+      try {
+        let list: Array<{ id: string; identification: string; depth?: number; diameter?: string }> =
+          []
+        if (formData.projectId) {
+          try {
+            const records = await pb.collection('wells').getFullList({
+              filter: `project = "${formData.projectId}" && active = true`,
+              sort: 'identification',
+            })
+            list = records.map((w: any) => ({
+              id: w.id,
+              identification: w.identification,
+              depth: w.depth,
+              diameter: w.diameter,
+            }))
+          } catch (pbErr) {
+            console.warn('Could not fetch wells with project filter, trying general list:', pbErr)
+            try {
+              const records = await pb.collection('wells').getFullList({
+                filter: 'active = true',
+                sort: 'identification',
+              })
+              list = records.map((w: any) => ({
+                id: w.id,
+                identification: w.identification,
+                depth: w.depth,
+                diameter: w.diameter,
+              }))
+            } catch (fallbackErr) {
+              console.warn('Fallback wells fetch failed:', fallbackErr)
+            }
+          }
+        }
+        if (isMounted) {
+          setAvailableWells(list)
+        }
+      } catch (e) {
+        console.error('Error fetching wells in RDO:', e)
+      } finally {
+        if (isMounted) {
+          setLoadingWells(false)
+        }
+      }
+    }
+
+    fetchWells()
+    return () => {
+      isMounted = false
+    }
+  }, [formData.projectId])
 
   const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -935,15 +997,27 @@ function RdoFullPageEditor({
   // Wells Handlers
   const handleAddWell = () => {
     const nextIndex = (formData.wells?.length || 0) + 1
+    // Se for técnico, seleciona o primeiro poço do catálogo que ainda não foi adicionado ou o primeiro disponível
+    const existingWellIds = new Set((formData.wells || []).map((w) => w.well_id))
+    const firstAvailable =
+      availableWells.find((w) => !existingWellIds.has(w.identification)) || availableWells[0]
+
     const newWell = {
-      well_id: `PZ-${String(nextIndex).padStart(2, '0')}`,
-      depth: 8.0,
+      well_id: firstAvailable
+        ? firstAvailable.identification
+        : isAdmin
+          ? `PZ-${String(nextIndex).padStart(2, '0')}`
+          : '',
+      depth: firstAvailable?.depth !== undefined ? firstAvailable.depth : 8.0,
       completion_date: formData.reportDate || new Date().toISOString().slice(0, 10),
-      diameter: '4 pol.',
+      diameter: firstAvailable?.diameter || '4 pol.',
     }
     const updated = [...(formData.wells || []), newWell]
     handleFieldChange('wells', updated)
-    toast({ title: 'Poço adicionado', description: `Linha ${newWell.well_id} inserida na tabela.` })
+    toast({
+      title: 'Poço vinculado',
+      description: `Poço ${newWell.well_id || 'selecionável'} inserido na tabela.`,
+    })
   }
 
   const handleRemoveWell = (index: number) => {
@@ -955,7 +1029,21 @@ function RdoFullPageEditor({
 
   const handleWellFieldChange = (index: number, field: string, value: any) => {
     const updated = [...(formData.wells || [])]
-    updated[index] = { ...updated[index], [field]: value }
+    if (field === 'well_id') {
+      const foundWell = availableWells.find((w) => w.identification === value)
+      updated[index] = {
+        ...updated[index],
+        well_id: value,
+        ...(foundWell?.depth !== undefined && !updated[index].depth
+          ? { depth: foundWell.depth }
+          : {}),
+        ...(foundWell?.diameter && !updated[index].diameter
+          ? { diameter: foundWell.diameter }
+          : {}),
+      }
+    } else {
+      updated[index] = { ...updated[index], [field]: value }
+    }
     handleFieldChange('wells', updated)
   }
 
@@ -1742,19 +1830,32 @@ function RdoFullPageEditor({
               variant="outline"
               size="sm"
               onClick={handleAddWell}
+              disabled={isTechnician && availableWells.length === 0}
               className="w-full sm:w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[40px]"
             >
               <Plus className="mr-1.5 h-4 w-4" />
-              Adicionar Poço
+              {isTechnician ? 'Vincular Poço do Projeto' : 'Adicionar Poço'}
             </Button>
           )}
         </div>
+
+        {/* Mensagem de orientação para o Técnico abaixo do cabeçalho ou quando lista vazia */}
+        {isTechnician && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
+            <div className="leading-relaxed">
+              <span className="font-semibold">Controle de Poços: </span>
+              Os poços disponíveis são definidos pelo Administrador. Caso necessite lançar um poço
+              que não consta na listagem, solicite o cadastro prévio ao Administrador.
+            </div>
+          </div>
+        )}
 
         <div className="mt-5 overflow-x-auto">
           <table className="w-full min-w-[620px] text-left text-xs">
             <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
               <tr>
-                <th className="p-3">ID do Poço</th>
+                <th className="p-3 w-48">ID do Poço</th>
                 <th className="p-3">Profundidade (m)</th>
                 <th className="p-3">Data Conclusão</th>
                 <th className="p-3">Diâmetro</th>
@@ -1765,20 +1866,44 @@ function RdoFullPageEditor({
               {formData.wells?.length === 0 ? (
                 <tr>
                   <td colSpan={isLocked ? 4 : 5} className="p-6 text-center text-slate-400">
-                    Nenhum poço adicionado. Clique no botão "Adicionar Poço" acima.
+                    {isTechnician
+                      ? 'Nenhum poço vinculado a este RDO. Clique em "Vincular Poço do Projeto" acima para selecionar um poço cadastrado.'
+                      : 'Nenhum poço adicionado. Clique no botão "Adicionar Poço" acima.'}
                   </td>
                 </tr>
               ) : (
                 formData.wells?.map((well, index) => (
                   <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <td className="p-2">
-                      <Input
-                        value={well.well_id ?? ''}
-                        onChange={(e) => handleWellFieldChange(index, 'well_id', e.target.value)}
-                        disabled={isLocked}
-                        placeholder="PZ-01"
-                        className="h-9 text-xs font-semibold"
-                      />
+                      {isTechnician ? (
+                        <select
+                          value={well.well_id ?? ''}
+                          onChange={(e) => handleWellFieldChange(index, 'well_id', e.target.value)}
+                          disabled={isLocked}
+                          className="epa-input h-9 text-xs font-semibold"
+                        >
+                          <option value="">-- Selecione o poço --</option>
+                          {well.well_id &&
+                            !availableWells.some((w) => w.identification === well.well_id) && (
+                              <option value={well.well_id} disabled>
+                                {well.well_id} (Não cadastrado)
+                              </option>
+                            )}
+                          {availableWells.map((w) => (
+                            <option key={w.id} value={w.identification}>
+                              {w.identification}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          value={well.well_id ?? ''}
+                          onChange={(e) => handleWellFieldChange(index, 'well_id', e.target.value)}
+                          disabled={isLocked}
+                          placeholder="PZ-01"
+                          className="h-9 text-xs font-semibold"
+                        ></Input>
+                      )}
                     </td>
                     <td className="p-2">
                       <Input
@@ -1830,6 +1955,14 @@ function RdoFullPageEditor({
             </tbody>
           </table>
         </div>
+
+        {/* Aviso abaixo da tabela para o Técnico */}
+        {isTechnician && (
+          <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 italic">
+            * Os poços disponíveis são definidos pelo Administrador. Caso necessite lançar um poço
+            que não consta na listagem, solicite o cadastro prévio ao Administrador.
+          </p>
+        )}
       </section>
 
       {/* 4. REGISTRO FOTOGRÁFICO */}

@@ -842,14 +842,64 @@ function FieldFullEditor({
   const [isExporting, setIsExporting] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewNotes, setReviewNotes] = useState(initialSheet.reviewNotes || '')
+  const [availableWells, setAvailableWells] = useState<
+    Array<{ id: string; identification: string }>
+  >([])
+  const [loadingWells, setLoadingWells] = useState(false)
 
   const { user, setHasUnsavedChanges } = useAuth()
   const { isOnline, syncNow } = useSync()
   const { toast } = useToast()
 
   const isAdmin = user?.role === 'admin'
+  const isTechnician = user?.role === 'technician'
   const isDeleted = Boolean(formData.deleted)
   const isLocked = (formData.status === 'approved' && !isAdmin) || isDeleted
+
+  // Load project wells from PocketBase (or fallback cache)
+  useEffect(() => {
+    let isMounted = true
+    const fetchWells = async () => {
+      setLoadingWells(true)
+      try {
+        let list: Array<{ id: string; identification: string }> = []
+        if (formData.projectId) {
+          try {
+            const records = await pb.collection('wells').getFullList({
+              filter: `project = "${formData.projectId}" && active = true`,
+              sort: 'identification',
+            })
+            list = records.map((w: any) => ({ id: w.id, identification: w.identification }))
+          } catch (pbErr) {
+            console.warn('Could not fetch wells with project filter, trying general list:', pbErr)
+            try {
+              const records = await pb.collection('wells').getFullList({
+                filter: 'active = true',
+                sort: 'identification',
+              })
+              list = records.map((w: any) => ({ id: w.id, identification: w.identification }))
+            } catch (fallbackErr) {
+              console.warn('Fallback wells fetch failed:', fallbackErr)
+            }
+          }
+        }
+        if (isMounted) {
+          setAvailableWells(list)
+        }
+      } catch (e) {
+        console.error('Error fetching wells:', e)
+      } finally {
+        if (isMounted) {
+          setLoadingWells(false)
+        }
+      }
+    }
+
+    fetchWells()
+    return () => {
+      isMounted = false
+    }
+  }, [formData.projectId])
 
   const handleFieldChange = (field: keyof OfflineFieldSheetItem, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -985,7 +1035,6 @@ function FieldFullEditor({
     }
   }
 
-  const isTechnician = user?.role === 'technician'
   const canExportExcel = isAdmin || isTechnician
 
   // Excel Export (Admin e Técnico têm permissão de exportar/visualizar planilha)
@@ -1311,7 +1360,7 @@ function FieldFullEditor({
               Leituras dos poços de remediação, hidrômetros (manhã/tarde), altura da bomba e saídas
             </p>
           </div>
-          {!isLocked && (
+          {!isLocked && isAdmin && (
             <Button
               variant="outline"
               size="sm"
@@ -1324,11 +1373,37 @@ function FieldFullEditor({
           )}
         </div>
 
+        {/* Aviso de orientação para o Técnico sobre poços e hidrômetros */}
+        {isTechnician && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
+            <div className="leading-relaxed">
+              <span className="font-semibold">Controle de Poços e Hidrômetros: </span>
+              Apenas o Administrador pode cadastrar novos poços e hidrômetros. Se o poço necessário
+              não estiver disponível na lista, solicite o cadastro ao Administrador.
+            </div>
+          </div>
+        )}
+
+        {/* Aviso destacado quando a lista de poços estiver vazia */}
+        {availableWells.length === 0 && !loadingWells && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
+            <div>
+              <p className="font-bold">Nenhum poço cadastrado para este projeto</p>
+              <p className="mt-0.5">
+                Apenas o Administrador pode cadastrar novos poços e hidrômetros. Se o poço
+                necessário não estiver disponível na lista, solicite o cadastro ao Administrador.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[700px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-36">
+                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-44">
                   Poço de Remediação
                 </th>
                 <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[170px]">
@@ -1372,13 +1447,35 @@ function FieldFullEditor({
               {formData.extraction_data?.map((row, index) => (
                 <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      value={row.well}
-                      onChange={(e) => handleExtractionCellChange(index, 'well', e.target.value)}
-                      disabled={isLocked}
-                      placeholder="Ex.: PR-01"
-                      className="h-8 font-semibold text-xs text-center"
-                    />
+                    {isTechnician ? (
+                      <select
+                        value={row.well || ''}
+                        onChange={(e) => handleExtractionCellChange(index, 'well', e.target.value)}
+                        disabled={isLocked}
+                        className="epa-input h-8 text-xs font-semibold text-center"
+                      >
+                        <option value="">-- Selecione o poço --</option>
+                        {/* Se o valor atual não estiver na lista de poços ativos (ex.: legado), preserva como opção desabilitada para visualização */}
+                        {row.well && !availableWells.some((w) => w.identification === row.well) && (
+                          <option value={row.well} disabled>
+                            {row.well} (Não cadastrado)
+                          </option>
+                        )}
+                        {availableWells.map((w) => (
+                          <option key={w.id} value={w.identification}>
+                            {w.identification}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        value={row.well}
+                        onChange={(e) => handleExtractionCellChange(index, 'well', e.target.value)}
+                        disabled={isLocked}
+                        placeholder="Ex.: PR-01"
+                        className="h-8 font-semibold text-xs text-center"
+                      />
+                    )}
                   </td>
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
                     <Input
