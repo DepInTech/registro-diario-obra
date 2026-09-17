@@ -389,18 +389,10 @@ export function UsersPage() {
         </span>
       )
     }
-    if (r === 'technician') {
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-          <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
-          Técnico
-        </span>
-      )
-    }
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-teal-100 px-2.5 py-0.5 text-xs font-semibold text-teal-800 dark:bg-teal-950 dark:text-teal-300">
-        <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
-        Operador
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+        <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+        Técnico
       </span>
     )
   }
@@ -411,7 +403,7 @@ export function UsersPage() {
         <div>
           <h2 className="text-xl font-bold tracking-tight">Gestão de Usuários & Acessos</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Controle de permissões e credenciais (Administrador, Técnico e Operador)
+            Controle de permissões e credenciais (Administrador e Técnico)
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -717,10 +709,9 @@ export function UsersPage() {
                   onChange={(e) => setRole(e.target.value as Role)}
                   className="epa-input mt-1"
                 >
-                  <option value="operator">Operador (Preenchimento RDO e Planilha)</option>
-                  <option value="technician">Técnico (Supervisão Técnica e RDO)</option>
+                  <option value="technician">Técnico (Planilha de Campo e RDO)</option>
                   <option value="admin">
-                    Administrador (Controle Total, PDF/Excel e Usuários)
+                    Administrador (Controle Total, Análise, PDF/Excel e Gestão)
                   </option>
                 </select>
                 <p className="mt-1 text-[11px] text-slate-500">

@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'operator' | 'technician'
+export type Role = 'admin' | 'technician'
 export type Status = 'draft' | 'submitted' | 'approved' | 'returned'
 
 export interface EpaProject {
@@ -281,17 +281,17 @@ export const users = [
     projects: 4,
   },
   {
-    id: 'cfpekk93zx4j1pr',
-    name: 'Carlos Oliveira',
-    email: 'operador@grupoepa.com.br',
-    role: 'operator' as Role,
-    active: true,
-    projects: 3,
-  },
-  {
     id: '2n6he1v3guzt3yt',
     name: 'Marina Santos',
     email: 'tecnico@grupoepa.com.br',
+    role: 'technician' as Role,
+    active: true,
+    projects: 4,
+  },
+  {
+    id: 'cfpekk93zx4j1pr',
+    name: 'Carlos Oliveira',
+    email: 'carlos.oliveira@grupoepa.com.br',
     role: 'technician' as Role,
     active: true,
     projects: 3,
@@ -300,15 +300,15 @@ export const users = [
     id: 'user-04',
     name: 'João Viana',
     email: 'joao.viana@grupoepa.com.br',
-    role: 'operator' as Role,
+    role: 'technician' as Role,
     active: true,
     projects: 1,
   },
 ]
 
 export const statusLabel: Record<Status, string> = {
-  draft: 'Rascunho',
-  submitted: 'Enviado',
+  draft: 'Em preenchimento',
+  submitted: 'Enviado para aprovação',
   approved: 'Aprovado',
-  returned: 'Devolvido',
+  returned: 'Devolvida para correção',
 }

@@ -59,7 +59,7 @@ const allPrimary = [
     id: 'rdos' as Page,
     label: 'Relatórios RDO',
     icon: ClipboardList,
-    allowedRoles: ['admin', 'operator'],
+    allowedRoles: ['admin', 'technician'],
   },
   {
     id: 'fields' as Page,
@@ -122,8 +122,7 @@ export function Layout({
   }
 
   const isAdmin = user?.role === 'admin'
-  const userRoleLabel =
-    user?.role === 'admin' ? 'Administrador' : user?.role === 'technician' ? 'Técnico' : 'Operador'
+  const userRoleLabel = user?.role === 'admin' ? 'Administrador' : 'Técnico'
   const userInitials =
     user?.name
       ?.split(' ')

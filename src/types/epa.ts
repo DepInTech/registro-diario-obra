@@ -166,9 +166,25 @@ export type RdoDraft = {
   location_map?: File
 }
 
+export interface ReturnedFieldItem {
+  field: string
+  label: string
+  note?: string
+}
+
+export interface ChangeHistoryItem {
+  field: string
+  label?: string
+  previousValue: unknown
+  newValue: unknown
+  changedAt: string
+  changedBy: string
+  changedByName?: string
+  reviewNote?: string
+}
+
 export const roleLabels: Record<UserRole, string> = {
   admin: 'Administrador',
-  operator: 'Operador',
   technician: 'Técnico',
 }
 export const statusLabels: Record<string, string> = {
@@ -176,8 +192,8 @@ export const statusLabels: Record<string, string> = {
   paused: 'Pausado',
   completed: 'Concluído',
   closed: 'Encerrado',
-  draft: 'Rascunho',
-  submitted: 'Em análise',
+  draft: 'Em preenchimento',
+  submitted: 'Enviado para aprovação',
   approved: 'Aprovado',
-  returned: 'Devolvido',
+  returned: 'Devolvida para correção',
 }

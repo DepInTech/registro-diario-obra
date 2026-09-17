@@ -26,26 +26,6 @@ export default function Index() {
   const handleNavigate = (targetPage: Page) => {
     const role = user?.role
 
-    if (targetPage === 'fields' && role === 'operator') {
-      toast({
-        title: 'Você não possui permissão para esta função.',
-        description: 'O perfil Operador tem acesso restrito ao RDO.',
-        variant: 'destructive',
-      })
-      setPage('rdos')
-      return
-    }
-
-    if (targetPage === 'rdos' && role === 'technician') {
-      toast({
-        title: 'Você não possui permissão para esta função.',
-        description: 'O perfil Técnico tem acesso restrito à Planilha de Campo.',
-        variant: 'destructive',
-      })
-      setPage('fields')
-      return
-    }
-
     if ((targetPage === 'users' || targetPage === 'audit') && role !== 'admin') {
       toast({
         title: 'Você não possui permissão para esta função.',
@@ -63,21 +43,7 @@ export default function Index() {
   useEffect(() => {
     if (!user) return
     const role = user.role
-    if (page === 'fields' && role === 'operator') {
-      toast({
-        title: 'Você não possui permissão para esta função.',
-        description: 'Redirecionando para Relatórios RDO.',
-        variant: 'destructive',
-      })
-      setPage('rdos')
-    } else if (page === 'rdos' && role === 'technician') {
-      toast({
-        title: 'Você não possui permissão para esta função.',
-        description: 'Redirecionando para Planilha de Campo.',
-        variant: 'destructive',
-      })
-      setPage('fields')
-    } else if ((page === 'users' || page === 'audit') && role !== 'admin') {
+    if ((page === 'users' || page === 'audit') && role !== 'admin') {
       toast({
         title: 'Você não possui permissão para esta função.',
         description: 'Redirecionando para Visão Geral.',
@@ -134,7 +100,7 @@ export default function Index() {
           onOpenField={() => handleNavigate('fields')}
         />
       )}
-      {page === 'rdos' && (user?.role === 'admin' || user?.role === 'operator') && (
+      {page === 'rdos' && (user?.role === 'admin' || user?.role === 'technician') && (
         <RdosPage query={query} />
       )}
       {page === 'fields' && (user?.role === 'admin' || user?.role === 'technician') && (
