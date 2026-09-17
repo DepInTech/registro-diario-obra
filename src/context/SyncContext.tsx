@@ -109,11 +109,21 @@ function translateServerErrorMessage(err: unknown, entity: 'rdo' | 'field' | 'pr
     return 'Registro não encontrado no servidor.'
   }
   if (
+    rawMsg.includes('bloqueado para edição') ||
+    rawMsg.includes('bloqueada para edição') ||
+    rawMsg.includes('Aguarde a liberação do Administrador')
+  ) {
+    return 'Documento enviado para aprovação ou já aprovado: edição bloqueada para técnico. Aguarde a liberação do Administrador.'
+  }
+
+  if (
     rawMsg.includes('Only admins can') ||
     rawMsg.includes('403') ||
-    rawMsg.includes('Failed to authenticate')
+    rawMsg.includes('Failed to authenticate') ||
+    rawMsg.includes('Forbidden') ||
+    rawMsg.includes('forbidden')
   ) {
-    return 'Permissão insuficiente para sincronizar este registro com o servidor.'
+    return 'Permissão insuficiente para alterar este registro: documento já enviado ou aprovado, bloqueado para edição.'
   }
 
   return rawMsg
@@ -511,6 +521,30 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               throw fetchErr
             }
 
+            // Trava de integridade offline para Técnico: se no servidor o RDO já está 'submitted' ou 'approved',
+            // ou se o Técnico está tentando alterar um RDO que localmente já estava enviado/aprovado
+            const userRole = pb.authStore.record?.role
+            if (userRole === 'technician') {
+              const serverStatus = serverRecord?.status
+              // Se o documento no servidor já está submitted ou approved, e localmente é apenas uma edição de dados
+              // (não a transição inicial para submitted a partir de draft/returned)
+              if (
+                serverStatus === 'submitted' ||
+                serverStatus === 'approved' ||
+                rdo.status === 'approved'
+              ) {
+                // Aborta envio indevido e marca falha explicativa sem corromper o documento
+                const lockMsg =
+                  'RDO enviado para aprovação ou aprovado: edição bloqueada para técnico. Aguarde a liberação do Administrador.'
+                rdo.syncStatus = 'failed'
+                rdo.syncError = lockMsg
+                await offlineStorage.saveRdo(rdo)
+                totalErrors++
+                errorsList.push(lockMsg)
+                continue
+              }
+            }
+
             if (
               rdo.serverUpdatedAt &&
               serverRecord.updated !== rdo.serverUpdatedAt &&
@@ -739,6 +773,28 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                 continue
               }
               throw fetchErr
+            }
+
+            // Trava de integridade offline para Técnico: se no servidor a Planilha já está 'submitted' ou 'approved',
+            // ou se o Técnico está tentando alterar uma Planilha que localmente já estava enviada/aprovada
+            const userRoleSheet = pb.authStore.record?.role
+            if (userRoleSheet === 'technician') {
+              const serverStatus = serverRecord?.status
+              if (
+                serverStatus === 'submitted' ||
+                serverStatus === 'approved' ||
+                sheet.status === 'approved'
+              ) {
+                // Aborta envio indevido e marca falha explicativa sem corromper a planilha
+                const lockMsg =
+                  'Planilha enviada para aprovação ou aprovada: edição bloqueada para técnico. Aguarde a liberação do Administrador.'
+                sheet.syncStatus = 'failed'
+                sheet.syncError = lockMsg
+                await offlineStorage.saveFieldSheet(sheet)
+                totalErrors++
+                errorsList.push(lockMsg)
+                continue
+              }
             }
 
             if (

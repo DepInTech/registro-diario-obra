@@ -741,7 +741,10 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                         ? 'Ver Arquivada →'
                         : sheet.archived
                           ? 'Visualizar arquivada →'
-                          : 'Abrir Planilha →'}
+                          : user?.role === 'technician' &&
+                              (sheet.status === 'submitted' || sheet.status === 'approved')
+                            ? 'Visualizar →'
+                            : 'Abrir Planilha →'}
                     </span>
                   </div>
                 </div>
@@ -876,7 +879,10 @@ function FieldFullEditor({
   const isAdmin = user?.role === 'admin'
   const isTechnician = user?.role === 'technician'
   const isDeleted = Boolean(formData.deleted)
-  const isLocked = (formData.status === 'approved' && !isAdmin) || isDeleted
+  // O Técnico fica estritamente bloqueado (somente leitura) quando o status for 'submitted' ou 'approved'.
+  // Apenas Administradores podem editar nesses estados, ou o Técnico quando o Admin devolver ('returned' / 'draft').
+  const isLocked =
+    (!isAdmin && (formData.status === 'approved' || formData.status === 'submitted')) || isDeleted
 
   // Carrega projetos (local + PocketBase) para preenchimento de Cliente, Contrato e Projeto EPA
   useEffect(() => {
@@ -1177,11 +1183,24 @@ function FieldFullEditor({
               Planilha de Campo · {formData.date}
             </h2>
             <StatusBadge status={formData.status} />
-            {isDeleted && (
+            {isDeleted ? (
               <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold text-red-800 dark:bg-red-950 dark:text-red-300">
                 Item Excluído (Arquivado para auditoria)
               </span>
-            )}
+            ) : isLocked ? (
+              <span
+                className={cn(
+                  'rounded-full px-2.5 py-0.5 text-[10px] font-semibold',
+                  formData.status === 'submitted'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+                )}
+              >
+                {formData.status === 'submitted'
+                  ? 'Bloqueado — Aguardando aprovação do Administrador'
+                  : 'Bloqueado após aprovação'}
+              </span>
+            ) : null}
           </div>
         </div>
 
@@ -2112,7 +2131,9 @@ function FieldFullEditor({
           <p className="text-sm font-semibold">Finalização da Planilha</p>
           <p className="text-xs text-slate-500">
             {isLocked
-              ? 'Esta planilha já foi aprovada e está bloqueada para modificações.'
+              ? formData.status === 'submitted'
+                ? 'Esta planilha foi enviada para aprovação e está bloqueada para edição. Aguarde a liberação do Administrador.'
+                : 'Esta planilha já foi aprovada e está bloqueada para modificações.'
               : 'Verifique todos os dados antes de salvar ou enviar para aprovação.'}
           </p>
         </div>

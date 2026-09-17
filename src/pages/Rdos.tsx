@@ -791,7 +791,10 @@ export function RdosPage({ query }: { query: string }) {
                             ? 'Ver Arquivado'
                             : report.archived
                               ? 'Visualizar'
-                              : 'Abrir / Editar'}
+                              : user?.role === 'technician' &&
+                                  (report.status === 'submitted' || report.status === 'approved')
+                                ? 'Visualizar'
+                                : 'Abrir / Editar'}
                         </Button>
                       </div>
                     </td>
@@ -931,7 +934,10 @@ function RdoFullPageEditor({
   const isAdmin = user?.role === 'admin'
   const isTechnician = user?.role === 'technician'
   const isDeleted = Boolean(formData.deleted)
-  const isLocked = (formData.status === 'approved' && !isAdmin) || isDeleted
+  // O Técnico fica estritamente bloqueado (somente leitura) quando o status for 'submitted' ou 'approved'.
+  // Apenas Administradores podem editar nesses estados, ou o Técnico quando o Admin devolver ('returned' / 'draft').
+  const isLocked =
+    (!isAdmin && (formData.status === 'approved' || formData.status === 'submitted')) || isDeleted
 
   const [availableWells, setAvailableWells] = useState<
     Array<{ id: string; identification: string; depth?: number; diameter?: string }>
@@ -1145,6 +1151,16 @@ function RdoFullPageEditor({
 
   // Save logic (Draft or Submitted)
   const saveReport = async (targetStatus?: Status) => {
+    if (isLocked) {
+      toast({
+        title: 'Documento bloqueado para edição',
+        description:
+          'Não é possível alterar este RDO enquanto aguarda aprovação ou estiver aprovado.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     // Check project association
     if (!formData.projectId || isProvisionalId(formData.projectId)) {
       try {
@@ -1344,8 +1360,17 @@ function RdoFullPageEditor({
                 Item Excluído (Arquivado para auditoria)
               </span>
             ) : isLocked ? (
-              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                Bloqueado após aprovação
+              <span
+                className={cn(
+                  'rounded-full px-2.5 py-0.5 text-[10px] font-semibold',
+                  formData.status === 'submitted'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                    : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+                )}
+              >
+                {formData.status === 'submitted'
+                  ? 'Bloqueado — Aguardando aprovação do Administrador'
+                  : 'Bloqueado após aprovação'}
               </span>
             ) : null}
           </div>
@@ -2141,7 +2166,9 @@ function RdoFullPageEditor({
           <p className="text-sm font-semibold">Finalização do Relatório</p>
           <p className="text-xs text-slate-500">
             {isLocked
-              ? 'Este RDO já foi aprovado e está bloqueado para modificações.'
+              ? formData.status === 'submitted'
+                ? 'Este RDO foi enviado para aprovação e está bloqueado para edição. Aguarde a liberação do Administrador.'
+                : 'Este RDO já foi aprovado e está bloqueado para modificações.'
               : 'Verifique todos os dados antes de salvar ou enviar para aprovação.'}
           </p>
         </div>
