@@ -1035,14 +1035,14 @@ function FieldFullEditor({
     }
   }
 
-  const canExportExcel = isAdmin || isTechnician
+  const canExportExcel = isAdmin
 
-  // Excel Export (Admin e Técnico têm permissão de exportar/visualizar planilha)
+  // Excel Export (Admin tem permissão exclusiva de exportar planilha)
   const handleExportExcel = async () => {
     if (!canExportExcel) {
       toast({
         title: 'Você não possui permissão para esta função.',
-        description: 'Exportação permitida para Administradores e Técnicos.',
+        description: 'Exportação permitida exclusivamente para Administradores.',
         variant: 'destructive',
       })
       return
@@ -1458,7 +1458,7 @@ function FieldFullEditor({
                         {/* Se o valor atual não estiver na lista de poços ativos (ex.: legado), preserva como opção desabilitada para visualização */}
                         {row.well && !availableWells.some((w) => w.identification === row.well) && (
                           <option value={row.well} disabled>
-                            {row.well} (Não cadastrado)
+                            {row.well}
                           </option>
                         )}
                         {availableWells.map((w) => (

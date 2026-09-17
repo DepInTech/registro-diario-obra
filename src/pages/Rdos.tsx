@@ -1889,7 +1889,7 @@ function RdoFullPageEditor({
                           {well.well_id &&
                             !availableWells.some((w) => w.identification === well.well_id) && (
                               <option value={well.well_id} disabled>
-                                {well.well_id} (Não cadastrado)
+                                {well.well_id}
                               </option>
                             )}
                           {availableWells.map((w) => (
