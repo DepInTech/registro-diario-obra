@@ -958,7 +958,7 @@ function FieldFullEditor({
       toast({
         title:
           targetStatus === 'submitted'
-            ? 'Planilha enviada para aprovação'
+            ? 'Planilha enviada para o Técnico'
             : 'Planilha salva com sucesso',
         description: isOnline
           ? 'Dados sincronizados com o servidor.'
@@ -1187,7 +1187,7 @@ function FieldFullEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                Enviar para Aprovação
+                Enviar para Técnico
               </Button>
             </>
           )}
@@ -1438,7 +1438,7 @@ function FieldFullEditor({
                 <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[180px]">
                   Saída de Cada Autopump (500mL)*
                 </th>
-                {!isLocked && (
+                {!isLocked && isAdmin && (
                   <th className="p-2.5 border border-emerald-800 w-12 text-center"></th>
                 )}
               </tr>
@@ -1517,14 +1517,14 @@ function FieldFullEditor({
                       className="h-8 font-mono text-xs text-center"
                     />
                   </td>
-                  {!isLocked && (
+                  {!isLocked && isAdmin && (
                     <td className="p-1.5 border border-slate-200 dark:border-slate-800 text-center">
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveExtractionWell(index)}
                         className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
-                        title="Remover linha de poço"
+                        title="Remover linha de poço (Admin)"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

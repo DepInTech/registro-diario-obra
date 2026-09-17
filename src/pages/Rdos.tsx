@@ -1185,7 +1185,7 @@ function RdoFullPageEditor({
 
       toast({
         title:
-          targetStatus === 'submitted' ? 'RDO enviado para aprovação' : 'RDO salvo com sucesso',
+          targetStatus === 'submitted' ? 'RDO enviado para o Técnico' : 'RDO salvo com sucesso',
         description: isOnline
           ? 'Dados sincronizados com o servidor.'
           : 'Salvo localmente no dispositivo (IndexedDB). Sincronizará quando voltar a internet.',
@@ -1422,7 +1422,7 @@ function RdoFullPageEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                Enviar para aprovação
+                Enviar para Técnico
               </Button>
             </>
           )}
@@ -1859,13 +1859,16 @@ function RdoFullPageEditor({
                 <th className="p-3">Profundidade (m)</th>
                 <th className="p-3">Data Conclusão</th>
                 <th className="p-3">Diâmetro</th>
-                {!isLocked && <th className="p-3 w-12 text-center">Ações</th>}
+                {!isLocked && isAdmin && <th className="p-3 w-12 text-center">Ações</th>}
               </tr>
             </thead>
             <tbody className="divide-y dark:divide-slate-800">
               {formData.wells?.length === 0 ? (
                 <tr>
-                  <td colSpan={isLocked ? 4 : 5} className="p-6 text-center text-slate-400">
+                  <td
+                    colSpan={isLocked || !isAdmin ? 4 : 5}
+                    className="p-6 text-center text-slate-400"
+                  >
                     {isTechnician
                       ? 'Nenhum poço vinculado a este RDO. Clique em "Vincular Poço do Projeto" acima para selecionar um poço cadastrado.'
                       : 'Nenhum poço adicionado. Clique no botão "Adicionar Poço" acima.'}
@@ -1936,14 +1939,14 @@ function RdoFullPageEditor({
                         className="h-9 text-xs"
                       />
                     </td>
-                    {!isLocked && (
+                    {!isLocked && isAdmin && (
                       <td className="p-2 text-center">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleRemoveWell(index)}
                           className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50"
-                          title="Remover poço"
+                          title="Remover poço (Admin)"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -2132,7 +2135,7 @@ function RdoFullPageEditor({
           <p className="text-xs text-slate-500">
             {isLocked
               ? 'Este RDO já foi aprovado e está bloqueado para modificações.'
-              : 'Verifique todos os dados antes de salvar ou enviar para aprovação.'}
+              : 'Verifique todos os dados antes de salvar ou enviar para o Técnico.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
