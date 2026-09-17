@@ -1012,6 +1012,16 @@ function FieldFullEditor({
 
   // Save logic
   const saveSheet = async (targetStatus?: Status) => {
+    if (isLocked) {
+      toast({
+        title: 'Documento bloqueado para edição',
+        description:
+          'Não é possível alterar esta Planilha de Campo enquanto aguarda aprovação ou estiver aprovada.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setIsSaving(true)
     const statusToSave = targetStatus || formData.status
     const updatedItem: OfflineFieldSheetItem = {
