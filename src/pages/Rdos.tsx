@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import {
+  isValidDeletionJustification,
+  INVALID_JUSTIFICATION_MESSAGE,
+} from '@/lib/justificationValidator'
+import {
   AlertCircle,
   ArrowLeft,
   CalendarDays,
@@ -384,10 +388,10 @@ export function RdosPage({ query }: { query: string }) {
     }
 
     const trimmedReason = deleteReason.trim()
-    if (trimmedReason.length < 10) {
+    if (!isValidDeletionJustification(trimmedReason)) {
       toast({
-        title: 'Justificativa insuficiente',
-        description: 'Por favor, informe uma justificativa com no mínimo 10 caracteres.',
+        title: 'Justificativa inválida',
+        description: INVALID_JUSTIFICATION_MESSAGE,
         variant: 'destructive',
       })
       return
@@ -830,20 +834,20 @@ export function RdosPage({ query }: { query: string }) {
             <div className="mt-4 space-y-1.5">
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                 Justificativa da Exclusão{' '}
-                <span className="text-red-500">* (mínimo 10 caracteres)</span>
+                <span className="text-red-500">* (obrigatória e fundamentada)</span>
               </label>
               <textarea
                 value={deleteReason}
                 onChange={(e) => setDeleteReason(e.target.value)}
-                placeholder="Explique detalhadamente por que este RDO está sendo excluído..."
+                placeholder="Informe uma justificativa válida explicando o motivo da exclusão..."
                 rows={3}
                 className="w-full rounded-xl border border-slate-300 bg-white p-3 text-sm text-slate-900 shadow-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
               />
               <div className="flex items-center justify-between text-[11px] text-slate-400">
                 <span>
-                  {deleteReason.trim().length < 10
-                    ? `Faltam ${10 - deleteReason.trim().length} caractere(s)`
-                    : '✓ Justificativa atende ao requisito mínimo'}
+                  {isValidDeletionJustification(deleteReason)
+                    ? '✓ Justificativa válida'
+                    : 'Informe uma justificativa real para a exclusão'}
                 </span>
                 <span>{deleteReason.length} caracteres</span>
               </div>
@@ -863,7 +867,7 @@ export function RdosPage({ query }: { query: string }) {
               </Button>
               <Button
                 size="sm"
-                disabled={isDeleting || deleteReason.trim().length < 10}
+                disabled={isDeleting || !deleteReason.trim()}
                 onClick={confirmDeleteRdo}
                 className="bg-red-600 hover:bg-red-700 text-white min-w-[130px] disabled:opacity-50"
               >

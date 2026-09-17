@@ -1,6 +1,6 @@
 import type { RecordModel } from 'pocketbase'
 
-export type UserRole = 'admin' | 'operator' | 'technician'
+export type UserRole = 'admin' | 'technician'
 export type EpaUser = RecordModel & {
   name: string
   email: string

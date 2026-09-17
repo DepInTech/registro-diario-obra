@@ -1,14 +1,10 @@
 routerAdd(
   'POST',
-  '/api/epa/audit-export',
+  '/backend/v1/epa/audit-export',
   (e) => {
     const auth = e.auth
     const role = auth?.getString('role')
-    if (
-      !auth ||
-      !auth.getBool('active') ||
-      (role !== 'admin' && role !== 'operator' && role !== 'technician')
-    ) {
+    if (!auth || !auth.getBool('active') || (role !== 'admin' && role !== 'technician')) {
       throw new ForbiddenError('Acesso não autorizado para auditoria de exportação')
     }
     const body = e.requestInfo().body

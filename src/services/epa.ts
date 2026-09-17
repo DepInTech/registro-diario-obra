@@ -90,7 +90,7 @@ export const auditExport = (
   entityRecord: string,
   filename: string,
 ) =>
-  pb.send('/api/epa/audit-export', {
+  pb.send('/backend/v1/epa/audit-export', {
     method: 'POST',
     body: { action, entity, entity_record: entityRecord, filename },
   })
