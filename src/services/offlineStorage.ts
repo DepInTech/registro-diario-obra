@@ -64,6 +64,8 @@ export interface OfflineFieldSheetItem {
   id: string
   projectId: string
   projectName: string
+  clientName?: string
+  contractCode?: string
   date: string
   area: string
   operator: string

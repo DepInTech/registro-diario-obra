@@ -39,7 +39,11 @@ import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/context/AuthContext'
 import { useSync, SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
-import { offlineStorage, OfflineFieldSheetItem } from '@/services/offlineStorage'
+import {
+  offlineStorage,
+  OfflineFieldSheetItem,
+  OfflineProjectItem,
+} from '@/services/offlineStorage'
 import { authHeaders, exportUrl, updateFieldStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
@@ -97,6 +101,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 id: rec.id,
                 projectId: rec.project,
                 projectName: proj?.name || 'Recuperação Ambiental Lote A',
+                clientName: proj?.client || undefined,
+                contractCode: proj?.contract || proj?.code || undefined,
                 date: rec.date ? rec.date.slice(0, 10) : '2025-05-28',
                 area: rec.area || 'Oficina Central',
                 operator: rec.operator,
@@ -146,6 +152,11 @@ export function FieldSpreadsheets({ query }: { query: string }) {
             id: m.id,
             projectId: m.projectId,
             projectName: m.project,
+            clientName:
+              m.projectId === 'u6c77idn7hfi13c'
+                ? 'Saneamento Industrial do Maranhão'
+                : 'Petrobras — Refinaria Sul',
+            contractCode: m.projectId === 'u6c77idn7hfi13c' ? 'CT-2025-003' : 'CT-EPA-2025-017',
             date: '2025-05-28',
             area: m.area,
             operator: user?.id || 'cfpekk93zx4j1pr',
@@ -368,6 +379,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
   const openNew = async () => {
     let initialProjectId = '6699p05pm2uv1x2'
     let initialProjectName = 'Recuperação Ambiental Lote A'
+    let initialClientName = 'Petrobras — Refinaria Sul'
+    let initialContractCode = 'CT-EPA-2025-017'
 
     try {
       const localProjects = await offlineStorage.getAllProjects()
@@ -377,6 +390,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       if (activeProj) {
         initialProjectId = activeProj.id
         initialProjectName = activeProj.name
+        initialClientName = activeProj.client || ''
+        initialContractCode = activeProj.contract || activeProj.code || ''
       }
     } catch (e) {
       console.warn('Could not read cached projects for new field spreadsheet:', e)
@@ -386,6 +401,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       id: 'field_' + Date.now(),
       projectId: initialProjectId,
       projectName: initialProjectName,
+      clientName: initialClientName,
+      contractCode: initialContractCode,
       date: new Date().toISOString().slice(0, 10),
       area: 'Oficina Central',
       operator: user?.id || 'cfpekk93zx4j1pr',
@@ -489,18 +506,20 @@ export function FieldSpreadsheets({ query }: { query: string }) {
           <FileSpreadsheet className="h-4 w-4" />
           Planilhas Ativas ({activeCount})
         </button>
-        <button
-          onClick={() => setTabFilter('archived')}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
-            tabFilter === 'archived'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
-          )}
-        >
-          <Archive className="h-4 w-4" />
-          Arquivadas ({archivedCount})
-        </button>
+        {user?.role !== 'technician' && (
+          <button
+            onClick={() => setTabFilter('archived')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+              tabFilter === 'archived'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+            )}
+          >
+            <Archive className="h-4 w-4" />
+            Arquivadas ({archivedCount})
+          </button>
+        )}
         {user?.role === 'admin' && (
           <button
             onClick={() => setTabFilter('deleted')}
@@ -650,23 +669,25 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                       )}
                       {!sheet.deleted && (
                         <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleToggleArchiveSheet(sheet)
-                            }}
-                            disabled={actionLoadingId === sheet.id}
-                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                            title={sheet.archived ? 'Desarquivar planilha' : 'Arquivar planilha'}
-                          >
-                            {actionLoadingId === sheet.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : sheet.archived ? (
-                              <ArchiveRestore className="h-3.5 w-3.5 text-amber-600" />
-                            ) : (
-                              <Archive className="h-3.5 w-3.5" />
-                            )}
-                          </button>
+                          {user?.role !== 'technician' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleToggleArchiveSheet(sheet)
+                              }}
+                              disabled={actionLoadingId === sheet.id}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                              title={sheet.archived ? 'Desarquivar planilha' : 'Arquivar planilha'}
+                            >
+                              {actionLoadingId === sheet.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : sheet.archived ? (
+                                <ArchiveRestore className="h-3.5 w-3.5 text-amber-600" />
+                              ) : (
+                                <Archive className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          )}
                           {user?.role === 'admin' && (
                             <button
                               onClick={(e) => {
@@ -846,6 +867,7 @@ function FieldFullEditor({
     Array<{ id: string; identification: string }>
   >([])
   const [loadingWells, setLoadingWells] = useState(false)
+  const [projectList, setProjectList] = useState<OfflineProjectItem[]>([])
 
   const { user, setHasUnsavedChanges } = useAuth()
   const { isOnline, syncNow } = useSync()
@@ -855,6 +877,53 @@ function FieldFullEditor({
   const isTechnician = user?.role === 'technician'
   const isDeleted = Boolean(formData.deleted)
   const isLocked = (formData.status === 'approved' && !isAdmin) || isDeleted
+
+  // Carrega projetos (local + PocketBase) para preenchimento de Cliente, Contrato e Projeto EPA
+  useEffect(() => {
+    let isMounted = true
+    const loadProjectsAndDetails = async () => {
+      try {
+        const localProjects = await offlineStorage.getAllProjects()
+        if (isMounted && localProjects.length > 0) {
+          setProjectList(localProjects)
+        }
+
+        // Tentar obter dados adicionais se cliente ou contrato não estiverem preenchidos
+        const currentProj = localProjects.find(
+          (p) => p.id === formData.projectId || p.name === formData.projectName,
+        )
+        if (currentProj) {
+          setFormData((prev) => ({
+            ...prev,
+            projectName: prev.projectName || currentProj.name,
+            clientName: prev.clientName || currentProj.client,
+            contractCode: prev.contractCode || currentProj.contract || currentProj.code,
+          }))
+        } else if (navigator.onLine && pb.authStore.isValid && formData.projectId) {
+          try {
+            const pRec = await pb.collection('projects').getOne(formData.projectId)
+            if (isMounted && pRec) {
+              setFormData((prev) => ({
+                ...prev,
+                projectName: prev.projectName || pRec.name,
+                clientName: prev.clientName || (pRec as any).client,
+                contractCode: prev.contractCode || (pRec as any).contract || (pRec as any).code,
+              }))
+            }
+          } catch (e) {
+            console.warn('Could not fetch project details from PB:', e)
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load projects for field editor:', e)
+      }
+    }
+
+    loadProjectsAndDetails()
+    return () => {
+      isMounted = false
+    }
+  }, [formData.projectId])
 
   // Load project wells from PocketBase (or fallback cache)
   useEffect(() => {
@@ -958,11 +1027,14 @@ function FieldFullEditor({
       toast({
         title:
           targetStatus === 'submitted'
-            ? 'Planilha enviada para o Técnico'
+            ? 'Planilha enviada para aprovação'
             : 'Planilha salva com sucesso',
-        description: isOnline
-          ? 'Dados sincronizados com o servidor.'
-          : 'Salvo localmente no dispositivo (IndexedDB).',
+        description:
+          targetStatus === 'submitted'
+            ? 'A planilha foi enviada para validação e aprovação do Administrador.'
+            : isOnline
+              ? 'Dados sincronizados com o servidor.'
+              : 'Salvo localmente no dispositivo (IndexedDB).',
       })
       onSaved()
     } catch (err) {
@@ -1114,8 +1186,8 @@ function FieldFullEditor({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Arquivar / Desarquivar (não aplicável se excluído) */}
-          {!isDeleted && onToggleArchive && (
+          {/* Arquivar / Desarquivar (Admin apenas, não visível para Técnico) */}
+          {!isDeleted && !isTechnician && onToggleArchive && (
             <Button
               variant="outline"
               onClick={onToggleArchive}
@@ -1187,7 +1259,7 @@ function FieldFullEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                Enviar para Técnico
+                Enviar para aprovação
               </Button>
             </>
           )}
@@ -1255,12 +1327,12 @@ function FieldFullEditor({
                 Planilha de Campo Arquivada
               </p>
               <p className="text-xs text-amber-800 dark:text-amber-300">
-                Esta planilha está em modo de leitura nos arquivos. Você pode desarquivá-la a
-                qualquer momento.
+                Esta planilha está em modo de leitura nos arquivos.{' '}
+                {!isTechnician && 'Você pode desarquivá-la a qualquer momento.'}
               </p>
             </div>
           </div>
-          {onToggleArchive && (
+          {!isTechnician && onToggleArchive && (
             <Button
               size="sm"
               onClick={onToggleArchive}
@@ -1277,7 +1349,6 @@ function FieldFullEditor({
           )}
         </div>
       )}
-
       {/* CABEÇALHO OFICIAL */}
       <section className="epa-card p-6 border-t-4 border-t-emerald-700">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 dark:border-slate-800">
@@ -1288,6 +1359,82 @@ function FieldFullEditor({
             <h1 className="text-base md:text-lg font-extrabold tracking-wide text-slate-900 dark:text-white">
               Controle Operacional Diário de Remediação
             </h1>
+          </div>
+        </div>
+
+        {/* Metadados de contexto: Projeto EPA, Cliente e Contrato (🔒 para Técnico, livre para Admin) */}
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-4 border-b pb-5 dark:border-slate-800">
+          <div>
+            <label className="epa-label flex items-center gap-1">
+              <span>Projeto EPA</span>
+              {isTechnician && <span>🔒</span>}
+            </label>
+            {isAdmin ? (
+              <select
+                value={formData.projectId || ''}
+                onChange={(e) => {
+                  const pid = e.target.value
+                  const selectedProj = projectList.find((p) => p.id === pid)
+                  setFormData((prev) => ({
+                    ...prev,
+                    projectId: pid,
+                    projectName: selectedProj?.name || prev.projectName,
+                    clientName: selectedProj?.client || prev.clientName,
+                    contractCode: selectedProj?.contract || selectedProj?.code || prev.contractCode,
+                  }))
+                  setHasUnsavedChanges(true)
+                }}
+                disabled={isLocked}
+                className="epa-input mt-1"
+              >
+                <option value="">-- Selecione o Projeto --</option>
+                {projectList.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <Input
+                value={formData.projectName || 'Recuperação Ambiental Lote A'}
+                disabled
+                className="mt-1 font-medium bg-slate-100 text-slate-700 cursor-not-allowed dark:bg-slate-800 dark:text-slate-300"
+              />
+            )}
+          </div>
+          <div>
+            <label className="epa-label flex items-center gap-1">
+              <span>Cliente</span>
+              {isTechnician && <span>🔒</span>}
+            </label>
+            <Input
+              value={formData.clientName || 'Petrobras — Refinaria Sul'}
+              onChange={(e) => handleFieldChange('clientName', e.target.value)}
+              disabled={isLocked || isTechnician}
+              placeholder="Ex.: Petrobras — Refinaria Sul"
+              className={cn(
+                'mt-1 font-medium',
+                isTechnician &&
+                  'bg-slate-100 text-slate-700 cursor-not-allowed dark:bg-slate-800 dark:text-slate-300',
+              )}
+            />
+          </div>
+          <div>
+            <label className="epa-label flex items-center gap-1">
+              <span>Contrato</span>
+              {isTechnician && <span>🔒</span>}
+            </label>
+            <Input
+              value={formData.contractCode || 'CT-EPA-2025-017'}
+              onChange={(e) => handleFieldChange('contractCode', e.target.value)}
+              disabled={isLocked || isTechnician}
+              placeholder="Ex.: CT-EPA-2025-017"
+              className={cn(
+                'mt-1 font-medium',
+                isTechnician &&
+                  'bg-slate-100 text-slate-700 cursor-not-allowed dark:bg-slate-800 dark:text-slate-300',
+              )}
+            />
           </div>
         </div>
 
@@ -1373,27 +1520,25 @@ function FieldFullEditor({
           )}
         </div>
 
-        {/* Aviso de orientação para o Técnico sobre poços e hidrômetros */}
+        {/* Aviso de orientação para o Técnico sobre poços definidos pelo Administrador */}
         {isTechnician && (
           <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
             <div className="leading-relaxed">
-              <span className="font-semibold">Controle de Poços e Hidrômetros: </span>
-              Apenas o Administrador pode cadastrar novos poços e hidrômetros. Se o poço necessário
-              não estiver disponível na lista, solicite o cadastro ao Administrador.
+              🔒 <b>Poços definidos pelo Administrador.</b> Se o poço necessário não constar na
+              lista, solicite o cadastro prévio ao Administrador.
             </div>
           </div>
         )}
 
         {/* Aviso destacado quando a lista de poços estiver vazia */}
-        {availableWells.length === 0 && !loadingWells && (
+        {isAdmin && availableWells.length === 0 && !loadingWells && (
           <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
             <div>
               <p className="font-bold">Nenhum poço cadastrado para este projeto</p>
               <p className="mt-0.5">
-                Apenas o Administrador pode cadastrar novos poços e hidrômetros. Se o poço
-                necessário não estiver disponível na lista, solicite o cadastro ao Administrador.
+                Utilize o botão "Adicionar Poço (PR)" ou cadastre novos poços na tela de Projetos.
               </p>
             </div>
           </div>
@@ -1448,25 +1593,15 @@ function FieldFullEditor({
                 <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
                     {isTechnician ? (
-                      <select
-                        value={row.well || ''}
-                        onChange={(e) => handleExtractionCellChange(index, 'well', e.target.value)}
-                        disabled={isLocked}
-                        className="epa-input h-8 text-xs font-semibold text-center"
-                      >
-                        <option value="">-- Selecione o poço --</option>
-                        {/* Se o valor atual não estiver na lista de poços ativos (ex.: legado), preserva como opção desabilitada para visualização */}
-                        {row.well && !availableWells.some((w) => w.identification === row.well) && (
-                          <option value={row.well} disabled>
-                            {row.well}
-                          </option>
-                        )}
-                        {availableWells.map((w) => (
-                          <option key={w.id} value={w.identification}>
-                            {w.identification}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center justify-center gap-1.5 py-1 px-2 font-semibold text-xs text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded">
+                        <span>{row.well || '—'}</span>
+                        <span
+                          className="text-[11px]"
+                          title="Poço definido pelo Administrador (somente leitura)"
+                        >
+                          🔒
+                        </span>
+                      </div>
                     ) : (
                       <Input
                         value={row.well}
@@ -2052,6 +2187,48 @@ function FieldFullEditor({
           className="mt-4 min-h-[120px]"
         />
       </section>
+
+      {/* 9. BOTÕES FINAIS DE AÇÃO E VALIDAÇÃO */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 epa-card p-6">
+        <div>
+          <p className="text-sm font-semibold">Finalização da Planilha</p>
+          <p className="text-xs text-slate-500">
+            {isLocked
+              ? 'Esta planilha já foi aprovada e está bloqueada para modificações.'
+              : 'Verifique todos os dados antes de salvar ou enviar para aprovação.'}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <Button variant="outline" onClick={onBack} className="min-h-[44px] flex-1 sm:flex-none">
+            Voltar
+          </Button>
+          {!isLocked && !formData.archived && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => saveSheet('draft')}
+                disabled={isSaving}
+                className="min-h-[44px] flex-1 sm:flex-none"
+              >
+                {isSaving ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-1.5 h-4 w-4" />
+                )}
+                Salvar Rascunho
+              </Button>
+              <Button
+                onClick={() => saveSheet('submitted')}
+                disabled={isSaving}
+                className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 flex-1 sm:flex-none text-xs font-semibold shadow-sm"
+              >
+                <Send className="mr-1.5 h-4 w-4" />
+                Enviar para aprovação
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Modal Devolução */}
       {reviewOpen && (
