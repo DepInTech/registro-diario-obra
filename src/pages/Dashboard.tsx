@@ -250,7 +250,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             label: 'Planilhas de campo',
             value: String(sheetCount),
             helper: 'medições operacionais',
-            trend: `${stats.fieldActive} ativas`,
+            trend: `${sheetCount} ativas`,
             icon: FileSpreadsheet,
             color: 'teal',
             up: true,
