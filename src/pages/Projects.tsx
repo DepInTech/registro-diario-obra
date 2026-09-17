@@ -1005,7 +1005,7 @@ export function Projects({
                           ? 'Ⅱ Pausado'
                           : '✓ Concluído'}
                     </span>
-                    {!project.deleted && (
+                    {isAdmin && !project.deleted && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -1561,7 +1561,7 @@ function ProjectDetail({
         </button>
 
         <div className="flex items-center gap-2">
-          {!project.deleted && (
+          {isAdmin && !project.deleted && (
             <Button
               variant="outline"
               size="sm"

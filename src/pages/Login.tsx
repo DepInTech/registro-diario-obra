@@ -418,6 +418,11 @@ export function LoginPage() {
                   <p className="text-[10px] font-medium text-[#334155] truncate">Marina</p>
                 </button>
               </div>
+
+              {/* Dica de demonstração do fluxo */}
+              <p className="mt-3 text-center text-[11px] text-[#64748B] font-medium">
+                Técnico preenche → Enviar para aprovação → Administrador analisa
+              </p>
             </div>
           </div>
         </div>

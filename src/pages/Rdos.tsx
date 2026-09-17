@@ -535,18 +535,20 @@ export function RdosPage({ query }: { query: string }) {
           <FileText className="h-4 w-4" />
           RDOs Ativos ({activeCount})
         </button>
-        <button
-          onClick={() => setTabFilter('archived')}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
-            tabFilter === 'archived'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
-          )}
-        >
-          <Archive className="h-4 w-4" />
-          Arquivados ({archivedCount})
-        </button>
+        {user?.role !== 'technician' && (
+          <button
+            onClick={() => setTabFilter('archived')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+              tabFilter === 'archived'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+            )}
+          >
+            <Archive className="h-4 w-4" />
+            Arquivados ({archivedCount})
+          </button>
+        )}
         {user?.role === 'admin' && (
           <button
             onClick={() => setTabFilter('deleted')}
@@ -735,23 +737,25 @@ export function RdosPage({ query }: { query: string }) {
                       <div className="flex items-center justify-end gap-1">
                         {!report.deleted && (
                           <>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleToggleArchiveRdo(report)
-                              }}
-                              disabled={actionLoadingId === report.id}
-                              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                              title={report.archived ? 'Desarquivar RDO' : 'Arquivar RDO'}
-                            >
-                              {actionLoadingId === report.id ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : report.archived ? (
-                                <ArchiveRestore className="h-4 w-4 text-amber-600" />
-                              ) : (
-                                <Archive className="h-4 w-4" />
-                              )}
-                            </button>
+                            {user?.role !== 'technician' && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleToggleArchiveRdo(report)
+                                }}
+                                disabled={actionLoadingId === report.id}
+                                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                                title={report.archived ? 'Desarquivar RDO' : 'Arquivar RDO'}
+                              >
+                                {actionLoadingId === report.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : report.archived ? (
+                                  <ArchiveRestore className="h-4 w-4 text-amber-600" />
+                                ) : (
+                                  <Archive className="h-4 w-4" />
+                                )}
+                              </button>
+                            )}
                             {user?.role === 'admin' && (
                               <button
                                 onClick={(e) => {
@@ -1185,7 +1189,7 @@ function RdoFullPageEditor({
 
       toast({
         title:
-          targetStatus === 'submitted' ? 'RDO enviado para o Técnico' : 'RDO salvo com sucesso',
+          targetStatus === 'submitted' ? 'RDO enviado para aprovação' : 'RDO salvo com sucesso',
         description: isOnline
           ? 'Dados sincronizados com o servidor.'
           : 'Salvo localmente no dispositivo (IndexedDB). Sincronizará quando voltar a internet.',
@@ -1348,8 +1352,8 @@ function RdoFullPageEditor({
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Arquivar / Desarquivar (não aplicável a itens excluídos) */}
-          {!isDeleted && onToggleArchive && (
+          {/* Arquivar / Desarquivar (não aplicável a itens excluídos nem para técnicos) */}
+          {!isDeleted && !isTechnician && onToggleArchive && (
             <Button
               variant="outline"
               onClick={onToggleArchive}
@@ -1422,7 +1426,7 @@ function RdoFullPageEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                Enviar para Técnico
+                Enviar para aprovação
               </Button>
             </>
           )}
@@ -1538,23 +1542,37 @@ function RdoFullPageEditor({
         />
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="epa-label">Cliente</label>
+            <label className="epa-label flex items-center gap-1">
+              <span>Cliente</span>
+              {isTechnician && <span title="Campo bloqueado pelo Administrador">🔒</span>}
+            </label>
             <Input
               placeholder="Ex.: VALE S.A."
               value={formData.clientName ?? ''}
               onChange={(e) => handleFieldChange('clientName', e.target.value)}
-              disabled={isLocked}
-              className="mt-1.5"
+              disabled={isLocked || isTechnician}
+              className={cn(
+                'mt-1.5',
+                isTechnician &&
+                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+              )}
             />
           </div>
           <div>
-            <label className="epa-label">Contrato</label>
+            <label className="epa-label flex items-center gap-1">
+              <span>Contrato</span>
+              {isTechnician && <span title="Campo bloqueado pelo Administrador">🔒</span>}
+            </label>
             <Input
               placeholder="Ex.: 5900117667"
               value={formData.contractCode ?? ''}
               onChange={(e) => handleFieldChange('contractCode', e.target.value)}
-              disabled={isLocked}
-              className="mt-1.5"
+              disabled={isLocked || isTechnician}
+              className={cn(
+                'mt-1.5',
+                isTechnician &&
+                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+              )}
             />
           </div>
           <div>
@@ -1568,13 +1586,20 @@ function RdoFullPageEditor({
             />
           </div>
           <div>
-            <label className="epa-label">Projeto EPA</label>
+            <label className="epa-label flex items-center gap-1">
+              <span>Projeto EPA</span>
+              {isTechnician && <span title="Campo bloqueado pelo Administrador">🔒</span>}
+            </label>
             <Input
               placeholder="Ex.: 24-0234"
               value={formData.projectName ?? ''}
               onChange={(e) => handleFieldChange('projectName', e.target.value)}
-              disabled={isLocked}
-              className="mt-1.5"
+              disabled={isLocked || isTechnician}
+              className={cn(
+                'mt-1.5',
+                isTechnician &&
+                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+              )}
             />
           </div>
           <div>
@@ -1612,13 +1637,20 @@ function RdoFullPageEditor({
             </select>
           </div>
           <div>
-            <label className="epa-label">Número do RDO</label>
+            <label className="epa-label flex items-center gap-1">
+              <span>Número do RDO</span>
+              {isTechnician && <span title="Campo bloqueado pelo Administrador">🔒</span>}
+            </label>
             <Input
               type="number"
               value={formData.number ?? ''}
               onChange={(e) => handleFieldChange('number', Number(e.target.value))}
-              disabled={isLocked}
-              className="mt-1.5 font-mono"
+              disabled={isLocked || isTechnician}
+              className={cn(
+                'mt-1.5 font-mono',
+                isTechnician &&
+                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+              )}
             />
           </div>
           <div className="sm:col-span-2">
@@ -1825,28 +1857,26 @@ function RdoFullPageEditor({
             title="3. Tabela de Poços"
             subtitle="Identificação, profundidade, data de conclusão e diâmetro dos poços trabalhados"
           />
-          {!isLocked && (
+          {!isLocked && isAdmin && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleAddWell}
-              disabled={isTechnician && availableWells.length === 0}
               className="w-full sm:w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[40px]"
             >
               <Plus className="mr-1.5 h-4 w-4" />
-              {isTechnician ? 'Vincular Poço do Projeto' : 'Adicionar Poço'}
+              Adicionar Poço
             </Button>
           )}
         </div>
 
-        {/* Mensagem de orientação para o Técnico abaixo do cabeçalho ou quando lista vazia */}
+        {/* Mensagem de orientação / banner para o Técnico */}
         {isTechnician && (
           <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
             <div className="leading-relaxed">
-              <span className="font-semibold">Controle de Poços: </span>
-              Os poços disponíveis são definidos pelo Administrador. Caso necessite lançar um poço
-              que não consta na listagem, solicite o cadastro prévio ao Administrador.
+              🔒 Poços definidos pelo Administrador. Se o poço necessário não constar na lista,
+              solicite o cadastro prévio ao Administrador.
             </div>
           </div>
         )}
@@ -1879,25 +1909,10 @@ function RdoFullPageEditor({
                   <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <td className="p-2">
                       {isTechnician ? (
-                        <select
-                          value={well.well_id ?? ''}
-                          onChange={(e) => handleWellFieldChange(index, 'well_id', e.target.value)}
-                          disabled={isLocked}
-                          className="epa-input h-9 text-xs font-semibold"
-                        >
-                          <option value="">-- Selecione o poço --</option>
-                          {well.well_id &&
-                            !availableWells.some((w) => w.identification === well.well_id) && (
-                              <option value={well.well_id} disabled>
-                                {well.well_id}
-                              </option>
-                            )}
-                          {availableWells.map((w) => (
-                            <option key={w.id} value={w.identification}>
-                              {w.identification}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
+                          <span>🔒</span>
+                          <span>{well.well_id || 'Não especificado'}</span>
+                        </div>
                       ) : (
                         <Input
                           value={well.well_id ?? ''}
@@ -1905,7 +1920,7 @@ function RdoFullPageEditor({
                           disabled={isLocked}
                           placeholder="PZ-01"
                           className="h-9 text-xs font-semibold"
-                        ></Input>
+                        />
                       )}
                     </td>
                     <td className="p-2">
@@ -1962,8 +1977,8 @@ function RdoFullPageEditor({
         {/* Aviso abaixo da tabela para o Técnico */}
         {isTechnician && (
           <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400 italic">
-            * Os poços disponíveis são definidos pelo Administrador. Caso necessite lançar um poço
-            que não consta na listagem, solicite o cadastro prévio ao Administrador.
+            * 🔒 Poços definidos pelo Administrador. Se o poço necessário não constar na lista,
+            solicite o cadastro prévio ao Administrador.
           </p>
         )}
       </section>
@@ -2135,7 +2150,7 @@ function RdoFullPageEditor({
           <p className="text-xs text-slate-500">
             {isLocked
               ? 'Este RDO já foi aprovado e está bloqueado para modificações.'
-              : 'Verifique todos os dados antes de salvar ou enviar para o Técnico.'}
+              : 'Verifique todos os dados antes de salvar ou enviar para aprovação.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -2157,7 +2172,7 @@ function RdoFullPageEditor({
                 disabled={isSaving || !formData.activityTitle.trim()}
                 className="min-h-[44px] bg-emerald-700 hover:bg-emerald-800 text-white flex-1 sm:flex-none"
               >
-                Salvar e Enviar RDO
+                Enviar para aprovação
               </Button>
             </>
           )}
