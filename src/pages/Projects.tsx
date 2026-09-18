@@ -420,12 +420,21 @@ export function Projects({
     setIsDeleting(true)
     try {
       if (navigator.onLine && pb.authStore.isValid) {
-        await pb.collection('projects').update(p.id, {
-          deleted: true,
-          deleted_reason: trimmedReason,
-          deleted_by: user?.id || null,
-          deleted_at: nowIso,
-        })
+        try {
+          await pb.collection('projects').update(p.id, {
+            deleted: true,
+            deleted_reason: trimmedReason,
+            deleted_by: user?.id || null,
+            deleted_at: nowIso,
+          })
+        } catch (pbErr: any) {
+          console.error('Backend soft delete project error:', pbErr)
+          const reason =
+            pbErr?.data?.message ||
+            pbErr?.message ||
+            'Erro de permissão ou falha de comunicação com o servidor ao excluir o projeto.'
+          throw new Error(reason)
+        }
       }
       // Limpeza offline (IndexedDB) de RDOs e Planilhas associados ao projeto para não manter órfãos locais
       try {
@@ -459,10 +468,13 @@ export function Projects({
     } catch (err: any) {
       console.error('Delete project error:', err)
       toast({
-        title: 'Erro ao excluir projeto',
-        description: err.message || 'Verifique se há relatórios vinculados ou permissões.',
+        title: 'Não foi possível excluir o projeto',
+        description:
+          err.message ||
+          'Falha ao registrar a exclusão. O modal permanece aberto para nova tentativa.',
         variant: 'destructive',
       })
+      // Mantém o modal aberto e não limpa deleteReason para o Admin tentar novamente
     } finally {
       setIsDeleting(false)
     }
@@ -762,7 +774,7 @@ export function Projects({
           </Button>
           <Button
             size="sm"
-            disabled={isDeleting || !deleteReason.trim()}
+            disabled={isDeleting}
             onClick={confirmDeleteProject}
             className="bg-red-600 hover:bg-red-700 text-white min-w-[130px] disabled:opacity-50"
           >

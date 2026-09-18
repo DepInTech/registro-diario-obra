@@ -286,10 +286,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         lastModified: Date.now(),
       }
 
-      // Save soft delete locally
-      await offlineStorage.saveFieldSheet(updatedItem)
-
-      // Sync to PocketBase backend if online
+      // Sync to PocketBase backend first if online to validate permissions and real server persistence
       if (navigator.onLine && pb.authStore.isValid) {
         try {
           await pb.collection('field_spreadsheets').update(sheetToDelete.id, {
@@ -299,11 +296,18 @@ export function FieldSpreadsheets({ query }: { query: string }) {
             deleted_at: nowIso,
           })
           updatedItem.syncStatus = 'synced'
-          await offlineStorage.saveFieldSheet(updatedItem)
         } catch (pbErr: any) {
-          console.warn('Backend soft delete error (saved locally for sync):', pbErr)
+          console.error('Backend soft delete error:', pbErr)
+          const reason =
+            pbErr?.data?.message ||
+            pbErr?.message ||
+            'Erro de permissão ou falha de comunicação com o servidor ao excluir a planilha.'
+          throw new Error(reason)
         }
       }
+
+      // Save soft delete locally
+      await offlineStorage.saveFieldSheet(updatedItem)
 
       setItems((prev) => prev.map((item) => (item.id === sheetToDelete.id ? updatedItem : item)))
       if (editing?.id === sheetToDelete.id) {
@@ -319,10 +323,13 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     } catch (err: any) {
       console.error('Delete sheet error:', err)
       toast({
-        title: 'Erro ao excluir planilha',
-        description: err.message || 'Ocorreu um erro ao excluir a planilha.',
+        title: 'Não foi possível excluir a planilha',
+        description:
+          err.message ||
+          'Falha ao registrar a exclusão. O modal permanece aberto para nova tentativa.',
         variant: 'destructive',
       })
+      // Mantém o modal aberto e não limpa deleteReason para o Admin tentar novamente
     } finally {
       setIsDeleting(false)
     }
@@ -823,7 +830,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
               </Button>
               <Button
                 size="sm"
-                disabled={isDeleting || !deleteReason.trim()}
+                disabled={isDeleting}
                 onClick={confirmDeleteSheet}
                 className="bg-red-600 hover:bg-red-700 text-white min-w-[130px] disabled:opacity-50"
               >
@@ -1023,10 +1030,20 @@ function FieldFullEditor({
     }
 
     setIsSaving(true)
-    const statusToSave = targetStatus || formData.status
+    // Se o Admin estiver despachando (targetStatus === 'submitted'), o status gravado deve ser 'returned'
+    // para que a planilha fique editável para o Técnico preencher os campos operacionais (sem violar
+    // a regra onde o Técnico não pode editar planilhas com status 'submitted' ou 'approved').
+    // Para o Técnico, o statusToSave continua sendo 'submitted'.
+    const effectiveStatus: Status =
+      targetStatus === 'submitted'
+        ? isAdmin
+          ? 'returned'
+          : 'submitted'
+        : targetStatus || formData.status
+
     const updatedItem: OfflineFieldSheetItem = {
       ...formData,
-      status: statusToSave,
+      status: effectiveStatus,
       syncStatus: isOnline ? 'pending_update' : isNew ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1043,11 +1060,15 @@ function FieldFullEditor({
       toast({
         title:
           targetStatus === 'submitted'
-            ? 'Planilha enviada para aprovação'
+            ? isAdmin
+              ? 'Planilha enviada para o Técnico'
+              : 'Planilha enviada para aprovação'
             : 'Planilha salva com sucesso',
         description:
           targetStatus === 'submitted'
-            ? 'A planilha foi enviada para validação e aprovação do Administrador.'
+            ? isAdmin
+              ? 'Planilha despachada para preenchimento do Técnico.'
+              : 'A planilha foi enviada para validação e aprovação do Administrador.'
             : isOnline
               ? 'Dados sincronizados com o servidor.'
               : 'Salvo localmente no dispositivo (IndexedDB).',
@@ -1288,7 +1309,7 @@ function FieldFullEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                Enviar para aprovação
+                {isAdmin ? 'Enviar para o técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}
@@ -2172,7 +2193,7 @@ function FieldFullEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 flex-1 sm:flex-none text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                Enviar para aprovação
+                {isAdmin ? 'Enviar para o técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}

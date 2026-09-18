@@ -413,10 +413,7 @@ export function RdosPage({ query }: { query: string }) {
         lastModified: Date.now(),
       }
 
-      // Save soft-deleted in local IndexedDB
-      await offlineStorage.saveRdo(updatedItem)
-
-      // Sync to PocketBase backend if online
+      // Sync to PocketBase backend first if online to validate permissions and real server persistence
       if (navigator.onLine && pb.authStore.isValid) {
         try {
           await pb.collection('reports_rdo').update(rdoToDelete.id, {
@@ -426,11 +423,18 @@ export function RdosPage({ query }: { query: string }) {
             deleted_at: nowIso,
           })
           updatedItem.syncStatus = 'synced'
-          await offlineStorage.saveRdo(updatedItem)
         } catch (pbErr: any) {
-          console.warn('Backend soft delete error (saved locally for sync):', pbErr)
+          console.error('Backend soft delete error:', pbErr)
+          const reason =
+            pbErr?.data?.message ||
+            pbErr?.message ||
+            'Erro de permissão ou falha de comunicação com o servidor ao excluir o RDO.'
+          throw new Error(reason)
         }
       }
+
+      // Save soft-deleted in local IndexedDB
+      await offlineStorage.saveRdo(updatedItem)
 
       setItems((prev) => prev.map((item) => (item.id === rdoToDelete.id ? updatedItem : item)))
       if (editing?.id === rdoToDelete.id) {
@@ -446,10 +450,13 @@ export function RdosPage({ query }: { query: string }) {
     } catch (err: any) {
       console.error('Delete RDO error:', err)
       toast({
-        title: 'Erro ao excluir RDO',
-        description: err.message || 'Ocorreu um erro ao excluir o relatório.',
+        title: 'Não foi possível excluir o RDO',
+        description:
+          err.message ||
+          'Falha ao registrar a exclusão. O modal permanece aberto para nova tentativa.',
         variant: 'destructive',
       })
+      // Mantém o modal aberto e não limpa deleteReason para o Admin tentar novamente
     } finally {
       setIsDeleting(false)
     }
@@ -875,7 +882,7 @@ export function RdosPage({ query }: { query: string }) {
               </Button>
               <Button
                 size="sm"
-                disabled={isDeleting || !deleteReason.trim()}
+                disabled={isDeleting}
                 onClick={confirmDeleteRdo}
                 className="bg-red-600 hover:bg-red-700 text-white min-w-[130px] disabled:opacity-50"
               >
@@ -1187,10 +1194,20 @@ function RdoFullPageEditor({
     }
 
     setIsSaving(true)
-    const statusToSave = targetStatus || formData.status
+    // Se o Admin estiver despachando (targetStatus === 'submitted'), o status gravado deve ser 'returned'
+    // para que o documento fique editável para o Técnico preencher os campos operacionais (sem violar
+    // a regra de bloqueio estrito onde o Técnico não pode editar RDOs com status 'submitted' ou 'approved').
+    // Para o Técnico, o statusToSave continua sendo 'submitted'.
+    const effectiveStatus: Status =
+      targetStatus === 'submitted'
+        ? isAdmin
+          ? 'returned'
+          : 'submitted'
+        : targetStatus || formData.status
+
     const updatedItem: OfflineRdoItem = {
       ...formData,
-      status: statusToSave,
+      status: effectiveStatus,
       syncStatus: isNew || isProvisionalId(formData.id) ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1206,7 +1223,11 @@ function RdoFullPageEditor({
 
       toast({
         title:
-          targetStatus === 'submitted' ? 'RDO enviado para aprovação' : 'RDO salvo com sucesso',
+          targetStatus === 'submitted'
+            ? isAdmin
+              ? 'RDO enviado para o Técnico'
+              : 'RDO enviado para aprovação'
+            : 'RDO salvo com sucesso',
         description: isOnline
           ? 'Dados sincronizados com o servidor.'
           : 'Salvo localmente no dispositivo (IndexedDB). Sincronizará quando voltar a internet.',
@@ -1452,7 +1473,7 @@ function RdoFullPageEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                Enviar para aprovação
+                {isAdmin ? 'Enviar para o técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}
@@ -2191,7 +2212,7 @@ function RdoFullPageEditor({
                 disabled={isSaving || !formData.activityTitle.trim()}
                 className="min-h-[44px] bg-emerald-700 hover:bg-emerald-800 text-white flex-1 sm:flex-none"
               >
-                Enviar para aprovação
+                {isAdmin ? 'Enviar para o técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}
