@@ -469,6 +469,15 @@ export function Projects({
   }
 
   const handleToggleArchiveProject = async (p: ProjectItem) => {
+    if (user?.role !== 'admin') {
+      toast({
+        title: 'Ação não autorizada',
+        description: 'Apenas administradores podem arquivar projetos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const nextArchived = !p.archived
     setActionLoadingId(p.id)
     try {
@@ -831,18 +840,20 @@ export function Projects({
           <Building2 className="h-4 w-4" />
           Projetos Ativos ({activeCount})
         </button>
-        <button
-          onClick={() => setTabFilter('archived')}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
-            tabFilter === 'archived'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
-          )}
-        >
-          <Archive className="h-4 w-4" />
-          Arquivados ({archivedCount})
-        </button>
+        {user?.role !== 'technician' && (
+          <button
+            onClick={() => setTabFilter('archived')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+              tabFilter === 'archived'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+            )}
+          >
+            <Archive className="h-4 w-4" />
+            Arquivados ({archivedCount})
+          </button>
+        )}
         {isAdmin && (
           <button
             onClick={() => setTabFilter('deleted')}
@@ -1649,19 +1660,21 @@ function ProjectDetail({
               </p>
             </div>
           </div>
-          <Button
-            size="sm"
-            onClick={onToggleArchive}
-            disabled={actionLoading}
-            className="bg-amber-700 hover:bg-amber-800 text-white text-xs"
-          >
-            {actionLoading ? (
-              <Loader2 className="h-3 w-3 animate-spin mr-1" />
-            ) : (
-              <ArchiveRestore className="h-3.5 w-3.5 mr-1" />
-            )}
-            Desarquivar
-          </Button>
+          {isAdmin && (
+            <Button
+              size="sm"
+              onClick={onToggleArchive}
+              disabled={actionLoading}
+              className="bg-amber-700 hover:bg-amber-800 text-white text-xs"
+            >
+              {actionLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <ArchiveRestore className="h-3.5 w-3.5 mr-1" />
+              )}
+              Desarquivar
+            </Button>
+          )}
         </div>
       )}
 

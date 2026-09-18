@@ -235,7 +235,7 @@ onRecordUpdateRequest((e) => {
 
   // Técnico NÃO pode arquivar ou desarquivar projetos
   if (prevArchived !== nextArchived) {
-    throw new ForbiddenError('Apenas o Administrador pode arquivar ou desarquivar projetos')
+    throw new ForbiddenError('Apenas administradores podem arquivar ou desarquivar projetos.')
   }
 
   e.next()
