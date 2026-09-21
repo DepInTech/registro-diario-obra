@@ -26,6 +26,10 @@ export interface OfflineRdoItem {
   accidents?: string
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   reviewNotes?: string
+  returned_fields?: string[]
+  returnedByName?: string
+  returnedAt?: string
+  change_history?: any[] // Lista de ReturnCycle
   archived?: boolean
   deleted?: boolean
   deletedReason?: string
@@ -103,6 +107,7 @@ export interface OfflineFieldSheetItem {
   returned_fields?: string[]
   returnedByName?: string
   returnedAt?: string
+  change_history?: any[] // Lista de ReturnCycle
   archived?: boolean
   deleted?: boolean
   deletedReason?: string

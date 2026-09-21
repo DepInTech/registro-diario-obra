@@ -173,6 +173,32 @@ export interface ReturnedFieldItem {
   note?: string
 }
 
+export interface ChangeDetail {
+  field: string
+  label: string
+  previousValue: string
+  newValue: string
+  changedAt: string
+  changedBy?: string
+  changedByName?: string
+}
+
+export interface ReturnCycle {
+  id: string
+  returnReason: string
+  returnedBy?: string
+  returnedByName?: string
+  returnedAt: string
+  requestedFields: string[] // IDs dos campos apontados pelo Admin
+  requestedFieldsLabels?: string[] // Nomes legíveis dos campos apontados
+  snapshot: Record<string, any> // Cópia dos campos no momento da devolução
+  changes: ChangeDetail[] // Todas as alterações realizadas pelo técnico após a devolução
+  correctedBy?: string
+  correctedByName?: string
+  correctedAt?: string
+  submittedAt?: string
+}
+
 export interface ChangeHistoryItem {
   field: string
   label?: string

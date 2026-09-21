@@ -400,6 +400,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               accidents: rdo.accidents || '',
               status: rdo.status || 'draft',
               review_notes: rdo.reviewNotes || '',
+              returned_fields: rdo.returned_fields || [],
+              change_history: rdo.change_history || [],
               archived: Boolean(rdo.archived),
               deleted: Boolean(rdo.deleted),
               deleted_reason: rdo.deletedReason || '',
@@ -584,6 +586,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               accidents: rdo.accidents || '',
               status: rdo.status,
               review_notes: rdo.reviewNotes || '',
+              returned_fields: rdo.returned_fields || [],
+              change_history: rdo.change_history || [],
               archived: Boolean(rdo.archived),
               deleted: Boolean(rdo.deleted),
               deleted_reason: rdo.deletedReason || '',
@@ -726,6 +730,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               observations: sheet.observations || '',
               status: sheet.status || 'draft',
               review_notes: sheet.reviewNotes || '',
+              returned_fields: sheet.returned_fields || [],
+              change_history: sheet.change_history || [],
               archived: Boolean(sheet.archived),
               deleted: Boolean(sheet.deleted),
               deleted_reason: sheet.deletedReason || '',
@@ -845,6 +851,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               observations: sheet.observations || '',
               status: sheet.status,
               review_notes: sheet.reviewNotes || '',
+              returned_fields: sheet.returned_fields || [],
+              change_history: sheet.change_history || [],
               archived: Boolean(sheet.archived),
               deleted: Boolean(sheet.deleted),
               deleted_reason: sheet.deletedReason || '',
@@ -965,6 +973,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         rdo.status = (s.status as 'draft' | 'submitted' | 'approved' | 'returned') || 'draft'
         rdo.activityTitle = String(s.activity_title || '')
         rdo.activityDescription = String(s.activity_description || '')
+        rdo.returned_fields = (s.returned_fields as string[]) || rdo.returned_fields
+        rdo.change_history = (s.change_history as any[]) || rdo.change_history
         rdo.syncStatus = 'synced'
         rdo.serverUpdatedAt = String(s.updated || '')
         await offlineStorage.saveRdo(rdo)
@@ -981,6 +991,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       } else {
         const s = conflict.serverData
         sheet.status = (s.status as 'draft' | 'submitted' | 'approved' | 'returned') || 'draft'
+        sheet.returned_fields = (s.returned_fields as string[]) || sheet.returned_fields
+        sheet.change_history = (s.change_history as any[]) || sheet.change_history
         sheet.syncStatus = 'synced'
         sheet.serverUpdatedAt = String(s.updated || '')
         await offlineStorage.saveFieldSheet(sheet)

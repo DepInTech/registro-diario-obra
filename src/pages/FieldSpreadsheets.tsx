@@ -49,6 +49,13 @@ import { authHeaders, exportUrl, updateFieldStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
 import { fieldSheets as mockFieldSheets, type Status } from '@/data/epa'
+import {
+  FIELD_SHEET_RETURN_OPTIONS,
+  createFieldSheetSnapshot,
+  diffFieldSheet,
+  appendOrUpdateReturnCycle,
+} from '@/services/historyDiffService'
+import { CorrectionHistorySection } from '@/components/CorrectionHistorySection'
 
 export function FieldSpreadsheets({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineFieldSheetItem | null>(null)
@@ -131,6 +138,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 returned_fields: (rec as any).returned_fields || undefined,
                 returnedByName: (rec as any).returned_by_name || undefined,
                 returnedAt: (rec as any).returned_at || undefined,
+                change_history: (rec as any).change_history || undefined,
                 syncStatus: 'synced',
                 lastModified: new Date(rec.updated).getTime(),
                 serverUpdatedAt: rec.updated,
@@ -1048,9 +1056,35 @@ function FieldFullEditor({
           : 'submitted'
         : targetStatus || formData.status
 
+    // Rastreamento de alterações pós-devolução pelo Técnico
+    let updatedHistory = formData.change_history ? [...formData.change_history] : []
+    const nowIso = new Date().toISOString()
+
+    if (updatedHistory.length > 0) {
+      const lastIndex = updatedHistory.length - 1
+      const activeCycle = updatedHistory[lastIndex]
+      if (activeCycle?.snapshot) {
+        const changes = diffFieldSheet(
+          activeCycle.snapshot,
+          formData,
+          user?.id,
+          user?.name || 'Técnico',
+        )
+        updatedHistory[lastIndex] = {
+          ...activeCycle,
+          changes,
+          correctedBy: user?.id,
+          correctedByName: user?.name || 'Técnico',
+          correctedAt: nowIso,
+          submittedAt: targetStatus === 'submitted' ? nowIso : activeCycle.submittedAt,
+        }
+      }
+    }
+
     const updatedItem: OfflineFieldSheetItem = {
       ...formData,
       status: effectiveStatus,
+      change_history: updatedHistory,
       syncStatus: isOnline ? 'pending_update' : isNew ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1119,6 +1153,28 @@ function FieldFullEditor({
     setIsSaving(true)
     try {
       const nowIso = new Date().toISOString()
+      let updatedHistory = formData.change_history ? [...formData.change_history] : []
+
+      if (nextStatus === 'returned') {
+        const snapshot = createFieldSheetSnapshot(formData)
+        const requestedLabels = reviewReturnedFields.map((fId) => {
+          const opt = FIELD_SHEET_RETURN_OPTIONS.find((o) => o.id === fId)
+          return opt ? opt.label : fId
+        })
+        const newCycle = {
+          id: 'cycle_' + Date.now(),
+          returnReason: reviewNotes || 'Ajustes solicitados.',
+          returnedBy: user?.id,
+          returnedByName: user?.name || 'Administrador',
+          returnedAt: nowIso,
+          requestedFields: reviewReturnedFields,
+          requestedFieldsLabels: requestedLabels,
+          snapshot,
+          changes: [],
+        }
+        updatedHistory.push(newCycle)
+      }
+
       const updatedItem: OfflineFieldSheetItem = {
         ...formData,
         status: nextStatus,
@@ -1126,6 +1182,7 @@ function FieldFullEditor({
         returned_fields: nextStatus === 'returned' ? reviewReturnedFields : [],
         returnedByName: nextStatus === 'returned' ? user?.name : undefined,
         returnedAt: nextStatus === 'returned' ? nowIso : undefined,
+        change_history: updatedHistory,
         syncStatus: 'pending_update',
         lastModified: Date.now(),
       }
@@ -1142,6 +1199,7 @@ function FieldFullEditor({
             nextStatus,
             reviewNotes,
             nextStatus === 'returned' ? reviewReturnedFields : [],
+            updatedHistory,
           )
         } catch {
           // ignore if mock
@@ -1460,6 +1518,14 @@ function FieldFullEditor({
           </div>
         </div>
       )}
+
+      {/* Histórico das Alterações após Devolução (Seção visível com detalhes para Admin e Técnico) */}
+      <CorrectionHistorySection
+        changeHistory={formData.change_history}
+        currentStatus={formData.status}
+        isAdmin={isAdmin}
+      />
+
       {/* CABEÇALHO OFICIAL */}
       <section className="epa-card p-6 border-t-4 border-t-emerald-700">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 dark:border-slate-800">

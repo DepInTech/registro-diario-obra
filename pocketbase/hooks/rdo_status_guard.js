@@ -48,6 +48,19 @@ onRecordUpdateRequest((e) => {
     )
   }
 
+  // 4. Integridade do Histórico de Alterações: Técnico nunca pode apagar ou diminuir histórico existente
+  try {
+    const origHist = e.record.original().get('change_history')
+    const nextHist = e.record.get('change_history')
+    if (Array.isArray(origHist) && origHist.length > 0) {
+      if (!Array.isArray(nextHist) || nextHist.length < origHist.length) {
+        throw new ForbiddenError('O histórico de alterações após devolução não pode ser removido.')
+      }
+    }
+  } catch (histErr) {
+    if (histErr instanceof ForbiddenError) throw histErr
+  }
+
   e.next()
 }, 'reports_rdo')
 
@@ -94,6 +107,19 @@ onRecordUpdateRequest((e) => {
     throw new ForbiddenError(
       'O projeto associado à planilha é controlado pelo Administrador e não pode ser alterado por técnicos',
     )
+  }
+
+  // 4. Integridade do Histórico de Alterações: Técnico nunca pode apagar ou diminuir histórico existente
+  try {
+    const origHist = e.record.original().get('change_history')
+    const nextHist = e.record.get('change_history')
+    if (Array.isArray(origHist) && origHist.length > 0) {
+      if (!Array.isArray(nextHist) || nextHist.length < origHist.length) {
+        throw new ForbiddenError('O histórico de alterações após devolução não pode ser removido.')
+      }
+    }
+  } catch (histErr) {
+    if (histErr instanceof ForbiddenError) throw histErr
   }
 
   e.next()

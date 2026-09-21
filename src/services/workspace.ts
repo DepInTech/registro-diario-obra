@@ -8,8 +8,21 @@ export function signOut() {
   pb.authStore.clear()
 }
 
-export async function updateRdoStatus(id: string, status: string, reviewNotes = '') {
-  return pb.collection('reports_rdo').update(id, { status, review_notes: reviewNotes })
+export async function updateRdoStatus(
+  id: string,
+  status: string,
+  reviewNotes = '',
+  returnedFields?: string[],
+  changeHistory?: any[],
+) {
+  const data: Record<string, any> = { status, review_notes: reviewNotes }
+  if (returnedFields !== undefined) {
+    data.returned_fields = returnedFields
+  }
+  if (changeHistory !== undefined) {
+    data.change_history = changeHistory
+  }
+  return pb.collection('reports_rdo').update(id, data)
 }
 
 export async function updateFieldStatus(
@@ -17,10 +30,14 @@ export async function updateFieldStatus(
   status: string,
   reviewNotes = '',
   returnedFields?: string[],
+  changeHistory?: any[],
 ) {
   const data: Record<string, any> = { status, review_notes: reviewNotes }
   if (returnedFields !== undefined) {
     data.returned_fields = returnedFields
+  }
+  if (changeHistory !== undefined) {
+    data.change_history = changeHistory
   }
   return pb.collection('field_spreadsheets').update(id, data)
 }
