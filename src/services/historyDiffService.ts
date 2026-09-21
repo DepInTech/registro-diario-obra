@@ -340,6 +340,7 @@ export function createRdoSnapshot(rdo: OfflineRdoItem): Record<string, any> {
   return {
     location: rdo.location || '',
     weather: rdo.weather || '',
+    reportDate: rdo.reportDate || '',
     activityTitle: rdo.activityTitle || '',
     activityDescription: rdo.activityDescription || '',
     timeDisplacement: rdo.timeDisplacement || '',
@@ -347,6 +348,8 @@ export function createRdoSnapshot(rdo: OfflineRdoItem): Record<string, any> {
     interferences: rdo.interferences || '',
     planChanges: rdo.planChanges || '',
     accidents: rdo.accidents || '',
+    fieldPhotoCaption: rdo.fieldPhoto?.caption || '',
+    hasFieldPhoto: Boolean(rdo.fieldPhoto?.dataUrl || rdo.fieldPhoto?.image),
     wells: JSON.parse(JSON.stringify(rdo.wells || [])),
     photosCount: (rdo.photos || []).length,
     photosCaptions: (rdo.photos || []).map((p) => p.caption || ''),
@@ -382,11 +385,41 @@ export function diffRdo(
   checkField('activityDescription', 'Descrição dos Serviços')
   checkField('location', 'Local da Obra')
   checkField('weather', 'Condições Climáticas')
+  checkField('reportDate', 'Data do Relatório')
   checkField('timeDisplacement', 'Horário de Deslocamento')
   checkField('timeWaiting', 'Tempo de Espera')
   checkField('interferences', 'Interferências Encontradas')
   checkField('planChanges', 'Mudanças de Plano')
   checkField('accidents', 'Acidentes / Incidentes')
+
+  // Foto de Campo / Local de Inspeção
+  const prevHasFieldPhoto = Boolean(snapshot.hasFieldPhoto)
+  const nextHasFieldPhoto = Boolean(current.fieldPhoto?.dataUrl || current.fieldPhoto?.image)
+  if (prevHasFieldPhoto !== nextHasFieldPhoto) {
+    changes.push({
+      field: 'fieldPhoto',
+      label: 'Foto do Campo / Local de Inspeção',
+      previousValue: prevHasFieldPhoto ? 'Foto anexada' : 'Não preenchido',
+      newValue: nextHasFieldPhoto ? 'Foto anexada' : 'Não preenchido',
+      changedAt: now,
+      changedBy,
+      changedByName,
+    })
+  } else if (nextHasFieldPhoto) {
+    const prevCaption = snapshot.fieldPhotoCaption || ''
+    const nextCaption = current.fieldPhoto?.caption || ''
+    if (normalizeCompare(prevCaption) !== normalizeCompare(nextCaption)) {
+      changes.push({
+        field: 'fieldPhoto.caption',
+        label: 'Legenda da Foto do Campo',
+        previousValue: formatValueDisplay(prevCaption),
+        newValue: formatValueDisplay(nextCaption),
+        changedAt: now,
+        changedBy,
+        changedByName,
+      })
+    }
+  }
 
   // Poços
   const prevWells: Array<Record<string, any>> = snapshot.wells || []

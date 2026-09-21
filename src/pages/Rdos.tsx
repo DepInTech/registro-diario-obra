@@ -1258,7 +1258,7 @@ function RdoFullPageEditor({
     const updatedItem: OfflineRdoItem = {
       ...formData,
       status: effectiveStatus,
-      change_history: updatedHistory.length > 0 ? updatedHistory : formData.change_history,
+      change_history: updatedHistory,
       syncStatus: isNew || isProvisionalId(formData.id) ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1314,34 +1314,16 @@ function RdoFullPageEditor({
 
       if (nextStatus === 'returned') {
         const snapshot = createRdoSnapshot(formData)
-        const labelsMap: Record<string, string> = {
-          clientName: 'Cliente',
-          location: 'Local / Endereço',
-          contractCode: 'Contrato',
-          projectName: 'Projeto EPA',
-          companyName: 'Empresa Executora',
-          performedByName: 'Realizado por (Operador)',
-          supervisedByName: 'Supervisionado por (Técnico)',
-          reportDate: 'Data do relatório',
-          weather: 'Clima',
-          activityTitle: 'Título da atividade',
-          activityDescription: 'Descrição detalhada das atividades',
-          wells: 'Tabela de poços',
-          photos: 'Registro fotográfico',
-          fieldPhoto: 'Foto do local / inspeção',
-          accidents: 'Acidentes / Incidentes',
-          interferences: 'Interferências / Dificuldades',
-          planChanges: 'Mudanças no plano',
-          timeWaiting: 'Tempo de espera',
-          timeDisplacement: 'Tempo de deslocamento',
-        }
-        const requestedLabels = reviewReturnedFields.map((f) => labelsMap[f] || f)
+        const requestedLabels = reviewReturnedFields.map((fId) => {
+          const opt = RDO_RETURN_OPTIONS.find((o) => o.id === fId)
+          return opt ? opt.label : fId
+        })
 
         const cycleResult = appendOrUpdateReturnCycle(updatedHistory, undefined, {
           returnedAt: nowIso,
           returnedBy: user?.id,
           returnedByName: user?.name || 'Administrador',
-          returnReason: reviewNotes,
+          returnReason: reviewNotes || 'Ajustes solicitados.',
           requestedFields: reviewReturnedFields,
           requestedFieldsLabels: requestedLabels,
           snapshot,
@@ -1702,7 +1684,7 @@ function RdoFullPageEditor({
         </div>
       )}
 
-      {/* Histórico completo de correções pós-devolução */}
+      {/* Histórico completo de correções pós-devolução (visível para Admin e Técnico quando houver histórico) */}
       {formData.change_history && formData.change_history.length > 0 && (
         <CorrectionHistorySection
           cycles={formData.change_history}
@@ -1710,7 +1692,6 @@ function RdoFullPageEditor({
           documentType="rdo"
         />
       )}
-
       {/* 1. CABEÇALHO DO RELATÓRIO */}
       <section className="epa-card p-6">
         <SectionHeader
@@ -1748,13 +1729,27 @@ function RdoFullPageEditor({
             />
           </div>
           <div>
-            <label className="epa-label">Local</label>
+            <div className="flex items-center justify-between">
+              <label className="epa-label">Local</label>
+              {isReturnedField('location') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
+            </div>
             <Input
               placeholder="Ex.: Açailândia - MA"
               value={formData.location ?? ''}
-              onChange={(e) => handleFieldChange('location', e.target.value)}
+              onChange={(e) => {
+                handleFieldChange('location', e.target.value)
+                clearReturnedField('location')
+              }}
               disabled={isLocked}
-              className="mt-1.5"
+              className={cn(
+                'mt-1.5',
+                isReturnedField('location') &&
+                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+              )}
             />
           </div>
           <div>
@@ -1786,22 +1781,50 @@ function RdoFullPageEditor({
             />
           </div>
           <div>
-            <label className="epa-label">Data do Relatório</label>
+            <div className="flex items-center justify-between">
+              <label className="epa-label">Data do Relatório</label>
+              {isReturnedField('reportDate') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
+            </div>
             <Input
               type="date"
               value={formData.reportDate ?? ''}
-              onChange={(e) => handleFieldChange('reportDate', e.target.value)}
+              onChange={(e) => {
+                handleFieldChange('reportDate', e.target.value)
+                clearReturnedField('reportDate')
+              }}
               disabled={isLocked}
-              className="mt-1.5"
+              className={cn(
+                'mt-1.5',
+                isReturnedField('reportDate') &&
+                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+              )}
             />
           </div>
           <div>
-            <label className="epa-label">Clima</label>
+            <div className="flex items-center justify-between">
+              <label className="epa-label">Clima</label>
+              {isReturnedField('weather') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
+            </div>
             <select
               value={formData.weather ?? 'Sol'}
-              onChange={(e) => handleFieldChange('weather', e.target.value)}
+              onChange={(e) => {
+                handleFieldChange('weather', e.target.value)
+                clearReturnedField('weather')
+              }}
               disabled={isLocked}
-              className="epa-input"
+              className={cn(
+                'epa-input',
+                isReturnedField('weather') &&
+                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+              )}
             >
               <option value="Sol">Sol</option>
               <option value="Nublado">Nublado</option>
@@ -1929,7 +1952,13 @@ function RdoFullPageEditor({
               </div>
 
               {/* FOTO DO CAMPO / LOCAL DA INSPEÇÃO (CENTRALIZADA COM LEGENDA ACIMA) */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+              <div
+                className={cn(
+                  'rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40 transition',
+                  isReturnedField('fieldPhoto') &&
+                    'border-amber-400 ring-2 ring-amber-300 dark:ring-amber-700 bg-amber-50/30 dark:bg-amber-950/20',
+                )}
+              >
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 pb-3 dark:border-slate-800">
                   <div>
                     <div className="flex items-center gap-2">
@@ -1937,6 +1966,11 @@ function RdoFullPageEditor({
                       <span className="text-xs font-bold uppercase tracking-wide text-slate-800 dark:text-slate-200">
                         Foto do Campo / Local da Inspeção (Modelo Oficial)
                       </span>
+                      {isReturnedField('fieldPhoto') && (
+                        <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                          🟨 CORREÇÃO SOLICITADA
+                        </span>
+                      )}
                     </div>
                     <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                       Exibida sob a descrição da atividade com legenda centralizada no topo da
@@ -2242,13 +2276,25 @@ function RdoFullPageEditor({
       </section>
 
       {/* 4. REGISTRO FOTOGRÁFICO */}
-      <section className="epa-card p-6">
+      <section
+        className={cn(
+          'epa-card p-6 transition',
+          isReturnedField('photos') && 'border-amber-400 ring-2 ring-amber-300 dark:ring-amber-700',
+        )}
+      >
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <SectionHeader
-            icon={Camera}
-            title="4. Registro Fotográfico"
-            subtitle="Fotos de campo com legendas (aparecem fielmente distribuídas no PDF do RDO)"
-          />
+          <div className="flex items-center gap-2">
+            <SectionHeader
+              icon={Camera}
+              title="4. Registro Fotográfico"
+              subtitle="Fotos de campo com legendas (aparecem fielmente distribuídas no PDF do RDO)"
+            />
+            {isReturnedField('photos') && (
+              <span className="rounded bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950 uppercase shadow-sm">
+                🟨 CORREÇÃO SOLICITADA
+              </span>
+            )}
+          </div>
           {!isLocked && (
             <div className="flex flex-wrap items-center gap-2">
               <input
@@ -2381,53 +2427,123 @@ function RdoFullPageEditor({
         />
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="epa-label">Acidentes / Incidentes</label>
+            <div className="flex items-center justify-between">
+              <label className="epa-label">Acidentes / Incidentes</label>
+              {isReturnedField('accidents') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
+            </div>
             <Input
               placeholder="Ex.: Não houve"
               value={formData.accidents ?? ''}
-              onChange={(e) => handleFieldChange('accidents', e.target.value)}
+              onChange={(e) => {
+                handleFieldChange('accidents', e.target.value)
+                clearReturnedField('accidents')
+              }}
               disabled={isLocked}
-              className="mt-1.5"
+              className={cn(
+                'mt-1.5',
+                isReturnedField('accidents') &&
+                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+              )}
             />
           </div>
           <div>
-            <label className="epa-label">Interferências / Dificuldades</label>
+            <div className="flex items-center justify-between">
+              <label className="epa-label">Interferências / Dificuldades</label>
+              {isReturnedField('interferences') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
+            </div>
             <Input
               placeholder="Ex.: Não houve"
               value={formData.interferences ?? ''}
-              onChange={(e) => handleFieldChange('interferences', e.target.value)}
+              onChange={(e) => {
+                handleFieldChange('interferences', e.target.value)
+                clearReturnedField('interferences')
+              }}
               disabled={isLocked}
-              className="mt-1.5"
+              className={cn(
+                'mt-1.5',
+                isReturnedField('interferences') &&
+                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+              )}
             />
           </div>
           <div>
-            <label className="epa-label">Mudanças no Plano de Trabalho</label>
+            <div className="flex items-center justify-between">
+              <label className="epa-label">Mudanças no Plano de Trabalho</label>
+              {isReturnedField('planChanges') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
+            </div>
             <Input
               placeholder="Ex.: Não houve"
               value={formData.planChanges ?? ''}
-              onChange={(e) => handleFieldChange('planChanges', e.target.value)}
+              onChange={(e) => {
+                handleFieldChange('planChanges', e.target.value)
+                clearReturnedField('planChanges')
+              }}
               disabled={isLocked}
-              className="mt-1.5"
+              className={cn(
+                'mt-1.5',
+                isReturnedField('planChanges') &&
+                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+              )}
             />
           </div>
           <div>
-            <label className="epa-label">Tempo de Espera</label>
+            <div className="flex items-center justify-between">
+              <label className="epa-label">Tempo de Espera</label>
+              {isReturnedField('timeWaiting') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
+            </div>
             <Input
               placeholder="Ex.: Sem ocorrências ou 00h30"
               value={formData.timeWaiting ?? ''}
-              onChange={(e) => handleFieldChange('timeWaiting', e.target.value)}
+              onChange={(e) => {
+                handleFieldChange('timeWaiting', e.target.value)
+                clearReturnedField('timeWaiting')
+              }}
               disabled={isLocked}
-              className="mt-1.5"
+              className={cn(
+                'mt-1.5',
+                isReturnedField('timeWaiting') &&
+                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+              )}
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="epa-label">Tempo de Deslocamento</label>
+            <div className="flex items-center justify-between">
+              <label className="epa-label">Tempo de Deslocamento</label>
+              {isReturnedField('timeDisplacement') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
+            </div>
             <Input
               placeholder="Ex.: 00h00 ou 01h20"
               value={formData.timeDisplacement ?? ''}
-              onChange={(e) => handleFieldChange('timeDisplacement', e.target.value)}
+              onChange={(e) => {
+                handleFieldChange('timeDisplacement', e.target.value)
+                clearReturnedField('timeDisplacement')
+              }}
               disabled={isLocked}
-              className="mt-1.5"
+              className={cn(
+                'mt-1.5',
+                isReturnedField('timeDisplacement') &&
+                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+              )}
             />
           </div>
         </div>

@@ -1198,6 +1198,7 @@ function FieldFullEditor({
             nextStatus,
             reviewNotes,
             nextStatus === 'returned' ? reviewReturnedFields : [],
+            user?.name || 'Administrador',
             updatedHistory,
           )
         } catch {
