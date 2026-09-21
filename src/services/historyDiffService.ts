@@ -494,9 +494,18 @@ export function diffRdo(
 
 export function appendOrUpdateReturnCycle(
   existingHistory: ReturnCycle[] | undefined,
-  currentCycleId: string | undefined,
-  updates: Partial<ReturnCycle>,
+  updatesOrCycleId?: string | Partial<ReturnCycle>,
+  optionalUpdates?: Partial<ReturnCycle>,
 ): { history: ReturnCycle[]; activeCycleId: string } {
+  let currentCycleId: string | undefined = undefined
+  let updates: Partial<ReturnCycle> = {}
+
+  if (typeof updatesOrCycleId === 'string') {
+    currentCycleId = updatesOrCycleId
+    updates = optionalUpdates || {}
+  } else if (updatesOrCycleId !== undefined) {
+    updates = updatesOrCycleId
+  }
   const history: ReturnCycle[] = existingHistory ? [...existingHistory] : []
   let activeIndex = currentCycleId ? history.findIndex((c) => c.id === currentCycleId) : -1
 

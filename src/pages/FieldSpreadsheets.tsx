@@ -1060,9 +1060,9 @@ function FieldFullEditor({
     let updatedHistory = formData.change_history ? [...formData.change_history] : []
     const nowIso = new Date().toISOString()
 
-    if (updatedHistory.length > 0) {
+    if (formData.status === 'returned' || updatedHistory.length > 0) {
       const lastIndex = updatedHistory.length - 1
-      const activeCycle = updatedHistory[lastIndex]
+      const activeCycle = lastIndex >= 0 ? updatedHistory[lastIndex] : null
       if (activeCycle?.snapshot) {
         const changes = diffFieldSheet(
           activeCycle.snapshot,
@@ -1161,28 +1161,27 @@ function FieldFullEditor({
           const opt = FIELD_SHEET_RETURN_OPTIONS.find((o) => o.id === fId)
           return opt ? opt.label : fId
         })
-        const newCycle = {
-          id: 'cycle_' + Date.now(),
-          returnReason: reviewNotes || 'Ajustes solicitados.',
+        const cycleResult = appendOrUpdateReturnCycle(updatedHistory, undefined, {
+          returnedAt: nowIso,
           returnedBy: user?.id,
           returnedByName: user?.name || 'Administrador',
-          returnedAt: nowIso,
+          returnReason: reviewNotes || 'Ajustes solicitados.',
           requestedFields: reviewReturnedFields,
           requestedFieldsLabels: requestedLabels,
           snapshot,
-          changes: [],
-        }
-        updatedHistory.push(newCycle)
+        })
+        updatedHistory = cycleResult.history
       }
 
       const updatedItem: OfflineFieldSheetItem = {
         ...formData,
         status: nextStatus,
         reviewNotes: nextStatus === 'returned' ? reviewNotes : '',
-        returned_fields: nextStatus === 'returned' ? reviewReturnedFields : [],
-        returnedByName: nextStatus === 'returned' ? user?.name : undefined,
-        returnedAt: nextStatus === 'returned' ? nowIso : undefined,
-        change_history: updatedHistory,
+        returned_fields:
+          nextStatus === 'returned' ? reviewReturnedFields : formData.returned_fields,
+        returnedByName: nextStatus === 'returned' ? user?.name : formData.returnedByName,
+        returnedAt: nextStatus === 'returned' ? nowIso : formData.returnedAt,
+        change_history: updatedHistory.length > 0 ? updatedHistory : formData.change_history,
         syncStatus: 'pending_update',
         lastModified: Date.now(),
       }
@@ -1520,11 +1519,13 @@ function FieldFullEditor({
       )}
 
       {/* Histórico das Alterações após Devolução (Seção visível com detalhes para Admin e Técnico) */}
-      <CorrectionHistorySection
-        changeHistory={formData.change_history}
-        currentStatus={formData.status}
-        isAdmin={isAdmin}
-      />
+      {formData.change_history && formData.change_history.length > 0 && (
+        <CorrectionHistorySection
+          cycles={formData.change_history}
+          currentStatus={formData.status}
+          documentType="field_sheet"
+        />
+      )}
 
       {/* CABEÇALHO OFICIAL */}
       <section className="epa-card p-6 border-t-4 border-t-emerald-700">
@@ -2487,13 +2488,7 @@ function FieldFullEditor({
                 Campos com necessidade de correção:
               </label>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                {[
-                  { id: 'hidrometro', label: 'Hidrômetro' },
-                  { id: 'autopump', label: 'Autopump' },
-                  { id: 'infiltracao', label: 'Infiltração' },
-                  { id: 'compressores', label: 'Compressores' },
-                  { id: 'observacoes', label: 'Observações' },
-                ].map((field) => {
+                {FIELD_SHEET_RETURN_OPTIONS.map((field) => {
                   const checked = reviewReturnedFields.includes(field.id)
                   return (
                     <label

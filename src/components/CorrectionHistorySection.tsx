@@ -14,18 +14,23 @@ import { cn } from '@/lib/utils'
 
 interface CorrectionHistorySectionProps {
   changeHistory?: ReturnCycle[]
+  cycles?: ReturnCycle[]
   currentStatus: string
-  isAdmin: boolean
+  isAdmin?: boolean
+  documentType?: 'field_sheet' | 'rdo'
 }
 
 export const CorrectionHistorySection: React.FC<CorrectionHistorySectionProps> = ({
   changeHistory,
+  cycles,
   currentStatus,
-  isAdmin,
+  isAdmin = false,
+  documentType = 'field_sheet',
 }) => {
+  const activeHistory = cycles || changeHistory
   const [expandedCycles, setExpandedCycles] = useState<Record<string, boolean>>({})
 
-  if (!changeHistory || changeHistory.length === 0) {
+  if (!activeHistory || activeHistory.length === 0) {
     return null
   }
 
@@ -37,7 +42,7 @@ export const CorrectionHistorySection: React.FC<CorrectionHistorySectionProps> =
   }
 
   // Ordena os ciclos do mais recente para o mais antigo
-  const sortedCycles = [...changeHistory].reverse()
+  const sortedCycles = [...activeHistory].reverse()
 
   return (
     <section className="epa-card p-6 border-l-4 border-l-amber-500 space-y-4">
@@ -50,7 +55,7 @@ export const CorrectionHistorySection: React.FC<CorrectionHistorySectionProps> =
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               Histórico das Alterações após Devolução
               <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                {changeHistory.length} ciclo{changeHistory.length > 1 ? 's' : ''}
+                {activeHistory.length} ciclo{activeHistory.length > 1 ? 's' : ''}
               </span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -70,7 +75,7 @@ export const CorrectionHistorySection: React.FC<CorrectionHistorySectionProps> =
 
       <div className="space-y-4">
         {sortedCycles.map((cycle, cycleIndex) => {
-          const cycleNumber = changeHistory.length - cycleIndex
+          const cycleNumber = activeHistory.length - cycleIndex
           const isLatest = cycleIndex === 0
           // Por padrão expande o ciclo mais recente
           const isExpanded =

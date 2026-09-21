@@ -13,11 +13,15 @@ export async function updateRdoStatus(
   status: string,
   reviewNotes = '',
   returnedFields?: string[],
+  returnedByName?: string,
   changeHistory?: any[],
 ) {
   const data: Record<string, any> = { status, review_notes: reviewNotes }
   if (returnedFields !== undefined) {
     data.returned_fields = returnedFields
+  }
+  if (returnedByName !== undefined) {
+    data.returned_by_name = returnedByName
   }
   if (changeHistory !== undefined) {
     data.change_history = changeHistory
@@ -30,11 +34,15 @@ export async function updateFieldStatus(
   status: string,
   reviewNotes = '',
   returnedFields?: string[],
+  returnedByName?: string,
   changeHistory?: any[],
 ) {
   const data: Record<string, any> = { status, review_notes: reviewNotes }
   if (returnedFields !== undefined) {
     data.returned_fields = returnedFields
+  }
+  if (returnedByName !== undefined) {
+    data.returned_by_name = returnedByName
   }
   if (changeHistory !== undefined) {
     data.change_history = changeHistory

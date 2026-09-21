@@ -47,6 +47,13 @@ import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
 import { rdos as mockRdos, type Status } from '@/data/epa'
 import { EPA_LOGO_BASE64 } from '@/components/epaLogoBase64'
+import { CorrectionHistorySection } from '@/components/CorrectionHistorySection'
+import {
+  RDO_RETURN_OPTIONS,
+  createRdoSnapshot,
+  diffRdo,
+  appendOrUpdateReturnCycle,
+} from '@/services/historyDiffService'
 
 function isProvisionalId(id?: string | null): boolean {
   if (!id) return false
@@ -152,6 +159,10 @@ export function RdosPage({ query }: { query: string }) {
                 accidents: rec.accidents || '',
                 status: rec.status,
                 reviewNotes: rec.review_notes || '',
+                returned_fields: (rec as any).returned_fields || undefined,
+                returnedByName: (rec as any).returned_by_name || undefined,
+                returnedAt: (rec as any).returned_at || undefined,
+                change_history: (rec as any).change_history || undefined,
                 wells: wells.map((w) => ({
                   id: w.id,
                   well_id: w.well_id,
@@ -931,6 +942,21 @@ function RdoFullPageEditor({
   const [isExporting, setIsExporting] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewNotes, setReviewNotes] = useState(initialReport.reviewNotes || '')
+  const [reviewReturnedFields, setReviewReturnedFields] = useState<string[]>(
+    initialReport.returned_fields || [],
+  )
+
+  const isReturnedField = (fieldName: string) =>
+    formData.status === 'returned' && !!formData.returned_fields?.includes(fieldName)
+
+  const clearReturnedField = (fieldName: string) => {
+    if (formData.returned_fields?.includes(fieldName)) {
+      setFormData((prev) => ({
+        ...prev,
+        returned_fields: prev.returned_fields?.filter((f) => f !== fieldName),
+      }))
+    }
+  }
   const galleryPhotosInputRef = useRef<HTMLInputElement>(null)
   const cameraPhotosInputRef = useRef<HTMLInputElement>(null)
   const galleryFieldPhotoInputRef = useRef<HTMLInputElement>(null)
@@ -1209,9 +1235,30 @@ function RdoFullPageEditor({
           : 'submitted'
         : targetStatus || formData.status
 
+    // Rastreamento de alterações pós-devolução pelo Técnico
+    let updatedHistory = formData.change_history ? [...formData.change_history] : []
+    const nowIso = new Date().toISOString()
+
+    if (formData.status === 'returned' || updatedHistory.length > 0) {
+      const lastIndex = updatedHistory.length - 1
+      const activeCycle = lastIndex >= 0 ? updatedHistory[lastIndex] : null
+      if (activeCycle?.snapshot) {
+        const changes = diffRdo(activeCycle.snapshot, formData, user?.id, user?.name || 'Técnico')
+        updatedHistory[lastIndex] = {
+          ...activeCycle,
+          changes,
+          correctedBy: user?.id,
+          correctedByName: user?.name || 'Técnico',
+          correctedAt: nowIso,
+          submittedAt: targetStatus === 'submitted' ? nowIso : activeCycle.submittedAt,
+        }
+      }
+    }
+
     const updatedItem: OfflineRdoItem = {
       ...formData,
       status: effectiveStatus,
+      change_history: updatedHistory.length > 0 ? updatedHistory : formData.change_history,
       syncStatus: isNew || isProvisionalId(formData.id) ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1262,10 +1309,56 @@ function RdoFullPageEditor({
 
     setIsSaving(true)
     try {
+      const nowIso = new Date().toISOString()
+      let updatedHistory = formData.change_history ? [...formData.change_history] : []
+
+      if (nextStatus === 'returned') {
+        const snapshot = createRdoSnapshot(formData)
+        const labelsMap: Record<string, string> = {
+          clientName: 'Cliente',
+          location: 'Local / Endereço',
+          contractCode: 'Contrato',
+          projectName: 'Projeto EPA',
+          companyName: 'Empresa Executora',
+          performedByName: 'Realizado por (Operador)',
+          supervisedByName: 'Supervisionado por (Técnico)',
+          reportDate: 'Data do relatório',
+          weather: 'Clima',
+          activityTitle: 'Título da atividade',
+          activityDescription: 'Descrição detalhada das atividades',
+          wells: 'Tabela de poços',
+          photos: 'Registro fotográfico',
+          fieldPhoto: 'Foto do local / inspeção',
+          accidents: 'Acidentes / Incidentes',
+          interferences: 'Interferências / Dificuldades',
+          planChanges: 'Mudanças no plano',
+          timeWaiting: 'Tempo de espera',
+          timeDisplacement: 'Tempo de deslocamento',
+        }
+        const requestedLabels = reviewReturnedFields.map((f) => labelsMap[f] || f)
+
+        const cycleResult = appendOrUpdateReturnCycle(updatedHistory, undefined, {
+          returnedAt: nowIso,
+          returnedBy: user?.id,
+          returnedByName: user?.name || 'Administrador',
+          returnReason: reviewNotes,
+          requestedFields: reviewReturnedFields,
+          requestedFieldsLabels: requestedLabels,
+          snapshot,
+        })
+        updatedHistory = cycleResult.history
+      }
+
       const updatedItem: OfflineRdoItem = {
         ...formData,
         status: nextStatus,
         reviewNotes: nextStatus === 'returned' ? reviewNotes : '',
+        returned_fields:
+          nextStatus === 'returned' ? reviewReturnedFields : formData.returned_fields,
+        returnedByName:
+          nextStatus === 'returned' ? user?.name || 'Administrador' : formData.returnedByName,
+        returnedAt: nextStatus === 'returned' ? nowIso : formData.returnedAt,
+        change_history: updatedHistory.length > 0 ? updatedHistory : formData.change_history,
         syncStatus: 'pending_update',
         lastModified: Date.now(),
       }
@@ -1277,7 +1370,14 @@ function RdoFullPageEditor({
 
       if (isOnline) {
         try {
-          await updateRdoStatus(formData.id, nextStatus, reviewNotes)
+          await updateRdoStatus(
+            formData.id,
+            nextStatus,
+            reviewNotes,
+            nextStatus === 'returned' ? reviewReturnedFields : undefined,
+            user?.name || 'Administrador',
+            nextStatus === 'returned' ? updatedHistory : undefined,
+          )
         } catch {
           // ignore if offline / mock
         }
@@ -1579,9 +1679,36 @@ function RdoFullPageEditor({
               <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
                 {formData.reviewNotes}
               </p>
+              {formData.returned_fields && formData.returned_fields.length > 0 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
+                  <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-200">
+                    Campos apontados:
+                  </span>
+                  {formData.returned_fields.map((f) => {
+                    const opt = RDO_RETURN_OPTIONS.find((o) => o.id === f)
+                    return (
+                      <span
+                        key={f}
+                        className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-900/60 dark:text-amber-200"
+                      >
+                        {opt?.label || f}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Histórico completo de correções pós-devolução */}
+      {formData.change_history && formData.change_history.length > 0 && (
+        <CorrectionHistorySection
+          cycles={formData.change_history}
+          currentStatus={formData.status}
+          documentType="rdo"
+        />
       )}
 
       {/* 1. CABEÇALHO DO RELATÓRIO */}
@@ -1730,38 +1857,74 @@ function RdoFullPageEditor({
 
         <div className="mt-6 space-y-6">
           {/* FAIXA: ATIVIDADE */}
-          <div className="overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700 shadow-sm">
-            <div className="bg-slate-100 dark:bg-slate-800/90 px-4 py-2 text-center border-b border-slate-300 dark:border-slate-700">
+          <div
+            className={cn(
+              'overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700 shadow-sm transition',
+              isReturnedField('activityTitle') &&
+                'border-amber-400 ring-2 ring-amber-300 dark:ring-amber-700',
+            )}
+          >
+            <div className="bg-slate-100 dark:bg-slate-800/90 px-4 py-2 text-center border-b border-slate-300 dark:border-slate-700 flex items-center justify-center gap-2">
               <h3 className="text-xs font-bold tracking-wider text-slate-800 dark:text-slate-100 uppercase">
                 ATIVIDADE
               </h3>
+              {isReturnedField('activityTitle') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
             </div>
             <div className="p-4 bg-white dark:bg-slate-900">
               <Input
                 placeholder="Ex.: Tamponamento de poços de monitoramento ou Operação de Extração"
                 value={formData.activityTitle ?? ''}
-                onChange={(e) => handleFieldChange('activityTitle', e.target.value)}
+                onChange={(e) => {
+                  handleFieldChange('activityTitle', e.target.value)
+                  clearReturnedField('activityTitle')
+                }}
                 disabled={isLocked}
-                className="font-medium text-sm border-slate-300 dark:border-slate-700"
+                className={cn(
+                  'font-medium text-sm border-slate-300 dark:border-slate-700',
+                  isReturnedField('activityTitle') &&
+                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30',
+                )}
               />
             </div>
           </div>
 
           {/* FAIXA: DESCRIÇÃO DA ATIVIDADE */}
-          <div className="overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700 shadow-sm">
-            <div className="bg-slate-100 dark:bg-slate-800/90 px-4 py-2 text-center border-b border-slate-300 dark:border-slate-700">
+          <div
+            className={cn(
+              'overflow-hidden rounded-lg border border-slate-300 dark:border-slate-700 shadow-sm transition',
+              isReturnedField('activityDescription') &&
+                'border-amber-400 ring-2 ring-amber-300 dark:ring-amber-700',
+            )}
+          >
+            <div className="bg-slate-100 dark:bg-slate-800/90 px-4 py-2 text-center border-b border-slate-300 dark:border-slate-700 flex items-center justify-center gap-2">
               <h3 className="text-xs font-bold tracking-wider text-slate-800 dark:text-slate-100 uppercase">
                 DESCRIÇÃO DA ATIVIDADE
               </h3>
+              {isReturnedField('activityDescription') && (
+                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
+                  🟨 CORREÇÃO SOLICITADA
+                </span>
+              )}
             </div>
             <div className="p-4 bg-white dark:bg-slate-900 space-y-6">
               <div>
                 <Textarea
                   placeholder="Descreva minuciosamente os serviços executados, procedimentos e informações de campo..."
                   value={formData.activityDescription ?? ''}
-                  onChange={(e) => handleFieldChange('activityDescription', e.target.value)}
+                  onChange={(e) => {
+                    handleFieldChange('activityDescription', e.target.value)
+                    clearReturnedField('activityDescription')
+                  }}
                   disabled={isLocked}
-                  className="epa-textarea min-h-[120px] text-xs sm:text-sm"
+                  className={cn(
+                    'epa-textarea min-h-[120px] text-xs sm:text-sm',
+                    isReturnedField('activityDescription') &&
+                      'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30',
+                  )}
                 />
               </div>
 
@@ -1940,11 +2103,18 @@ function RdoFullPageEditor({
       {/* 3. TABELA DE POÇOS */}
       <section className="epa-card p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <SectionHeader
-            icon={Layers}
-            title="3. Tabela de Poços"
-            subtitle="Identificação, profundidade, data de conclusão e diâmetro dos poços trabalhados"
-          />
+          <div className="flex items-center gap-2">
+            <SectionHeader
+              icon={Layers}
+              title="3. Tabela de Poços"
+              subtitle="Identificação, profundidade, data de conclusão e diâmetro dos poços trabalhados"
+            />
+            {isReturnedField('wells') && (
+              <span className="rounded bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950 uppercase shadow-sm">
+                🟨 CORREÇÃO SOLICITADA
+              </span>
+            )}
+          </div>
           {!isLocked && isAdmin && (
             <Button
               variant="outline"
@@ -2301,27 +2471,71 @@ function RdoFullPageEditor({
         </div>
       </div>
 
-      {/* Devolução modal */}
+      {/* Devolução modal com seleção de campos e justificativa */}
       {reviewOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto">
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-base">Devolver RDO para Correção</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  Descreva as correções necessárias que o técnico/operador deve realizar.
+                  Selecione os campos que necessitam de ajuste e descreva as correções para o
+                  técnico.
                 </p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setReviewOpen(false)}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <Textarea
-              value={reviewNotes}
-              onChange={(e) => setReviewNotes(e.target.value)}
-              className="mt-4 min-h-[120px] dark:border-slate-800 dark:bg-slate-950"
-              placeholder="Ex.: Favor conferir a profundidade do PZ-02 e anexar a foto da leitura final do hidrômetro."
-            />
+
+            <div className="mt-4 space-y-2">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Campos com Pendência (opcional / selecione os que se aplicam):
+              </label>
+              <div className="grid grid-cols-2 gap-2 text-xs max-h-48 overflow-y-auto p-1 border rounded-lg border-slate-200 dark:border-slate-800">
+                {RDO_RETURN_OPTIONS.map((field) => {
+                  const checked = reviewReturnedFields.includes(field.id)
+                  return (
+                    <label
+                      key={field.id}
+                      className={cn(
+                        'flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition',
+                        checked
+                          ? 'border-amber-400 bg-amber-50/70 font-semibold text-amber-950 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setReviewReturnedFields((prev) => [...prev, field.id])
+                          } else {
+                            setReviewReturnedFields((prev) => prev.filter((f) => f !== field.id))
+                          }
+                        }}
+                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="truncate">{field.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Descrição detalhada das correções <span className="text-red-500">*</span>:
+              </label>
+              <Textarea
+                value={reviewNotes}
+                onChange={(e) => setReviewNotes(e.target.value)}
+                className="min-h-[100px] dark:border-slate-800 dark:bg-slate-950"
+                placeholder="Ex.: Favor conferir a profundidade do PZ-02 e anexar a foto da leitura final do hidrômetro."
+              />
+            </div>
+
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setReviewOpen(false)}>
                 Cancelar
