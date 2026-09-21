@@ -931,8 +931,10 @@ function RdoFullPageEditor({
   const [isExporting, setIsExporting] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewNotes, setReviewNotes] = useState(initialReport.reviewNotes || '')
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const fieldPhotoInputRef = useRef<HTMLInputElement>(null)
+  const galleryPhotosInputRef = useRef<HTMLInputElement>(null)
+  const cameraPhotosInputRef = useRef<HTMLInputElement>(null)
+  const galleryFieldPhotoInputRef = useRef<HTMLInputElement>(null)
+  const cameraFieldPhotoInputRef = useRef<HTMLInputElement>(null)
 
   const { user, setHasUnsavedChanges } = useAuth()
   const { isOnline, syncNow } = useSync()
@@ -1092,7 +1094,8 @@ function RdoFullPageEditor({
       }
       reader.readAsDataURL(file)
     })
-    if (fileInputRef.current) fileInputRef.current.value = ''
+    if (galleryPhotosInputRef.current) galleryPhotosInputRef.current.value = ''
+    if (cameraPhotosInputRef.current) cameraPhotosInputRef.current.value = ''
   }
 
   const handleRemovePhoto = (index: number) => {
@@ -1133,7 +1136,8 @@ function RdoFullPageEditor({
       })
     }
     reader.readAsDataURL(file)
-    if (fieldPhotoInputRef.current) fieldPhotoInputRef.current.value = ''
+    if (galleryFieldPhotoInputRef.current) galleryFieldPhotoInputRef.current.value = ''
+    if (cameraFieldPhotoInputRef.current) cameraFieldPhotoInputRef.current.value = ''
   }
 
   const handleRemoveFieldPhoto = () => {
@@ -1777,10 +1781,19 @@ function RdoFullPageEditor({
                   </div>
 
                   {!isLocked && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Input Galeria (sem capture) */}
                       <input
                         type="file"
-                        ref={fieldPhotoInputRef}
+                        ref={galleryFieldPhotoInputRef}
+                        onChange={handleSelectFieldPhoto}
+                        accept="image/*"
+                        className="hidden"
+                      />
+                      {/* Input Câmera (com capture="environment") */}
+                      <input
+                        type="file"
+                        ref={cameraFieldPhotoInputRef}
                         onChange={handleSelectFieldPhoto}
                         accept="image/*"
                         capture="environment"
@@ -1790,11 +1803,21 @@ function RdoFullPageEditor({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => fieldPhotoInputRef.current?.click()}
+                        onClick={() => galleryFieldPhotoInputRef.current?.click()}
                         className="w-full sm:w-fit text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[38px]"
                       >
                         <Upload className="mr-1.5 h-3.5 w-3.5" />
-                        {formData.fieldPhoto ? 'Substituir Foto do Campo' : 'Inserir Foto do Campo'}
+                        Selecionar foto da galeria
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => cameraFieldPhotoInputRef.current?.click()}
+                        className="w-full sm:w-fit text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[38px]"
+                      >
+                        <Camera className="mr-1.5 h-3.5 w-3.5" />
+                        Tirar foto
                       </Button>
                     </div>
                   )}
@@ -1835,16 +1858,28 @@ function RdoFullPageEditor({
                         )
                       })()}
                       {!isLocked && (
-                        <div className="absolute right-2 top-2 flex items-center gap-1.5 bg-slate-950/70 backdrop-blur p-1 rounded-md shadow">
+                        <div className="absolute right-2 top-2 flex flex-wrap items-center gap-1.5 bg-slate-950/80 backdrop-blur p-1 rounded-md shadow">
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => fieldPhotoInputRef.current?.click()}
+                            onClick={() => galleryFieldPhotoInputRef.current?.click()}
                             className="h-7 px-2 text-[11px] text-white hover:bg-white/20"
+                            title="Selecionar outra foto da galeria"
                           >
                             <Upload className="mr-1 h-3 w-3" />
-                            Trocar
+                            Galeria
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => cameraFieldPhotoInputRef.current?.click()}
+                            className="h-7 px-2 text-[11px] text-white hover:bg-white/20"
+                            title="Tirar nova foto com a câmera"
+                          >
+                            <Camera className="mr-1 h-3 w-3" />
+                            Câmera
                           </Button>
                           <Button
                             type="button"
@@ -1861,14 +1896,7 @@ function RdoFullPageEditor({
                     </div>
                   </div>
                 ) : (
-                  <div
-                    onClick={() => !isLocked && fieldPhotoInputRef.current?.click()}
-                    className={cn(
-                      'mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white/70 p-6 text-center transition dark:border-slate-700 dark:bg-slate-900/50',
-                      !isLocked &&
-                        'cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/70 hover:shadow-sm',
-                    )}
-                  >
+                  <div className="mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-white/70 p-6 text-center transition dark:border-slate-700 dark:bg-slate-900/50">
                     <div className="grid h-11 w-11 place-items-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                       <Camera className="h-5 w-5" />
                     </div>
@@ -1876,10 +1904,34 @@ function RdoFullPageEditor({
                       Nenhuma foto do local/campo inserida
                     </p>
                     <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 max-w-sm">
-                      Clique aqui para adicionar a fotografia da área de interesse (câmera ou
-                      galeria). Conforme o modelo oficial, ela será exibida centralizada sob a
-                      descrição.
+                      Adicione a fotografia da área de interesse selecionando da galeria ou tirando
+                      uma foto na câmera. Conforme o modelo oficial, ela será exibida centralizada
+                      sob a descrição.
                     </p>
+                    {!isLocked && (
+                      <div className="mt-4 flex flex-wrap justify-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => galleryFieldPhotoInputRef.current?.click()}
+                          className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                        >
+                          <Upload className="mr-1.5 h-3.5 w-3.5" />
+                          Selecionar foto da galeria
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => cameraFieldPhotoInputRef.current?.click()}
+                          className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                        >
+                          <Camera className="mr-1.5 h-3.5 w-3.5" />
+                          Tirar foto
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1920,31 +1972,20 @@ function RdoFullPageEditor({
           </div>
         )}
 
-        <div className="mt-5 overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-xs">
-            <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
-              <tr>
-                <th className="p-3 w-48">ID do Poço</th>
-                <th className="p-3">Profundidade (m)</th>
-                <th className="p-3">Data Conclusão</th>
-                <th className="p-3">Diâmetro</th>
-                {!isLocked && isAdmin && <th className="p-3 w-12 text-center">Ações</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y dark:divide-slate-800">
-              {formData.wells?.length === 0 ? (
+        {formData.wells && formData.wells.length > 0 ? (
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[620px] text-left text-xs">
+              <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                 <tr>
-                  <td
-                    colSpan={isLocked || !isAdmin ? 4 : 5}
-                    className="p-6 text-center text-slate-400"
-                  >
-                    {isTechnician
-                      ? 'Nenhum poço vinculado a este RDO. Clique em "Vincular Poço do Projeto" acima para selecionar um poço cadastrado.'
-                      : 'Nenhum poço adicionado. Clique no botão "Adicionar Poço" acima.'}
-                  </td>
+                  <th className="p-3 w-48">ID do Poço</th>
+                  <th className="p-3">Profundidade (m)</th>
+                  <th className="p-3">Data Conclusão</th>
+                  <th className="p-3">Diâmetro</th>
+                  {!isLocked && isAdmin && <th className="p-3 w-12 text-center">Ações</th>}
                 </tr>
-              ) : (
-                formData.wells?.map((well, index) => (
+              </thead>
+              <tbody className="divide-y dark:divide-slate-800">
+                {formData.wells.map((well, index) => (
                   <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <td className="p-2">
                       {isTechnician ? (
@@ -2006,11 +2047,17 @@ function RdoFullPageEditor({
                       </td>
                     )}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
+            {isTechnician
+              ? 'Nenhum poço vinculado a este RDO. Como não há poços cadastrados, a tabela de poços não será incluída no PDF final.'
+              : 'Nenhum poço vinculado a este RDO. Não haverá tabela de poços no PDF final a menos que poços sejam adicionados.'}
+          </div>
+        )}
 
         {/* Aviso abaixo da tabela para o Técnico */}
         {isTechnician && (
@@ -2030,24 +2077,42 @@ function RdoFullPageEditor({
             subtitle="Fotos de campo com legendas (aparecem fielmente distribuídas no PDF do RDO)"
           />
           {!isLocked && (
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="file"
-                ref={fileInputRef}
+                ref={galleryPhotosInputRef}
                 onChange={handleAddPhotoFiles}
                 multiple
                 accept="image/*"
+                className="hidden"
+              />
+              <input
+                type="file"
+                ref={cameraPhotosInputRef}
+                onChange={handleAddPhotoFiles}
+                accept="image/*"
+                capture="environment"
                 className="hidden"
               />
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => galleryPhotosInputRef.current?.click()}
                 className="w-full sm:w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[40px]"
               >
                 <Upload className="mr-1.5 h-4 w-4" />
-                Adicionar Fotos
+                Selecionar foto da galeria
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => cameraPhotosInputRef.current?.click()}
+                className="w-full sm:w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[40px]"
+              >
+                <Camera className="mr-1.5 h-4 w-4" />
+                Tirar foto
               </Button>
             </div>
           )}
@@ -2105,17 +2170,35 @@ function RdoFullPageEditor({
           })}
 
           {!isLocked && (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 p-6 text-slate-500 hover:border-emerald-500 hover:bg-emerald-50/50 hover:text-emerald-700 transition dark:border-slate-800 dark:hover:bg-slate-900/50"
-            >
+            <div className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 p-6 text-center text-slate-500 dark:border-slate-800 dark:bg-slate-900/40">
               <Camera className="h-8 w-8 mb-2 text-slate-400" />
               <span className="text-xs font-semibold">Adicionar nova fotografia</span>
-              <span className="text-[10px] text-slate-400 mt-1">
-                Formatos JPG, PNG (Câmera ou Arquivo)
+              <span className="text-[10px] text-slate-400 mt-1 mb-3">
+                Formatos JPG, PNG (Galeria do dispositivo ou Câmera)
               </span>
-            </button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => galleryPhotosInputRef.current?.click()}
+                  className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                >
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  Selecionar foto da galeria
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => cameraPhotosInputRef.current?.click()}
+                  className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                >
+                  <Camera className="mr-1.5 h-3.5 w-3.5" />
+                  Tirar foto
+                </Button>
+              </div>
+            </div>
           )}
         </div>
       </section>
@@ -2290,94 +2373,10 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
 
   const logoSrc = EPA_LOGO_BASE64
 
-  // Lista de poços: cadastrados no relatório ou modelo oficial
-  const wellsList =
-    report.wells && report.wells.length > 0
-      ? report.wells
-      : [
-          { id: '1', well_id: 'AS-26', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '2', well_id: 'AS-27', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '3', well_id: 'AS-28', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '4', well_id: 'AS-29', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '5', well_id: 'AS-30', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '6', well_id: 'AS-31', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '7', well_id: 'AS-32', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '8', well_id: 'AS-33', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '9', well_id: 'AS-34', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '10', well_id: 'AS-35', depth: '', completion_date: '', diameter: '1/2"' },
-          { id: '11', well_id: 'PB-127', depth: '', completion_date: '', diameter: '4"' },
-          { id: '12', well_id: 'PB-128', depth: '', completion_date: '', diameter: '4"' },
-          { id: '13', well_id: 'PB-129', depth: '', completion_date: '', diameter: '4"' },
-          { id: '14', well_id: 'PB-130', depth: '', completion_date: '', diameter: '4"' },
-          { id: '15', well_id: 'PB-131', depth: '', completion_date: '', diameter: '4"' },
-          { id: '16', well_id: 'PB-132', depth: '', completion_date: '', diameter: '4"' },
-          { id: '17', well_id: 'PB-134', depth: '', completion_date: '', diameter: '4"' },
-          { id: '18', well_id: 'PB-136', depth: '', completion_date: '', diameter: '4"' },
-          { id: '19', well_id: 'PB-137', depth: '', completion_date: '', diameter: '4"' },
-          { id: '20', well_id: 'PB-138', depth: '', completion_date: '', diameter: '4"' },
-          { id: '21', well_id: 'PB-140', depth: '', completion_date: '', diameter: '4"' },
-          { id: '22', well_id: 'PB-141', depth: '', completion_date: '', diameter: '4"' },
-          { id: '23', well_id: 'PB-25', depth: '', completion_date: '', diameter: '4"' },
-          { id: '24', well_id: 'PB-26', depth: '', completion_date: '', diameter: '4"' },
-          { id: '25', well_id: 'PB-27', depth: '', completion_date: '', diameter: '4"' },
-          { id: '26', well_id: 'PB-28', depth: '', completion_date: '', diameter: '4"' },
-          { id: '27', well_id: 'PB-29', depth: '', completion_date: '', diameter: '2"' },
-          { id: '28', well_id: 'PB-30', depth: '', completion_date: '', diameter: '4"' },
-          { id: '29', well_id: 'PB-31', depth: '', completion_date: '', diameter: '4"' },
-          { id: '30', well_id: 'PB-33', depth: '', completion_date: '', diameter: '4"' },
-          { id: '31', well_id: 'PB-34', depth: '', completion_date: '', diameter: '4"' },
-          { id: '32', well_id: 'PB-35', depth: '', completion_date: '', diameter: '4"' },
-          { id: '33', well_id: 'PB-36', depth: '', completion_date: '', diameter: '4"' },
-          {
-            id: '34',
-            well_id: 'PB-37',
-            depth: '28,00',
-            completion_date: '27/05/2026',
-            diameter: '4"',
-          },
-          {
-            id: '35',
-            well_id: 'PB-38',
-            depth: '28,01',
-            completion_date: '27/05/2026',
-            diameter: '4"',
-          },
-          {
-            id: '36',
-            well_id: 'PB-39',
-            depth: '28,00',
-            completion_date: '27/05/2026',
-            diameter: '4"',
-          },
-          {
-            id: '37',
-            well_id: 'PB-40',
-            depth: '28,03',
-            completion_date: '27/05/2026',
-            diameter: '4"',
-          },
-          { id: '38', well_id: 'PB-41', depth: '', completion_date: '', diameter: '4"' },
-          {
-            id: '39',
-            well_id: 'PB-42',
-            depth: '28,06',
-            completion_date: '26/05/2026',
-            diameter: '4"',
-          },
-          { id: '40', well_id: 'PM-18', depth: '', completion_date: '', diameter: '2"' },
-          { id: '41', well_id: 'PM-19', depth: '', completion_date: '', diameter: '2"' },
-          { id: '42', well_id: 'PM-20', depth: '', completion_date: '', diameter: '2"' },
-          { id: '43', well_id: 'PM-21', depth: '', completion_date: '', diameter: '2"' },
-          { id: '44', well_id: 'PM-37', depth: '', completion_date: '', diameter: '2"' },
-          { id: '45', well_id: 'PM-38', depth: '', completion_date: '', diameter: '2"' },
-          { id: '46', well_id: 'PM-48', depth: '', completion_date: '', diameter: '2"' },
-          { id: '47', well_id: 'PM-49', depth: '', completion_date: '', diameter: '2"' },
-          { id: '48', well_id: 'PM-51', depth: '', completion_date: '', diameter: '2"' },
-          { id: '49', well_id: 'PM-52', depth: '', completion_date: '', diameter: '2"' },
-          { id: '50', well_id: 'PM-53', depth: '', completion_date: '', diameter: '2"' },
-        ]
+  // Lista de poços: cadastrados no relatório. Se não houver nenhum poço, a tabela não deve aparecer no PDF.
+  const wellsList = report.wells && report.wells.length > 0 ? report.wells : []
 
-  // Divide poços em 2 páginas de tabela (como no modelo oficial, ~25 por folha)
+  // Divide poços em páginas de tabela (~25 por folha)
   const wellsPage1 = wellsList.slice(0, 25)
   const wellsPage2 = wellsList.slice(25)
 
@@ -2478,6 +2477,33 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
       <div class="footer-text">${rdoNumStr}</div>
     </div>
   `
+
+  let wellsPagesHtml = ''
+  if (wellsList.length > 0) {
+    wellsPagesHtml = `
+    <!-- PÁGINA: TABELA DE POÇOS PARTE 1 -->
+    <div class="rdo-page">
+      ${renderPageHeader()}
+      <div class="rdo-page-content">
+        ${renderWellsTable(wellsPage1)}
+      </div>
+      ${renderPageFooter()}
+    </div>
+    ${
+      wellsPage2.length > 0
+        ? `
+    <!-- PÁGINA: TABELA DE POÇOS PARTE 2 -->
+    <div class="rdo-page">
+      ${renderPageHeader()}
+      <div class="rdo-page-content">
+        ${renderWellsTable(wellsPage2)}
+      </div>
+      ${renderPageFooter()}
+    </div>
+    `
+        : ''
+    }`
+  }
 
   // Seção de Fotos em Pares (páginas individuais de fotos com cabeçalho)
   const photoPagesHtml: string[] = []
@@ -2760,29 +2786,8 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
       ${renderPageFooter()}
     </div>
 
-    <!-- PÁGINA 2: TABELA DE POÇOS PARTE 1 -->
-    <div class="rdo-page">
-      ${renderPageHeader()}
-      <div class="rdo-page-content">
-        ${renderWellsTable(wellsPage1)}
-      </div>
-      ${renderPageFooter()}
-    </div>
-
-    ${
-      wellsPage2.length > 0
-        ? `
-    <!-- PÁGINA 3: TABELA DE POÇOS PARTE 2 -->
-    <div class="rdo-page">
-      ${renderPageHeader()}
-      <div class="rdo-page-content">
-        ${renderWellsTable(wellsPage2)}
-      </div>
-      ${renderPageFooter()}
-    </div>
-    `
-        : ''
-    }
+    <!-- TABELA DE POÇOS (DINÂMICA: NÃO APARECE SE NÃO HOUVER POÇOS) -->
+    ${wellsPagesHtml}
 
     <!-- PÁGINAS FOTOGRÁFICAS (EM PARES) -->
     ${photoPagesHtml.join('\n')}

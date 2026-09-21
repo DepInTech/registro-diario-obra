@@ -25,10 +25,11 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
     } catch (_) {}
   }
 
-  // Wells: se houver poços cadastrados usa eles, senão usa poços modelo de tamponamento
+  // Wells: apenas os poços cadastrados/associados ao RDO.
+  // Regra: se não houver poços, a tabela não deve ser renderizada no PDF.
   let wells = $app.findRecordsByFilter('report_wells', `report = "${id}"`, 'created')
   let wellsList = []
-  if (wells.length > 0) {
+  if (wells && wells.length > 0) {
     wellsList = wells.map((w) => ({
       well_id: w.getString('well_id') || '',
       depth: w.getFloat('depth') ? w.getFloat('depth') + ' m' : '',
@@ -37,59 +38,6 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
         : '',
       diameter: w.getString('diameter') || '',
     }))
-  } else {
-    wellsList = [
-      { well_id: 'AS-26', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-27', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-28', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-29', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-30', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-31', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-32', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-33', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-34', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'AS-35', depth: '', completion_date: '', diameter: '1/2"' },
-      { well_id: 'PB-127', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-128', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-129', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-130', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-131', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-132', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-134', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-136', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-137', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-138', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-140', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-141', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-25', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-26', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-27', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-28', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-29', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PB-30', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-31', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-33', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-34', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-35', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-36', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-37', depth: '28,00', completion_date: '27/05/2026', diameter: '4"' },
-      { well_id: 'PB-38', depth: '28,01', completion_date: '27/05/2026', diameter: '4"' },
-      { well_id: 'PB-39', depth: '28,00', completion_date: '27/05/2026', diameter: '4"' },
-      { well_id: 'PB-40', depth: '28,03', completion_date: '27/05/2026', diameter: '4"' },
-      { well_id: 'PB-41', depth: '', completion_date: '', diameter: '4"' },
-      { well_id: 'PB-42', depth: '28,06', completion_date: '26/05/2026', diameter: '4"' },
-      { well_id: 'PM-18', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-19', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-20', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-21', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-37', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-38', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-48', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-49', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-51', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-52', depth: '', completion_date: '', diameter: '2"' },
-      { well_id: 'PM-53', depth: '', completion_date: '', diameter: '2"' },
-    ]
   }
 
   const wellsPage1 = wellsList.slice(0, 25)
@@ -106,6 +54,56 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
   </tr>`,
       )
       .join('')
+
+  let wellsPagesHtml = ''
+  if (wellsList.length > 0) {
+    wellsPagesHtml = `
+    <!-- PÁGINA: TABELA DE POÇOS PARTE 1 -->
+    <div class="rdo-page">
+      ${pageHeaderHtml}
+      <div class="rdo-page-content">
+        <table class="wells-table">
+          <thead>
+            <tr>
+              <th style="width:25%;">Identificação<br />do Poço</th>
+              <th style="width:25%;">Profundidade</th>
+              <th style="width:25%;">Data de<br />finalização</th>
+              <th style="width:25%;">Diâmetro do<br />Poço (pol.)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderWellsRows(wellsPage1)}
+          </tbody>
+        </table>
+      </div>
+      ${pageFooterHtml}
+    </div>
+    ${
+      wellsPage2.length > 0
+        ? `
+    <!-- PÁGINA: TABELA DE POÇOS PARTE 2 -->
+    <div class="rdo-page">
+      ${pageHeaderHtml}
+      <div class="rdo-page-content">
+        <table class="wells-table">
+          <thead>
+            <tr>
+              <th style="width:25%;">Identificação<br />do Poço</th>
+              <th style="width:25%;">Profundidade</th>
+              <th style="width:25%;">Data de<br />finalização</th>
+              <th style="width:25%;">Diâmetro do<br />Poço (pol.)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderWellsRows(wellsPage2)}
+          </tbody>
+        </table>
+      </div>
+      ${pageFooterHtml}
+    </div>`
+        : ''
+    }`
+  }
 
   // Photos
   const photos = $app.findRecordsByFilter('report_photos', `report = "${id}"`, 'order')
@@ -542,53 +540,8 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
       ${pageFooterHtml}
     </div>
 
-    <!-- PÁGINA 2: TABELA DE POÇOS PARTE 1 -->
-    <div class="rdo-page">
-      ${pageHeaderHtml}
-      <div class="rdo-page-content">
-        <table class="wells-table">
-          <thead>
-            <tr>
-              <th style="width:25%;">Identificação<br />do Poço</th>
-              <th style="width:25%;">Profundidade</th>
-              <th style="width:25%;">Data de<br />finalização</th>
-              <th style="width:25%;">Diâmetro do<br />Poço (pol.)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${renderWellsRows(wellsPage1)}
-          </tbody>
-        </table>
-      </div>
-      ${pageFooterHtml}
-    </div>
-
-    ${
-      wellsPage2.length > 0
-        ? `
-    <!-- PÁGINA 3: TABELA DE POÇOS PARTE 2 -->
-    <div class="rdo-page">
-      ${pageHeaderHtml}
-      <div class="rdo-page-content">
-        <table class="wells-table">
-          <thead>
-            <tr>
-              <th style="width:25%;">Identificação<br />do Poço</th>
-              <th style="width:25%;">Profundidade</th>
-              <th style="width:25%;">Data de<br />finalização</th>
-              <th style="width:25%;">Diâmetro do<br />Poço (pol.)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${renderWellsRows(wellsPage2)}
-          </tbody>
-        </table>
-      </div>
-      ${pageFooterHtml}
-    </div>
-    `
-        : ''
-    }
+    <!-- TABELA DE POÇOS (DINÂMICA: OMITIDA SE NÃO HOUVER POÇOS) -->
+    ${wellsPagesHtml}
 
     <!-- PÁGINAS FOTOGRÁFICAS -->
     ${photoPagesHtml.join('\n')}
