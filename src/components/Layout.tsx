@@ -94,6 +94,7 @@ export function Layout({
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
   const { user, logout, hasUnsavedChanges } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const {
@@ -289,10 +290,11 @@ export function Layout({
                 onClick={() => retryFailed()}
                 disabled={isSyncing}
                 title="Clique para tentar novamente a sincronização dos itens com falha"
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:border-rose-800/50 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-900/50 transition cursor-pointer"
+                className="flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-1 text-xs font-medium border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:border-rose-800/50 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-900/50 transition cursor-pointer"
               >
                 <AlertTriangle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
-                <span className="truncate">Falhou ({failedCount}) — Tentar novamente</span>
+                <span className="hidden sm:inline">Falhou ({failedCount}) — Tentar novamente</span>
+                <span className="sm:hidden font-bold">({failedCount})</span>
                 <RefreshCw className={cn('h-3 w-3 ml-0.5', isSyncing && 'animate-spin')} />
               </button>
             ) : pendingCount > 0 ? (
@@ -302,7 +304,7 @@ export function Layout({
                 title={
                   isOnline ? 'Clique para sincronizar agora' : 'Alterações pendentes salvas offline'
                 }
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/50 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/50 transition"
+                className="flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-1 text-xs font-medium border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/50 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/50 transition"
               >
                 {!isOnline ? (
                   <WifiOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -315,13 +317,14 @@ export function Layout({
                   />
                 )}
                 <span>
-                  {pendingCount} pendente{pendingCount > 1 ? 's' : ''}
+                  {pendingCount}{' '}
+                  <span className="hidden sm:inline">pendente{pendingCount > 1 ? 's' : ''}</span>
                 </span>
               </button>
             ) : (
               <div
                 className={cn(
-                  'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border transition',
+                  'flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-1 text-xs font-medium border transition',
                   isOnline
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300'
                     : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300',
@@ -340,14 +343,27 @@ export function Layout({
                 <span className="hidden sm:inline">
                   {isOnline ? `Sincronizado ${formatSyncTime(lastSyncTime)}` : 'Offline'}
                 </span>
-                <span className="sm:hidden">
+                <span className="sm:hidden text-[11px]">
                   {isOnline ? formatSyncTime(lastSyncTime) : 'Offline'}
                 </span>
               </div>
             )}
           </div>
 
-          <div className="relative flex-1 md:max-w-[320px]">
+          {/* Botão de busca mobile / Campo expandido */}
+          <div className="flex items-center sm:hidden">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+              className="h-10 w-10 text-slate-600 dark:text-slate-300"
+              aria-label="Abrir busca"
+            >
+              <Search className="h-5 w-5" />
+            </Button>
+          </div>
+
+          <div className="relative hidden flex-1 sm:block md:max-w-[320px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               onChange={(e) => onSearch(e.target.value)}
@@ -443,7 +459,33 @@ export function Layout({
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
-        <main className="mx-auto min-h-[calc(100vh-72px)] max-w-[1600px] px-4 py-5 pb-24 md:px-7 md:py-7 lg:pb-8">
+
+        {/* Barra de busca retrátil no celular */}
+        {mobileSearchOpen && (
+          <div className="border-b border-slate-200 bg-white p-3 sm:hidden dark:border-slate-800 dark:bg-slate-900">
+            <div className="relative flex items-center">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                autoFocus
+                onChange={(e) => onSearch(e.target.value)}
+                placeholder="Buscar projeto, RDO, planilha..."
+                className="h-10 w-full border-slate-200 bg-slate-50 pl-9 pr-9 dark:border-slate-800 dark:bg-slate-950"
+              />
+              <button
+                onClick={() => {
+                  setMobileSearchOpen(false)
+                  onSearch('')
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label="Fechar busca"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        <main className="mx-auto min-h-[calc(100vh-72px)] max-w-[1600px] px-3 sm:px-4 py-4 sm:py-5 pb-24 md:px-7 md:py-7 lg:pb-8">
           {conflicts.length > 0 && (
             <div className="mb-6 rounded-2xl border border-amber-400 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/50">
               <div className="flex items-start gap-3">
@@ -493,7 +535,7 @@ export function Layout({
           {children}
         </main>
       </div>
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t bg-white dark:border-slate-800 dark:bg-slate-900 lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:hidden safe-area-pb">
         {visiblePrimary.map((item) => {
           const Icon = item.icon
           const isActive = page === item.id
@@ -502,14 +544,21 @@ export function Layout({
               key={item.id}
               onClick={() => navigate(item.id)}
               className={cn(
-                'flex flex-1 flex-col items-center justify-center gap-1 text-[10px] min-h-[48px]',
+                'flex flex-1 flex-col items-center justify-center gap-1 text-[10px] min-h-[48px] active:scale-95 transition-transform',
                 isActive
-                  ? 'text-emerald-700 dark:text-emerald-400 font-semibold'
-                  : 'text-slate-500 dark:text-slate-400',
+                  ? 'text-emerald-700 dark:text-emerald-400 font-bold'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
               )}
             >
-              <Icon className="h-5 w-5" />
-              <span>{item.label.split(' ')[0]}</span>
+              <div
+                className={cn(
+                  'grid h-7 w-7 place-items-center rounded-full transition-colors',
+                  isActive && 'bg-emerald-100 dark:bg-emerald-950/60',
+                )}
+              >
+                <Icon className={cn('h-4 w-4', isActive && 'stroke-[2.5]')} />
+              </div>
+              <span className="truncate max-w-[72px]">{item.label.split(' ')[0]}</span>
             </button>
           )
         })}

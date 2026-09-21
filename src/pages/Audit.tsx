@@ -170,7 +170,7 @@ export function AuditPage() {
             </Button>
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div className="table-scroll-container">
           <table className="w-full min-w-[760px] text-left">
             <thead className="bg-slate-50 text-[10px] uppercase tracking-wider text-slate-500">
               <tr>

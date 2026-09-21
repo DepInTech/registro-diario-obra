@@ -447,7 +447,7 @@ export function UsersPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-scroll-container">
             <table className="w-full min-w-[700px] text-left">
               <thead className="bg-slate-50 text-[10px] uppercase tracking-[.1em] text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                 <tr>
@@ -576,8 +576,8 @@ export function UsersPage() {
 
       {/* Modal Criar / Editar Usuário */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto sm:my-8">
             <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
               <div>
                 <h3 className="font-semibold text-base text-slate-900 dark:text-slate-100">
@@ -762,8 +762,8 @@ export function UsersPage() {
 
       {/* Modal de Confirmação de Exclusão */}
       {deletingUser && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto">
             <div className="flex items-center gap-3 text-red-600">
               <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950">
                 <Trash2 className="h-5 w-5" />

@@ -672,7 +672,7 @@ export function RdosPage({ query }: { query: string }) {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="table-scroll-container">
             <table className="w-full min-w-[860px] text-left">
               <thead className="bg-slate-50 text-[10px] uppercase tracking-[.1em] text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                 <tr>
@@ -1686,11 +1686,12 @@ function RdoFullPageEditor({
             <label className="epa-label">Número do RDO</label>
             <Input
               type="number"
+              inputMode="numeric"
               value={formData.number ?? ''}
               onChange={(e) => handleFieldChange('number', Number(e.target.value))}
               disabled={isLocked || isTechnician}
               className={cn(
-                'mt-1.5 font-mono',
+                'mt-1.5 font-mono min-h-[42px]',
                 isTechnician &&
                   'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
               )}
@@ -1802,21 +1803,19 @@ function RdoFullPageEditor({
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
                         onClick={() => galleryFieldPhotoInputRef.current?.click()}
-                        className="w-full sm:w-fit text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[38px]"
+                        className="flex-1 sm:flex-initial text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[44px] px-3 font-semibold"
                       >
-                        <Upload className="mr-1.5 h-3.5 w-3.5" />
-                        Selecionar foto da galeria
+                        <Upload className="mr-1.5 h-4 w-4 shrink-0" />
+                        Galeria
                       </Button>
                       <Button
                         type="button"
                         variant="outline"
-                        size="sm"
                         onClick={() => cameraFieldPhotoInputRef.current?.click()}
-                        className="w-full sm:w-fit text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[38px]"
+                        className="flex-1 sm:flex-initial text-xs border-emerald-300 bg-white text-emerald-800 hover:bg-emerald-100 hover:text-emerald-900 active:scale-[0.98] transition shadow-sm dark:border-emerald-700 dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-slate-800 min-h-[44px] px-3 font-semibold"
                       >
-                        <Camera className="mr-1.5 h-3.5 w-3.5" />
+                        <Camera className="mr-1.5 h-4 w-4 shrink-0" />
                         Tirar foto
                       </Button>
                     </div>
@@ -1909,25 +1908,23 @@ function RdoFullPageEditor({
                       sob a descrição.
                     </p>
                     {!isLocked && (
-                      <div className="mt-4 flex flex-wrap justify-center gap-2">
+                      <div className="mt-4 flex flex-wrap justify-center gap-2 w-full max-w-sm">
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
                           onClick={() => galleryFieldPhotoInputRef.current?.click()}
-                          className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                          className="flex-1 text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[44px] font-semibold"
                         >
-                          <Upload className="mr-1.5 h-3.5 w-3.5" />
-                          Selecionar foto da galeria
+                          <Upload className="mr-1.5 h-4 w-4" />
+                          Selecionar da galeria
                         </Button>
                         <Button
                           type="button"
                           variant="outline"
-                          size="sm"
                           onClick={() => cameraFieldPhotoInputRef.current?.click()}
-                          className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                          className="flex-1 text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[44px] font-semibold"
                         >
-                          <Camera className="mr-1.5 h-3.5 w-3.5" />
+                          <Camera className="mr-1.5 h-4 w-4" />
                           Tirar foto
                         </Button>
                       </div>
@@ -1972,8 +1969,13 @@ function RdoFullPageEditor({
           </div>
         )}
 
+        {/* Dica para mobile */}
+        <p className="mt-2 text-[11px] text-slate-400 sm:hidden flex items-center gap-1">
+          <span>👉 Deslize para visualizar e editar os dados dos poços</span>
+        </p>
+
         {formData.wells && formData.wells.length > 0 ? (
-          <div className="mt-5 overflow-x-auto">
+          <div className="mt-3 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
             <table className="w-full min-w-[620px] text-left text-xs">
               <thead className="bg-slate-50 text-[10px] uppercase text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                 <tr>
@@ -1989,7 +1991,7 @@ function RdoFullPageEditor({
                   <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <td className="p-2">
                       {isTechnician ? (
-                        <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
                           <span>{well.well_id || 'Não especificado'}</span>
                         </div>
                       ) : (
@@ -1998,19 +2000,20 @@ function RdoFullPageEditor({
                           onChange={(e) => handleWellFieldChange(index, 'well_id', e.target.value)}
                           disabled={isLocked}
                           placeholder="PZ-01"
-                          className="h-9 text-xs font-semibold"
+                          className="h-10 text-xs sm:text-sm font-semibold"
                         />
                       )}
                     </td>
                     <td className="p-2">
                       <Input
                         type="number"
+                        inputMode="decimal"
                         step="0.1"
                         value={well.depth ?? ''}
                         onChange={(e) => handleWellFieldChange(index, 'depth', e.target.value)}
                         disabled={isLocked}
                         placeholder="8.5"
-                        className="h-9 text-xs font-mono"
+                        className="h-10 text-xs sm:text-sm font-mono"
                       />
                     </td>
                     <td className="p-2">
@@ -2021,7 +2024,7 @@ function RdoFullPageEditor({
                           handleWellFieldChange(index, 'completion_date', e.target.value)
                         }
                         disabled={isLocked}
-                        className="h-9 text-xs"
+                        className="h-10 text-xs sm:text-sm"
                       />
                     </td>
                     <td className="p-2">
@@ -2030,7 +2033,7 @@ function RdoFullPageEditor({
                         onChange={(e) => handleWellFieldChange(index, 'diameter', e.target.value)}
                         disabled={isLocked}
                         placeholder="4 pol."
-                        className="h-9 text-xs"
+                        className="h-10 text-xs sm:text-sm"
                       />
                     </td>
                     {!isLocked && isAdmin && (
@@ -2039,7 +2042,7 @@ function RdoFullPageEditor({
                           variant="ghost"
                           size="icon"
                           onClick={() => handleRemoveWell(index)}
-                          className="h-8 w-8 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50"
+                          className="h-9 w-9 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50"
                           title="Remover poço (Admin)"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -2097,19 +2100,17 @@ function RdoFullPageEditor({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => galleryPhotosInputRef.current?.click()}
-                className="w-full sm:w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[40px]"
+                className="flex-1 sm:flex-initial text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[44px] px-3 font-semibold shadow-sm"
               >
                 <Upload className="mr-1.5 h-4 w-4" />
-                Selecionar foto da galeria
+                Galeria
               </Button>
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 onClick={() => cameraPhotosInputRef.current?.click()}
-                className="w-full sm:w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[40px]"
+                className="flex-1 sm:flex-initial text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[44px] px-3 font-semibold shadow-sm"
               >
                 <Camera className="mr-1.5 h-4 w-4" />
                 Tirar foto
@@ -2162,7 +2163,7 @@ function RdoFullPageEditor({
                     onChange={(e) => handlePhotoCaptionChange(index, e.target.value)}
                     disabled={isLocked}
                     placeholder="Legenda descritiva da imagem..."
-                    className="mt-1 h-8 text-xs"
+                    className="mt-1 h-10 text-xs sm:text-sm"
                   />
                 </div>
               </div>
@@ -2176,25 +2177,23 @@ function RdoFullPageEditor({
               <span className="text-[10px] text-slate-400 mt-1 mb-3">
                 Formatos JPG, PNG (Galeria do dispositivo ou Câmera)
               </span>
-              <div className="flex flex-wrap justify-center gap-2">
+              <div className="flex flex-wrap justify-center gap-2 w-full max-w-sm">
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   onClick={() => galleryPhotosInputRef.current?.click()}
-                  className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                  className="flex-1 text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[44px] font-semibold"
                 >
-                  <Upload className="mr-1.5 h-3.5 w-3.5" />
-                  Selecionar foto da galeria
+                  <Upload className="mr-1.5 h-4 w-4" />
+                  Galeria
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   onClick={() => cameraPhotosInputRef.current?.click()}
-                  className="text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+                  className="flex-1 text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[44px] font-semibold"
                 >
-                  <Camera className="mr-1.5 h-3.5 w-3.5" />
+                  <Camera className="mr-1.5 h-4 w-4" />
                   Tirar foto
                 </Button>
               </div>
@@ -2304,8 +2303,8 @@ function RdoFullPageEditor({
 
       {/* Devolução modal */}
       {reviewOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto">
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-base">Devolver RDO para Correção</h3>

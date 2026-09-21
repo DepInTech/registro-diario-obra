@@ -709,8 +709,8 @@ export function Projects({
   })
 
   const deleteModalJSX = deleteModalProject && (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto">
         <div className="flex items-center gap-3 text-red-600">
           <div className="grid h-10 w-10 place-items-center rounded-full bg-red-100 dark:bg-red-950/50">
             <Trash2 className="h-5 w-5" />
@@ -1164,8 +1164,8 @@ export function Projects({
 
       {/* MODAL CRIAR / EDITAR PROJETO */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-8">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto sm:my-8">
             <div className="flex items-center justify-between border-b pb-4 dark:border-slate-800">
               <div>
                 <h3 className="font-bold text-lg text-slate-900 dark:text-white">

@@ -188,13 +188,13 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2.5">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 w-full sm:w-auto">
           {(user?.role === 'admin' || user?.role === 'operator') && (
             <Button
               onClick={() => navigate('rdos')}
-              className="bg-emerald-600 text-white hover:bg-emerald-500 shadow-md min-h-[44px] font-semibold text-xs"
+              className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-500 shadow-md min-h-[44px] font-semibold text-xs justify-center"
             >
-              <ClipboardList className="mr-2 h-4 w-4" />
+              <ClipboardList className="mr-2 h-4 w-4 shrink-0" />
               Novo RDO
             </Button>
           )}
@@ -202,9 +202,9 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             <Button
               onClick={() => navigate('fields')}
               variant="outline"
-              className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs"
+              className="w-full sm:w-auto bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs justify-center"
             >
-              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              <FileSpreadsheet className="mr-2 h-4 w-4 shrink-0" />
               Planilha de Campo
             </Button>
           )}
@@ -212,9 +212,9 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             <Button
               onClick={() => navigate('projects')}
               variant="outline"
-              className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs"
+              className="w-full sm:w-auto bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs justify-center"
             >
-              <FolderKanban className="mr-2 h-4 w-4" />
+              <FolderKanban className="mr-2 h-4 w-4 shrink-0" />
               Gerenciar Projetos
             </Button>
           )}

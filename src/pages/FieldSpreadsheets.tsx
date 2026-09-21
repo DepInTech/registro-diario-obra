@@ -1519,13 +1519,14 @@ function FieldFullEditor({
             </select>
           </div>
           <div>
-            <label className="epa-label">PLUVIÔMETRO</label>
+            <label className="epa-label">PLUVIÔMETRO (mm)</label>
             <Input
               type="number"
+              inputMode="decimal"
               value={formData.pluviometer || 0}
               onChange={(e) => handleFieldChange('pluviometer', Number(e.target.value))}
               disabled={isLocked}
-              className="mt-1 font-mono"
+              className="mt-1 font-mono min-h-[42px]"
             />
           </div>
         </div>
@@ -1579,19 +1580,26 @@ function FieldFullEditor({
           </div>
         )}
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[700px] border-collapse text-left text-xs">
+        {/* Dica para o celular */}
+        <p className="mt-2 text-[11px] text-slate-400 sm:hidden flex items-center gap-1">
+          <span>
+            👉 Deslize horizontalmente para visualizar e preencher todas as colunas da tabela
+          </span>
+        </p>
+
+        <div className="mt-3 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
+          <table className="w-full min-w-[760px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-44">
+                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-40">
                   Poço de Remediação
                 </th>
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[170px]">
+                <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[180px]">
                   <div className="flex items-center justify-center gap-1.5 flex-wrap">
                     <span>Hidrômetro (Manhã)</span>
                     {isReturnedField('hidrometro') && (
                       <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
-                        🟨 CAMPO PARA CORREÇÃO
+                        🟨 CORREÇÃO
                       </span>
                     )}
                   </div>
@@ -1606,19 +1614,19 @@ function FieldFullEditor({
                       }}
                       disabled={isLocked}
                       className={cn(
-                        'h-6 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
                         isReturnedField('hidrometro') &&
                           'border-2 border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100 font-semibold',
                       )}
                     />
                   </div>
                 </th>
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[170px]">
+                <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[180px]">
                   <div className="flex items-center justify-center gap-1.5 flex-wrap">
                     <span>Hidrômetro (Tarde)</span>
                     {isReturnedField('hidrometro') && (
                       <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
-                        🟨 CAMPO PARA CORREÇÃO
+                        🟨 CORREÇÃO
                       </span>
                     )}
                   </div>
@@ -1633,19 +1641,19 @@ function FieldFullEditor({
                       }}
                       disabled={isLocked}
                       className={cn(
-                        'h-6 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
                         isReturnedField('hidrometro') &&
                           'border-2 border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100 font-semibold',
                       )}
                     />
                   </div>
                 </th>
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-40">
+                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-36">
                   Altura da bomba (m)
                 </th>
                 <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[180px]">
                   <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                    <span>Saída de Cada Autopump (500mL)*</span>
+                    <span>Saída Autopump (500mL)*</span>
                     {isReturnedField('autopump') && (
                       <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
                         🟨 CORREÇÃO
@@ -1653,9 +1661,9 @@ function FieldFullEditor({
                     )}
                   </div>
                 </th>
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[200px]">
+                <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[210px]">
                   <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                    <span>Condição Autopump (500 ml)</span>
+                    <span>Condição Autopump</span>
                     {isReturnedField('autopump') && (
                       <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
                         🟨 CORREÇÃO
@@ -1671,9 +1679,9 @@ function FieldFullEditor({
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {formData.extraction_data?.map((row, index) => (
                 <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     {isTechnician ? (
-                      <div className="flex items-center justify-center gap-1.5 py-1 px-2 font-semibold text-xs text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded">
+                      <div className="flex items-center justify-center gap-1.5 py-2 px-2 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded min-h-[40px]">
                         <span>{row.well || '—'}</span>
                       </div>
                     ) : (
@@ -1682,12 +1690,13 @@ function FieldFullEditor({
                         onChange={(e) => handleExtractionCellChange(index, 'well', e.target.value)}
                         disabled={isLocked}
                         placeholder="Ex.: PR-01"
-                        className="h-8 font-semibold text-xs text-center"
+                        className="h-10 font-semibold text-xs sm:text-sm text-center"
                       />
                     )}
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
+                      inputMode="decimal"
                       value={row.morning}
                       onChange={(e) => {
                         handleExtractionCellChange(index, 'morning', e.target.value)
@@ -1696,14 +1705,15 @@ function FieldFullEditor({
                       disabled={isLocked}
                       placeholder="0,00"
                       className={cn(
-                        'h-8 font-mono text-xs text-right',
+                        'h-10 font-mono text-xs sm:text-sm text-right',
                         isReturnedField('hidrometro') &&
                           'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                       )}
                     />
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
+                      inputMode="decimal"
                       value={row.afternoon}
                       onChange={(e) => {
                         handleExtractionCellChange(index, 'afternoon', e.target.value)
@@ -1712,23 +1722,25 @@ function FieldFullEditor({
                       disabled={isLocked}
                       placeholder="0,00"
                       className={cn(
-                        'h-8 font-mono text-xs text-right',
+                        'h-10 font-mono text-xs sm:text-sm text-right',
                         isReturnedField('hidrometro') &&
                           'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                       )}
                     />
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
+                      inputMode="decimal"
                       value={row.pump}
                       onChange={(e) => handleExtractionCellChange(index, 'pump', e.target.value)}
                       disabled={isLocked}
                       placeholder="0,00"
-                      className="h-8 font-mono text-xs text-center"
+                      className="h-10 font-mono text-xs sm:text-sm text-center"
                     />
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
+                      inputMode="decimal"
                       value={row.autopump}
                       onChange={(e) => {
                         handleExtractionCellChange(index, 'autopump', e.target.value)
@@ -1737,13 +1749,13 @@ function FieldFullEditor({
                       disabled={isLocked}
                       placeholder="0,00"
                       className={cn(
-                        'h-8 font-mono text-xs text-center',
+                        'h-10 font-mono text-xs sm:text-sm text-center',
                         isReturnedField('autopump') &&
                           'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                       )}
                     />
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <div className="space-y-1.5">
                       <select
                         value={row.autopump_condition || ''}
@@ -1753,7 +1765,7 @@ function FieldFullEditor({
                         }}
                         disabled={isLocked}
                         className={cn(
-                          'epa-input h-8 w-full text-xs',
+                          'epa-input h-10 w-full text-xs sm:text-sm',
                           isReturnedField('autopump') &&
                             'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
                         )}
@@ -1777,21 +1789,21 @@ function FieldFullEditor({
                           }}
                           disabled={isLocked}
                           placeholder="Descreva: (ex. presença de sedimentos)"
-                          className="h-7 text-[11px] border-amber-300 bg-amber-50/50 text-slate-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-slate-200"
+                          className="h-9 text-xs sm:text-sm border-amber-300 bg-amber-50/50 text-slate-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-slate-200"
                         />
                       )}
                     </div>
                   </td>
                   {!isLocked && isAdmin && (
-                    <td className="p-1.5 border border-slate-200 dark:border-slate-800 text-center">
+                    <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveExtractionWell(index)}
-                        className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50"
                         title="Remover linha de poço (Admin)"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </td>
                   )}
@@ -1821,7 +1833,7 @@ function FieldFullEditor({
           )}
         </div>
 
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
           <table className="w-full min-w-[500px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
@@ -1839,7 +1851,7 @@ function FieldFullEditor({
                         handleFieldChange('infiltration_morning_time', e.target.value)
                       }
                       disabled={isLocked}
-                      className="h-6 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1"
+                      className="h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1"
                     />
                   </div>
                 </th>
@@ -1854,7 +1866,7 @@ function FieldFullEditor({
                         handleFieldChange('infiltration_afternoon_time', e.target.value)
                       }
                       disabled={isLocked}
-                      className="h-6 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1"
+                      className="h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1"
                     />
                   </div>
                 </th>
@@ -1868,11 +1880,12 @@ function FieldFullEditor({
                 { label: 'Saída 03', mKey: 'out3Morning', aKey: 'out3Afternoon' },
               ].map((row) => (
                 <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                  <td className="p-2 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                  <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-300">
                     {row.label}
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
+                      inputMode="decimal"
                       value={formData.infiltration_data?.[row.mKey] || ''}
                       onChange={(e) => {
                         handleFieldChange('infiltration_data', {
@@ -1884,14 +1897,15 @@ function FieldFullEditor({
                       disabled={isLocked}
                       placeholder="0,00"
                       className={cn(
-                        'h-8 font-mono text-xs text-right',
+                        'h-10 font-mono text-xs sm:text-sm text-right',
                         isReturnedField('infiltracao') &&
                           'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                       )}
                     />
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
+                      inputMode="decimal"
                       value={formData.infiltration_data?.[row.aKey] || ''}
                       onChange={(e) => {
                         handleFieldChange('infiltration_data', {
@@ -1903,7 +1917,7 @@ function FieldFullEditor({
                       disabled={isLocked}
                       placeholder="0,00"
                       className={cn(
-                        'h-8 font-mono text-xs text-right',
+                        'h-10 font-mono text-xs sm:text-sm text-right',
                         isReturnedField('infiltracao') &&
                           'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                       )}
@@ -1979,20 +1993,22 @@ function FieldFullEditor({
             <label className="epa-label">Quantidade MAP (Kg)</label>
             <Input
               type="number"
+              inputMode="decimal"
               value={formData.nutrient_map_kg || 0}
               onChange={(e) => handleFieldChange('nutrient_map_kg', Number(e.target.value))}
               disabled={isLocked}
-              className="mt-1 font-mono text-xs"
+              className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
           </div>
           <div>
             <label className="epa-label">Quantidade Ureia (Kg)</label>
             <Input
               type="number"
+              inputMode="decimal"
               value={formData.nutrient_ureia_kg || 0}
               onChange={(e) => handleFieldChange('nutrient_ureia_kg', Number(e.target.value))}
               disabled={isLocked}
-              className="mt-1 font-mono text-xs"
+              className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
           </div>
         </div>
@@ -2009,7 +2025,7 @@ function FieldFullEditor({
           </p>
         </div>
 
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
           <table className="w-full min-w-[500px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
@@ -2055,11 +2071,12 @@ function FieldFullEditor({
                 },
               ].map((row) => (
                 <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                  <td className="p-2 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                  <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
                     {row.label}
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
+                      inputMode="decimal"
                       value={formData.compressor_data?.[row.k1] || ''}
                       onChange={(e) =>
                         handleFieldChange('compressor_data', {
@@ -2069,11 +2086,12 @@ function FieldFullEditor({
                       }
                       disabled={isLocked}
                       placeholder={row.ph}
-                      className="h-8 font-mono text-xs text-center"
+                      className="h-10 font-mono text-xs sm:text-sm text-center"
                     />
                   </td>
-                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                  <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
+                      inputMode="decimal"
                       value={formData.compressor_data?.[row.k2] || ''}
                       onChange={(e) =>
                         handleFieldChange('compressor_data', {
@@ -2083,7 +2101,7 @@ function FieldFullEditor({
                       }
                       disabled={isLocked}
                       placeholder={row.ph}
-                      className="h-8 font-mono text-xs text-center"
+                      className="h-10 font-mono text-xs sm:text-sm text-center"
                     />
                   </td>
                 </tr>
@@ -2093,7 +2111,7 @@ function FieldFullEditor({
         </div>
 
         {/* Segunda tabela: LINHA DE AR */}
-        <div className="mt-4 overflow-x-auto">
+        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
           <table className="w-full min-w-[500px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-emerald-800 text-white dark:bg-emerald-900 text-[11px]">
@@ -2110,11 +2128,12 @@ function FieldFullEditor({
             </thead>
             <tbody>
               <tr>
-                <td className="p-2 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
                   Pressão da Linha de Ar (ex.: PSI)
                 </td>
-                <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                <td className="p-2 border border-slate-200 dark:border-slate-800">
                   <Input
+                    inputMode="decimal"
                     value={formData.compressor_data?.linhaAr1 || ''}
                     onChange={(e) =>
                       handleFieldChange('compressor_data', {
@@ -2124,11 +2143,12 @@ function FieldFullEditor({
                     }
                     disabled={isLocked}
                     placeholder="Ex.: 85 PSI"
-                    className="h-8 font-mono text-xs text-center"
+                    className="h-10 font-mono text-xs sm:text-sm text-center"
                   />
                 </td>
-                <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                <td className="p-2 border border-slate-200 dark:border-slate-800">
                   <Input
+                    inputMode="decimal"
                     value={formData.compressor_data?.linhaAr2 || ''}
                     onChange={(e) =>
                       handleFieldChange('compressor_data', {
@@ -2138,7 +2158,7 @@ function FieldFullEditor({
                     }
                     disabled={isLocked}
                     placeholder="Ex.: 85 PSI"
-                    className="h-8 font-mono text-xs text-center"
+                    className="h-10 font-mono text-xs sm:text-sm text-center"
                   />
                 </td>
               </tr>
@@ -2255,22 +2275,24 @@ function FieldFullEditor({
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Líquido</label>
             <Input
               type="number"
+              inputMode="numeric"
               value={formData.waste_liquid_qty || 0}
               onChange={(e) => handleFieldChange('waste_liquid_qty', Number(e.target.value))}
               disabled={isLocked}
               placeholder="Ex.: 02"
-              className="mt-1 font-mono text-xs"
+              className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
           </div>
           <div>
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Sólido</label>
             <Input
               type="number"
+              inputMode="numeric"
               value={formData.waste_solid_qty || 0}
               onChange={(e) => handleFieldChange('waste_solid_qty', Number(e.target.value))}
               disabled={isLocked}
               placeholder="Ex.: 01"
-              className="mt-1 font-mono text-xs"
+              className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
           </div>
         </div>
@@ -2382,8 +2404,8 @@ function FieldFullEditor({
 
       {/* Modal Devolução */}
       {reviewOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 sm:p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">Devolver Planilha de Campo</h3>
               <Button variant="ghost" size="icon" onClick={() => setReviewOpen(false)}>
