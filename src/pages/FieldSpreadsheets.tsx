@@ -5,6 +5,7 @@ import {
 } from '@/lib/justificationValidator'
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Beaker,
   CheckCircle2,
@@ -127,6 +128,9 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 observations: rec.observations || '',
                 status: rec.status,
                 reviewNotes: rec.review_notes || '',
+                returned_fields: (rec as any).returned_fields || undefined,
+                returnedByName: (rec as any).returned_by_name || undefined,
+                returnedAt: (rec as any).returned_at || undefined,
                 syncStatus: 'synced',
                 lastModified: new Date(rec.updated).getTime(),
                 serverUpdatedAt: rec.updated,
@@ -873,6 +877,9 @@ function FieldFullEditor({
   const [isExporting, setIsExporting] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
   const [reviewNotes, setReviewNotes] = useState(initialSheet.reviewNotes || '')
+  const [reviewReturnedFields, setReviewReturnedFields] = useState<string[]>(
+    initialSheet.returned_fields || ['hidrometro'],
+  )
   const [availableWells, setAvailableWells] = useState<
     Array<{ id: string; identification: string }>
   >([])
@@ -1086,6 +1093,18 @@ function FieldFullEditor({
     }
   }
 
+  const isReturnedField = (fieldName: string) =>
+    formData.status === 'returned' && !!formData.returned_fields?.includes(fieldName)
+
+  const clearReturnedField = (fieldName: string) => {
+    if (formData.returned_fields?.includes(fieldName)) {
+      setFormData((prev) => ({
+        ...prev,
+        returned_fields: prev.returned_fields?.filter((f) => f !== fieldName),
+      }))
+    }
+  }
+
   // Admin Approval / Return
   const handleAdminStatusChange = async (nextStatus: 'approved' | 'returned') => {
     if (!isAdmin) {
@@ -1099,10 +1118,14 @@ function FieldFullEditor({
 
     setIsSaving(true)
     try {
+      const nowIso = new Date().toISOString()
       const updatedItem: OfflineFieldSheetItem = {
         ...formData,
         status: nextStatus,
         reviewNotes: nextStatus === 'returned' ? reviewNotes : '',
+        returned_fields: nextStatus === 'returned' ? reviewReturnedFields : [],
+        returnedByName: nextStatus === 'returned' ? user?.name : undefined,
+        returnedAt: nextStatus === 'returned' ? nowIso : undefined,
         syncStatus: 'pending_update',
         lastModified: Date.now(),
       }
@@ -1114,7 +1137,12 @@ function FieldFullEditor({
 
       if (isOnline) {
         try {
-          await updateFieldStatus(formData.id, nextStatus, reviewNotes)
+          await updateFieldStatus(
+            formData.id,
+            nextStatus,
+            reviewNotes,
+            nextStatus === 'returned' ? reviewReturnedFields : [],
+          )
         } catch {
           // ignore if mock
         }
@@ -1399,6 +1427,39 @@ function FieldFullEditor({
           )}
         </div>
       )}
+
+      {/* Caixa de Aviso de Devolução */}
+      {formData.status === 'returned' && (
+        <div className="rounded-2xl border-2 border-amber-400 bg-amber-50/90 p-5 dark:border-amber-700 dark:bg-amber-950/40 shadow-sm space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-200/80 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-amber-950 dark:text-amber-200 text-sm flex items-center gap-2">
+                ⚠️ Correção solicitada pelo Administrador
+              </h3>
+              <p className="text-xs font-medium text-amber-900 dark:text-amber-300 mt-1.5 leading-relaxed bg-white/70 dark:bg-slate-900/60 p-3 rounded-lg border border-amber-200/80 dark:border-amber-900/60">
+                {formData.reviewNotes ||
+                  'Por favor, revise os campos indicados e reenvie para aprovação.'}
+              </p>
+              {(formData.returnedByName || formData.returnedAt) && (
+                <p className="text-[11px] text-amber-800/90 dark:text-amber-400 mt-2">
+                  {formData.returnedByName && (
+                    <>
+                      Devolvido por: <b>{formData.returnedByName}</b>
+                    </>
+                  )}
+                  {formData.returnedByName && formData.returnedAt && ' · '}
+                  {formData.returnedAt && (
+                    <>em {new Date(formData.returnedAt).toLocaleString('pt-BR')}</>
+                  )}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* CABEÇALHO OFICIAL */}
       <section className="epa-card p-6 border-t-4 border-t-emerald-700">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 dark:border-slate-800">
@@ -1526,28 +1587,56 @@ function FieldFullEditor({
                   Poço de Remediação
                 </th>
                 <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[170px]">
-                  <div>Hidrômetro (Manhã)</div>
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                    <span>Hidrômetro (Manhã)</span>
+                    {isReturnedField('hidrometro') && (
+                      <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
+                        🟨 CAMPO PARA CORREÇÃO
+                      </span>
+                    )}
+                  </div>
                   <div className="mt-1 flex items-center justify-center gap-1.5 font-normal text-[10px] text-emerald-100">
                     <span>Hora:</span>
                     <Input
                       type="time"
                       value={formData.morning_time || ''}
-                      onChange={(e) => handleFieldChange('morning_time', e.target.value)}
+                      onChange={(e) => {
+                        handleFieldChange('morning_time', e.target.value)
+                        clearReturnedField('hidrometro')
+                      }}
                       disabled={isLocked}
-                      className="h-6 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1"
+                      className={cn(
+                        'h-6 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        isReturnedField('hidrometro') &&
+                          'border-2 border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100 font-semibold',
+                      )}
                     />
                   </div>
                 </th>
                 <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[170px]">
-                  <div>Hidrômetro (Tarde)</div>
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                    <span>Hidrômetro (Tarde)</span>
+                    {isReturnedField('hidrometro') && (
+                      <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
+                        🟨 CAMPO PARA CORREÇÃO
+                      </span>
+                    )}
+                  </div>
                   <div className="mt-1 flex items-center justify-center gap-1.5 font-normal text-[10px] text-emerald-100">
                     <span>Hora:</span>
                     <Input
                       type="time"
                       value={formData.afternoon_time || ''}
-                      onChange={(e) => handleFieldChange('afternoon_time', e.target.value)}
+                      onChange={(e) => {
+                        handleFieldChange('afternoon_time', e.target.value)
+                        clearReturnedField('hidrometro')
+                      }}
                       disabled={isLocked}
-                      className="h-6 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1"
+                      className={cn(
+                        'h-6 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        isReturnedField('hidrometro') &&
+                          'border-2 border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100 font-semibold',
+                      )}
                     />
                   </div>
                 </th>
@@ -1555,7 +1644,24 @@ function FieldFullEditor({
                   Altura da bomba (m)
                 </th>
                 <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[180px]">
-                  Saída de Cada Autopump (500mL)*
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                    <span>Saída de Cada Autopump (500mL)*</span>
+                    {isReturnedField('autopump') && (
+                      <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
+                        🟨 CORREÇÃO
+                      </span>
+                    )}
+                  </div>
+                </th>
+                <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[200px]">
+                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                    <span>Condição Autopump (500 ml)</span>
+                    {isReturnedField('autopump') && (
+                      <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
+                        🟨 CORREÇÃO
+                      </span>
+                    )}
+                  </div>
                 </th>
                 {!isLocked && isAdmin && (
                   <th className="p-2.5 border border-emerald-800 w-12 text-center"></th>
@@ -1583,21 +1689,33 @@ function FieldFullEditor({
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
                     <Input
                       value={row.morning}
-                      onChange={(e) => handleExtractionCellChange(index, 'morning', e.target.value)}
+                      onChange={(e) => {
+                        handleExtractionCellChange(index, 'morning', e.target.value)
+                        clearReturnedField('hidrometro')
+                      }}
                       disabled={isLocked}
                       placeholder="0,00"
-                      className="h-8 font-mono text-xs text-right"
+                      className={cn(
+                        'h-8 font-mono text-xs text-right',
+                        isReturnedField('hidrometro') &&
+                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                      )}
                     />
                   </td>
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
                     <Input
                       value={row.afternoon}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         handleExtractionCellChange(index, 'afternoon', e.target.value)
-                      }
+                        clearReturnedField('hidrometro')
+                      }}
                       disabled={isLocked}
                       placeholder="0,00"
-                      className="h-8 font-mono text-xs text-right"
+                      className={cn(
+                        'h-8 font-mono text-xs text-right',
+                        isReturnedField('hidrometro') &&
+                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                      )}
                     />
                   </td>
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
@@ -1612,13 +1730,57 @@ function FieldFullEditor({
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
                     <Input
                       value={row.autopump}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         handleExtractionCellChange(index, 'autopump', e.target.value)
-                      }
+                        clearReturnedField('autopump')
+                      }}
                       disabled={isLocked}
                       placeholder="0,00"
-                      className="h-8 font-mono text-xs text-center"
+                      className={cn(
+                        'h-8 font-mono text-xs text-center',
+                        isReturnedField('autopump') &&
+                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                      )}
                     />
+                  </td>
+                  <td className="p-1.5 border border-slate-200 dark:border-slate-800">
+                    <div className="space-y-1.5">
+                      <select
+                        value={row.autopump_condition || ''}
+                        onChange={(e) => {
+                          handleExtractionCellChange(index, 'autopump_condition', e.target.value)
+                          clearReturnedField('autopump')
+                        }}
+                        disabled={isLocked}
+                        className={cn(
+                          'epa-input h-8 w-full text-xs',
+                          isReturnedField('autopump') &&
+                            'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
+                        )}
+                      >
+                        <option value="">Selecione...</option>
+                        <option value="Limpa">Limpa</option>
+                        <option value="Turva">Turva</option>
+                        <option value="Oleosa">Oleosa</option>
+                        <option value="Outros">Outros</option>
+                      </select>
+                      {row.autopump_condition === 'Outros' && (
+                        <Input
+                          value={row.autopump_condition_other || ''}
+                          onChange={(e) => {
+                            handleExtractionCellChange(
+                              index,
+                              'autopump_condition_other',
+                              e.target.value,
+                            )
+                            clearReturnedField('autopump')
+                          }}
+                          disabled={isLocked}
+                          placeholder="Descreva: (ex. presença de sedimentos)"
+                          className="h-7 text-[11px] border-amber-300 bg-amber-50/50 text-slate-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-slate-200"
+                        />
+                      )}
+                    </div>
                   </td>
                   {!isLocked && isAdmin && (
                     <td className="p-1.5 border border-slate-200 dark:border-slate-800 text-center">
@@ -1642,13 +1804,21 @@ function FieldFullEditor({
 
       {/* 2. INFILTRAÇÃO/VOLUME INFILTRADO */}
       <section className="epa-card p-6">
-        <div className="border-b pb-4 dark:border-slate-800">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300">
-            2. INFILTRAÇÃO/VOLUME INFILTRADO
-          </h2>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Leitura de hidrômetros geral e saídas 01 a 03 com horário de medição e pressões da bomba
-          </p>
+        <div className="border-b pb-4 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300">
+              2. INFILTRAÇÃO/VOLUME INFILTRADO
+            </h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Leitura de hidrômetros geral e saídas 01 a 03 com horário de medição e pressões da
+              bomba
+            </p>
+          </div>
+          {isReturnedField('infiltracao') && (
+            <span className="rounded bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
+              🟨 CAMPO PARA CORREÇÃO
+            </span>
+          )}
         </div>
 
         <div className="mt-4 overflow-x-auto">
@@ -1704,29 +1874,39 @@ function FieldFullEditor({
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
                     <Input
                       value={formData.infiltration_data?.[row.mKey] || ''}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         handleFieldChange('infiltration_data', {
                           ...formData.infiltration_data,
                           [row.mKey]: e.target.value,
                         })
-                      }
+                        clearReturnedField('infiltracao')
+                      }}
                       disabled={isLocked}
                       placeholder="0,00"
-                      className="h-8 font-mono text-xs text-right"
+                      className={cn(
+                        'h-8 font-mono text-xs text-right',
+                        isReturnedField('infiltracao') &&
+                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                      )}
                     />
                   </td>
                   <td className="p-1.5 border border-slate-200 dark:border-slate-800">
                     <Input
                       value={formData.infiltration_data?.[row.aKey] || ''}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         handleFieldChange('infiltration_data', {
                           ...formData.infiltration_data,
                           [row.aKey]: e.target.value,
                         })
-                      }
+                        clearReturnedField('infiltracao')
+                      }}
                       disabled={isLocked}
                       placeholder="0,00"
-                      className="h-8 font-mono text-xs text-right"
+                      className={cn(
+                        'h-8 font-mono text-xs text-right',
+                        isReturnedField('infiltracao') &&
+                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                      )}
                     />
                   </td>
                 </tr>
@@ -2213,11 +2393,54 @@ function FieldFullEditor({
             <p className="mt-1 text-xs text-slate-500">
               Informe os pontos ou medições que precisam de correção pelo operador.
             </p>
+
+            <div className="mt-4 space-y-2">
+              <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block">
+                Campos com necessidade de correção:
+              </label>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { id: 'hidrometro', label: 'Hidrômetro' },
+                  { id: 'autopump', label: 'Autopump' },
+                  { id: 'infiltracao', label: 'Infiltração' },
+                  { id: 'compressores', label: 'Compressores' },
+                  { id: 'observacoes', label: 'Observações' },
+                ].map((field) => {
+                  const checked = reviewReturnedFields.includes(field.id)
+                  return (
+                    <label
+                      key={field.id}
+                      className={cn(
+                        'flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition',
+                        checked
+                          ? 'border-amber-400 bg-amber-50/70 font-semibold text-amber-950 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-200'
+                          : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300',
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setReviewReturnedFields((prev) => [...prev, field.id])
+                          } else {
+                            setReviewReturnedFields((prev) => prev.filter((f) => f !== field.id))
+                          }
+                        }}
+                        className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      <span>{field.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+
             <Textarea
               value={reviewNotes}
               onChange={(e) => setReviewNotes(e.target.value)}
-              className="mt-4 min-h-[120px] dark:border-slate-800 dark:bg-slate-950"
-              placeholder="Ex.: Conferir a medição de vazão da tarde no poço PB-128."
+              className="mt-4 min-h-[110px] dark:border-slate-800 dark:bg-slate-950 text-xs"
+              placeholder="Ex.: Conferir a medição de vazão da tarde no poço PB-128 e a condição do autopump."
             />
             <Button
               onClick={() => handleAdminStatusChange('returned')}
@@ -2276,16 +2499,22 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
   let extractionRows = ''
   if (sheet.extraction_data && sheet.extraction_data.length > 0) {
     sheet.extraction_data.forEach((r) => {
+      const condText =
+        r.autopump_condition === 'Outros' && r.autopump_condition_other
+          ? `Outros — ${r.autopump_condition_other}`
+          : r.autopump_condition || ''
+
       extractionRows += `<tr>
         <td style="border:1px solid #777;padding:5px 8px;text-align:center;font-weight:bold;">${r.well || '—'}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:right;">${r.morning || ''}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:right;">${r.afternoon || ''}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${r.pump || ''}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${r.autopump || ''}</td>
+        <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${condText}</td>
       </tr>`
     })
   } else {
-    extractionRows = `<tr><td colspan="5" style="border:1px solid #777;padding:8px;text-align:center;color:#666;">Nenhum poço registrado</td></tr>`
+    extractionRows = `<tr><td colspan="6" style="border:1px solid #777;padding:8px;text-align:center;color:#666;">Nenhum poço registrado</td></tr>`
   }
 
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -2329,20 +2558,21 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
 
       <!-- 1. EXTRAÇÃO/VOLUME BOMBEADO -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
+        <td colspan="6" class="section-hdr" style="padding: 7px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
       </tr>
       <tr>
-        <th style="width: 22%;">Poço de Remediação</th>
-        <th style="width: 20%;">
+        <th style="width: 18%;">Poço de Remediação</th>
+        <th style="width: 16%;">
           Hidrômetro (Manhã)<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${morningTime || '—'}</span>
         </th>
-        <th style="width: 20%;">
+        <th style="width: 16%;">
           Hidrômetro (Tarde)<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${afternoonTime || '—'}</span>
         </th>
-        <th style="width: 18%;">Altura da bomba (m)</th>
-        <th style="width: 20%;">Saída de Cada Autopump (500mL)*</th>
+        <th style="width: 14%;">Altura da bomba (m)</th>
+        <th style="width: 16%;">Saída de Cada Autopump (500mL)*</th>
+        <th style="width: 20%;">Condição Autopump (500 ml)</th>
       </tr>
       ${extractionRows}
 
