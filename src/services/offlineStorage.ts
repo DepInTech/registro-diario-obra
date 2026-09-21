@@ -84,6 +84,8 @@ export interface OfflineFieldSheetItem {
     afternoon_time?: string
     pump: string
     autopump: string
+    autopump_condition?: string
+    autopump_condition_other?: string
   }>
   infiltration_data?: Record<string, string>
   nutrient_done?: boolean
@@ -98,6 +100,9 @@ export interface OfflineFieldSheetItem {
   observations?: string
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   reviewNotes?: string
+  returned_fields?: string[]
+  returnedByName?: string
+  returnedAt?: string
   archived?: boolean
   deleted?: boolean
   deletedReason?: string

@@ -12,8 +12,17 @@ export async function updateRdoStatus(id: string, status: string, reviewNotes = 
   return pb.collection('reports_rdo').update(id, { status, review_notes: reviewNotes })
 }
 
-export async function updateFieldStatus(id: string, status: string, reviewNotes = '') {
-  return pb.collection('field_spreadsheets').update(id, { status, review_notes: reviewNotes })
+export async function updateFieldStatus(
+  id: string,
+  status: string,
+  reviewNotes = '',
+  returnedFields?: string[],
+) {
+  const data: Record<string, any> = { status, review_notes: reviewNotes }
+  if (returnedFields !== undefined) {
+    data.returned_fields = returnedFields
+  }
+  return pb.collection('field_spreadsheets').update(id, data)
 }
 
 export async function askEpaCopilot(
