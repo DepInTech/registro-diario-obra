@@ -40,7 +40,12 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/context/AuthContext'
-import { useSync, SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
+import {
+  useSync,
+  SYNC_BROADCAST_EVENT,
+  REALTIME_RECORD_UPDATE,
+  RealtimeRecordUpdateDetail,
+} from '@/context/SyncContext'
 import { offlineStorage, OfflineRdoItem } from '@/services/offlineStorage'
 import { authHeaders, exportUrl, updateRdoStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
@@ -82,8 +87,10 @@ export function RdosPage({ query }: { query: string }) {
   const { user } = useAuth()
   const { toast } = useToast()
 
-  const loadRdos = async () => {
-    setLoading(true)
+  const loadRdos = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true)
+    }
     try {
       // 1. Load from IndexedDB
       // RBAC check: Técnico e Administrador têm acesso ao RDO
@@ -270,7 +277,9 @@ export function RdosPage({ query }: { query: string }) {
     } catch (err) {
       console.error('Error loading RDOs:', err)
     } finally {
-      setLoading(false)
+      if (!options?.silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -278,11 +287,27 @@ export function RdosPage({ query }: { query: string }) {
     loadRdos()
 
     const handleSyncComplete = () => {
-      loadRdos()
+      loadRdos({ silent: true })
     }
+
+    const handleRealtimeUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
+      const col = customEvent.detail?.collection
+      if (
+        col === 'reports_rdo' ||
+        col === 'report_wells' ||
+        col === 'report_photos' ||
+        col === 'projects'
+      ) {
+        loadRdos({ silent: true })
+      }
+    }
+
     window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    window.addEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     return () => {
       window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+      window.removeEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     }
   }, [])
 

@@ -39,7 +39,12 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/context/AuthContext'
-import { useSync, SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
+import {
+  useSync,
+  SYNC_BROADCAST_EVENT,
+  REALTIME_RECORD_UPDATE,
+  RealtimeRecordUpdateDetail,
+} from '@/context/SyncContext'
 import {
   offlineStorage,
   OfflineFieldSheetItem,
@@ -84,8 +89,10 @@ export function FieldSpreadsheets({ query }: { query: string }) {
   const { user } = useAuth()
   const { toast } = useToast()
 
-  const loadSheets = async () => {
-    setLoading(true)
+  const loadSheets = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true)
+    }
     try {
       // RBAC check: Only Admin and Technician can access Field Spreadsheets
       if (user && user.role !== 'admin' && user.role !== 'technician') {
@@ -237,7 +244,9 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     } catch (err) {
       console.error('Error loading field sheets:', err)
     } finally {
-      setLoading(false)
+      if (!options?.silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -245,11 +254,22 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     loadSheets()
 
     const handleSyncComplete = () => {
-      loadSheets()
+      loadSheets({ silent: true })
     }
+
+    const handleRealtimeUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
+      const col = customEvent.detail?.collection
+      if (col === 'field_spreadsheets' || col === 'projects') {
+        loadSheets({ silent: true })
+      }
+    }
+
     window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    window.addEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     return () => {
       window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+      window.removeEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     }
   }, [])
 

@@ -41,7 +41,11 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 import { offlineStorage, OfflineProjectItem } from '@/services/offlineStorage'
-import { SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
+import {
+  SYNC_BROADCAST_EVENT,
+  REALTIME_RECORD_UPDATE,
+  RealtimeRecordUpdateDetail,
+} from '@/context/SyncContext'
 import type { Client, Contract, Company, Area, EpaUser } from '@/types/epa'
 
 interface ProjectItem extends EpaProject {
@@ -133,8 +137,10 @@ export function Projects({
     }
   }
 
-  const loadProjects = async () => {
-    setLoading(true)
+  const loadProjects = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true)
+    }
     try {
       // 1. Check local offline projects first
       const localOffline = await offlineStorage.getAllProjects()
@@ -279,7 +285,9 @@ export function Projects({
         })),
       )
     } finally {
-      setLoading(false)
+      if (!options?.silent) {
+        setLoading(false)
+      }
     }
   }
 
@@ -288,11 +296,22 @@ export function Projects({
     loadAuxiliaryData()
 
     const handleSyncComplete = () => {
-      loadProjects()
+      loadProjects({ silent: true })
     }
+
+    const handleRealtimeUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
+      const col = customEvent.detail?.collection
+      if (col === 'projects' || col === 'clients' || col === 'contracts') {
+        loadProjects({ silent: true })
+      }
+    }
+
     window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    window.addEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     return () => {
       window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+      window.removeEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     }
   }, [])
 

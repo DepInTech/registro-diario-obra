@@ -9,6 +9,14 @@ import {
 import { useToast } from '@/hooks/use-toast'
 
 export const SYNC_BROADCAST_EVENT = 'epa_sync_complete'
+export const REALTIME_RECORD_UPDATE = 'epa_realtime_record_update'
+
+export interface RealtimeRecordUpdateDetail {
+  collection: string
+  id: string
+  action: 'create' | 'update' | 'delete'
+  record?: Record<string, unknown>
+}
 
 export interface ConflictItem {
   id: string
@@ -1142,6 +1150,286 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       clearInterval(interval)
     }
   }, [syncNow, checkPending, toast])
+
+  // Centralized Realtime Subscriptions for PocketBase collections:
+  // 'reports_rdo', 'field_spreadsheets', 'projects', 'report_wells', 'report_photos'
+  useEffect(() => {
+    if (!isOnline || !pb.authStore.isValid) return
+
+    let cancelled = false
+    const unsubscribes: Array<() => Promise<void>> = []
+
+    const broadcastUpdate = (detail: RealtimeRecordUpdateDetail) => {
+      window.dispatchEvent(
+        new CustomEvent<RealtimeRecordUpdateDetail>(REALTIME_RECORD_UPDATE, { detail }),
+      )
+    }
+
+    // Helper: Handle RDO realtime events
+    const handleRdoEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
+      try {
+        const local = await offlineStorage.getRdo(record.id)
+        // PRESERVAÇÃO OFFLINE: se o registro local está pendente ou com conflito, NUNCA sobrescrever com dados remotos
+        if (
+          local &&
+          (local.syncStatus === 'pending_create' ||
+            local.syncStatus === 'pending_update' ||
+            local.syncStatus === 'conflict')
+        ) {
+          broadcastUpdate({ collection: 'reports_rdo', id: record.id, action, record })
+          return
+        }
+
+        if (action === 'delete') {
+          if (local) {
+            await offlineStorage.deleteRdo(record.id)
+          }
+        } else {
+          // create or update: atualizar o cache no IndexedDB preservando dados essenciais
+          const updatedItem: OfflineRdoItem = {
+            id: record.id,
+            number: record.number,
+            projectId: record.project,
+            projectName: local?.projectName || 'Projeto EPA',
+            clientName: local?.clientName,
+            contractCode: local?.contractCode,
+            companyName: record.empresa_executora || local?.companyName || 'EPA Gestão Ambiental',
+            location: local?.location,
+            reportDate: record.report_date
+              ? record.report_date.slice(0, 10)
+              : local?.reportDate || '',
+            weather: record.weather || local?.weather || 'Sol',
+            performedBy: record.performed_by || local?.performedBy || '',
+            performedByName: local?.performedByName,
+            supervisedBy: record.supervised_by || local?.supervisedBy,
+            supervisedByName: local?.supervisedByName,
+            activityTitle: record.activity_title || '',
+            activityDescription: record.activity_description || '',
+            timeDisplacement: record.time_displacement || '',
+            timeWaiting: record.time_waiting || '',
+            interferences: record.interferences || '',
+            planChanges: record.plan_changes || '',
+            accidents: record.accidents || '',
+            status: record.status || 'draft',
+            reviewNotes: record.review_notes || '',
+            returned_fields: record.returned_fields || undefined,
+            returnedByName: record.returned_by_name || undefined,
+            returnedAt: record.returned_at || undefined,
+            change_history: record.change_history || undefined,
+            wells: local?.wells || [],
+            photos: local?.photos || [],
+            fieldPhoto: local?.fieldPhoto,
+            syncStatus: 'synced',
+            lastModified: new Date(record.updated || Date.now()).getTime(),
+            serverUpdatedAt: record.updated,
+            archived: Boolean(record.archived),
+            deleted: Boolean(record.deleted),
+            deletedReason: record.deleted_reason || undefined,
+            deletedBy: record.deleted_by || undefined,
+            deletedAt: record.deleted_at || undefined,
+          }
+          await offlineStorage.saveRdo(updatedItem)
+        }
+      } catch (err) {
+        console.warn('Error handling realtime RDO event in offlineStorage:', err)
+      } finally {
+        broadcastUpdate({ collection: 'reports_rdo', id: record.id, action, record })
+      }
+    }
+
+    // Helper: Handle Field Spreadsheet realtime events
+    const handleFieldEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
+      try {
+        const local = await offlineStorage.getFieldSheet(record.id)
+        if (
+          local &&
+          (local.syncStatus === 'pending_create' ||
+            local.syncStatus === 'pending_update' ||
+            local.syncStatus === 'conflict')
+        ) {
+          broadcastUpdate({ collection: 'field_spreadsheets', id: record.id, action, record })
+          return
+        }
+
+        if (action === 'delete') {
+          if (local) {
+            await offlineStorage.deleteFieldSheet(record.id)
+          }
+        } else {
+          const rawExt = ((record.extraction_data as any) || []) as any[]
+          const fallbackMorning = rawExt.find((r) => r.morning_time)?.morning_time || ''
+          const fallbackAfternoon = rawExt.find((r) => r.afternoon_time)?.afternoon_time || ''
+
+          const updatedSheet: OfflineFieldSheetItem = {
+            id: record.id,
+            projectId: record.project,
+            projectName: local?.projectName || 'Projeto EPA',
+            clientName: local?.clientName,
+            contractCode: local?.contractCode,
+            date: record.date ? record.date.slice(0, 10) : local?.date || '',
+            area: record.area || local?.area || 'Oficina Central',
+            operator: record.operator || local?.operator || '',
+            operatorName: local?.operatorName,
+            weather: record.weather || local?.weather || 'Sol',
+            pluviometer: record.pluviometer ?? local?.pluviometer ?? 0,
+            morning_time: record.morning_time || fallbackMorning,
+            afternoon_time: record.afternoon_time || fallbackAfternoon,
+            infiltration_morning_time: record.infiltration_morning_time || '',
+            infiltration_afternoon_time: record.infiltration_afternoon_time || '',
+            extraction_data: record.extraction_data || [],
+            infiltration_data: record.infiltration_data || {},
+            nutrient_done: Boolean(record.nutrient_done),
+            nutrient_map_kg: record.nutrient_map_kg || 0,
+            nutrient_ureia_kg: record.nutrient_ureia_kg || 0,
+            compressor_data: record.compressor_data || {},
+            oil_removal_data: record.oil_removal_data || {},
+            waste_liquid_qty: record.waste_liquid_qty || 0,
+            waste_solid_qty: record.waste_solid_qty || 0,
+            env_5s_check: Boolean(record.env_5s_check),
+            env_checklist_monthly: Boolean(record.env_checklist_monthly),
+            observations: record.observations || '',
+            status: record.status || 'draft',
+            reviewNotes: record.review_notes || '',
+            returned_fields: record.returned_fields || undefined,
+            returnedByName: record.returned_by_name || undefined,
+            returnedAt: record.returned_at || undefined,
+            change_history: record.change_history || undefined,
+            syncStatus: 'synced',
+            lastModified: new Date(record.updated || Date.now()).getTime(),
+            serverUpdatedAt: record.updated,
+            archived: Boolean(record.archived),
+            deleted: Boolean(record.deleted),
+            deletedReason: record.deleted_reason || undefined,
+            deletedBy: record.deleted_by || undefined,
+            deletedAt: record.deleted_at || undefined,
+          }
+          await offlineStorage.saveFieldSheet(updatedSheet)
+        }
+      } catch (err) {
+        console.warn('Error handling realtime FieldSheet event in offlineStorage:', err)
+      } finally {
+        broadcastUpdate({ collection: 'field_spreadsheets', id: record.id, action, record })
+      }
+    }
+
+    // Helper: Handle Projects realtime events
+    const handleProjectEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
+      try {
+        const local = await offlineStorage.getProject(record.id)
+        if (
+          local &&
+          (local.syncStatus === 'pending_create' ||
+            local.syncStatus === 'pending_update' ||
+            local.syncStatus === 'conflict')
+        ) {
+          broadcastUpdate({ collection: 'projects', id: record.id, action, record })
+          return
+        }
+
+        if (action === 'delete') {
+          if (local) {
+            await offlineStorage.deleteProject(record.id)
+          }
+        } else {
+          const assignedIds: string[] = Array.isArray(record.assigned_users)
+            ? record.assigned_users
+            : record.assigned_users
+              ? [record.assigned_users]
+              : []
+
+          const updatedProject: OfflineProjectItem = {
+            id: record.id,
+            name: record.name,
+            client: local?.client || 'Cliente EPA',
+            code: record.epa_code || local?.code || 'EPA-001',
+            location: record.location || local?.location || 'Área Operacional',
+            status: record.status || local?.status || 'active',
+            progress: record.progress ?? local?.progress ?? 0,
+            contract: local?.contract || 'CT-2025',
+            team: local?.team || ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
+            rawClient: record.client,
+            rawContract: record.contract,
+            rawCompany: record.company,
+            rawArea: record.area,
+            assignedUsersIds: assignedIds,
+            archived: Boolean(record.archived),
+            deleted: Boolean(record.deleted),
+            deletedReason: record.deleted_reason || undefined,
+            deletedBy: record.deleted_by || undefined,
+            deletedAt: record.deleted_at || undefined,
+            syncStatus: 'synced',
+            lastModified: new Date(record.updated || Date.now()).getTime(),
+            serverUpdatedAt: record.updated,
+          }
+          await offlineStorage.saveProject(updatedProject)
+        }
+      } catch (err) {
+        console.warn('Error handling realtime Project event in offlineStorage:', err)
+      } finally {
+        broadcastUpdate({ collection: 'projects', id: record.id, action, record })
+      }
+    }
+
+    // Helper: Handle child collections (report_wells, report_photos)
+    const handleReportSubCollection = (
+      colName: string,
+      action: 'create' | 'update' | 'delete',
+      record: any,
+    ) => {
+      broadcastUpdate({ collection: colName, id: record.id, action, record })
+    }
+
+    const setupSubscriptions = async () => {
+      try {
+        const [subRdo, subField, subProj, subWells, subPhotos] = await Promise.all([
+          pb.collection('reports_rdo').subscribe('*', (e) => {
+            handleRdoEvent(e.action as 'create' | 'update' | 'delete', e.record)
+          }),
+          pb.collection('field_spreadsheets').subscribe('*', (e) => {
+            handleFieldEvent(e.action as 'create' | 'update' | 'delete', e.record)
+          }),
+          pb.collection('projects').subscribe('*', (e) => {
+            handleProjectEvent(e.action as 'create' | 'update' | 'delete', e.record)
+          }),
+          pb.collection('report_wells').subscribe('*', (e) => {
+            handleReportSubCollection(
+              'report_wells',
+              e.action as 'create' | 'update' | 'delete',
+              e.record,
+            )
+          }),
+          pb.collection('report_photos').subscribe('*', (e) => {
+            handleReportSubCollection(
+              'report_photos',
+              e.action as 'create' | 'update' | 'delete',
+              e.record,
+            )
+          }),
+        ])
+
+        if (cancelled) {
+          subRdo().catch(() => {})
+          subField().catch(() => {})
+          subProj().catch(() => {})
+          subWells().catch(() => {})
+          subPhotos().catch(() => {})
+        } else {
+          unsubscribes.push(subRdo, subField, subProj, subWells, subPhotos)
+        }
+      } catch (subErr) {
+        console.warn('Error setting up centralized realtime subscriptions:', subErr)
+      }
+    }
+
+    setupSubscriptions()
+
+    return () => {
+      cancelled = true
+      unsubscribes.forEach((fn) => {
+        fn().catch(() => {})
+      })
+    }
+  }, [isOnline])
 
   return (
     <SyncContext.Provider

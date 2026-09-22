@@ -17,7 +17,12 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
-import { useSync, SYNC_BROADCAST_EVENT } from '@/context/SyncContext'
+import {
+  useSync,
+  SYNC_BROADCAST_EVENT,
+  REALTIME_RECORD_UPDATE,
+  RealtimeRecordUpdateDetail,
+} from '@/context/SyncContext'
 import { offlineStorage } from '@/services/offlineStorage'
 import { Page } from '@/components/Layout'
 import { projects as staticProjects, auditEvents } from '@/data/epa'
@@ -58,7 +63,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
     })
   }
 
-  const loadStats = async () => {
+  const loadStats = async (_options?: { silent?: boolean }) => {
     try {
       // 1. If online and PocketBase available, fetch latest RDOs and FieldSheets to ensure fresh server data
       if (navigator.onLine && pb.authStore.isValid) {
@@ -166,11 +171,27 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
     loadStats()
 
     const handleSyncComplete = () => {
-      loadStats()
+      loadStats({ silent: true })
     }
+
+    const handleRealtimeUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
+      const col = customEvent.detail?.collection
+      if (
+        col === 'reports_rdo' ||
+        col === 'field_spreadsheets' ||
+        col === 'projects' ||
+        col === 'users'
+      ) {
+        loadStats({ silent: true })
+      }
+    }
+
     window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    window.addEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     return () => {
       window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+      window.removeEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     }
   }, [user])
 
