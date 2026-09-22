@@ -153,13 +153,8 @@
 [id*='accessibility-icon'],
 [class*='accessibility-btn'],
 [class*='accessibility-icon'],
-:has(> .bi-universal-access-circle),
-:has(> i.bi-universal-access-circle),
-:has(> svg.bi-universal-access-circle),
-:has(> .bi-universal-access),
 button:has(> .bi-universal-access-circle),
-div:has(> button > .bi-universal-access-circle),
-div:has(> .bi-universal-access-circle) {
+button:has(> .bi-universal-access) {
   position: fixed !important;
   right: 1.25rem !important; /* 20px */
   bottom: 1.25rem !important; /* 20px no desktop */
@@ -194,13 +189,8 @@ div:has(> .bi-universal-access-circle) {
   [id*='accessibility-icon'],
   [class*='accessibility-btn'],
   [class*='accessibility-icon'],
-  :has(> .bi-universal-access-circle),
-  :has(> i.bi-universal-access-circle),
-  :has(> svg.bi-universal-access-circle),
-  :has(> .bi-universal-access),
   button:has(> .bi-universal-access-circle),
-  div:has(> button > .bi-universal-access-circle),
-  div:has(> .bi-universal-access-circle) {
+  button:has(> .bi-universal-access) {
     bottom: 5.25rem !important; /* 84px (64px barra + 20px respiro) */
     right: 1rem !important; /* 16px */
   }
