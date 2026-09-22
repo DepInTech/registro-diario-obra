@@ -129,3 +129,28 @@
   background: #cbd5e1;
   border-radius: 999px;
 }
+
+/* Ajustes de acessibilidade para o plugin PrabothCharith / accessibility-menu */
+/* Garante que o menu/botão flutuante não sobreponha a barra mobile inferior (h-16 / 64px) nem fique atrás de modais */
+#accessibility-menu,
+.accessibility-menu,
+[class*='accessibility-menu'],
+[id*='accessibility-menu'],
+[id*='accessibility-btn'],
+[class*='accessibility-btn'],
+[id*='accessibility-icon'],
+[class*='accessibility-icon'] {
+  z-index: 45 !important;
+}
+
+/* Em telas móveis, garante espaçamento em relação à barra inferior de navegação do app */
+@media (max-width: 1024px) {
+  #accessibility-menu,
+  .accessibility-menu,
+  [class*='accessibility-menu'],
+  [id*='accessibility-menu'],
+  [id*='accessibility-btn'],
+  [class*='accessibility-btn'] {
+    bottom: 5.5rem !important; /* acima dos 64px (4rem) da barra mobile */
+  }
+}
