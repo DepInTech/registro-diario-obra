@@ -129,3 +129,79 @@
   background: #cbd5e1;
   border-radius: 999px;
 }
+
+/* ==========================================================================
+   Posicionamento do botão flutuante do Plugin de Acessibilidade
+   Plugin: PrabothCharith/accessibility-plugin (accessibility-menu)
+   Ícone: bi-universal-access-circle
+   Regras:
+   1. Fixo no canto inferior direito (bottom-right) sem quebrar/empurrar o layout.
+   2. z-index: 40 (acima do conteúdo comum e barra z-30, abaixo de modais z-50).
+   3. Mobile (< 1024px): espaçado acima da barra inferior de navegação (h-16 / 64px)
+      para não cobrir itens do menu nem atrapalhar o toque nos formulários.
+   ========================================================================== */
+#accessibility-icon,
+#accessibility-btn,
+#accessibility-button,
+#accessibility-menu-btn,
+#accessibility-trigger,
+.accessibility-btn,
+.accessibility-button,
+.accessibility-menu-btn,
+.accessibility-icon,
+[id*='accessibility-btn'],
+[id*='accessibility-icon'],
+[class*='accessibility-btn'],
+[class*='accessibility-icon'],
+:has(> .bi-universal-access-circle),
+:has(> i.bi-universal-access-circle),
+:has(> svg.bi-universal-access-circle),
+:has(> .bi-universal-access),
+button:has(> .bi-universal-access-circle),
+div:has(> button > .bi-universal-access-circle),
+div:has(> .bi-universal-access-circle) {
+  position: fixed !important;
+  right: 1.25rem !important; /* 20px */
+  bottom: 1.25rem !important; /* 20px no desktop */
+  top: auto !important;
+  left: auto !important;
+  z-index: 40 !important; /* Acima do conteúdo e barra z-30, abaixo de modais z-50 */
+  margin: 0 !important;
+  float: none !important;
+}
+
+/* Garante que o menu suspenso aberto pelo plugin fique ancorado corretamente à direita inferior */
+.accessibility-menu,
+#accessibility-menu,
+[id*='accessibility-menu-modal'],
+[class*='accessibility-menu-container'] {
+  z-index: 45 !important; /* Abaixo de modais z-50 */
+}
+
+/* Ajuste Mobile: a barra de navegação inferior tem h-16 (64px) com z-30.
+   Posiciona o botão acima da barra inferior (bottom: 5.25rem / ~84px) */
+@media screen and (max-width: 1023px) {
+  #accessibility-icon,
+  #accessibility-btn,
+  #accessibility-button,
+  #accessibility-menu-btn,
+  #accessibility-trigger,
+  .accessibility-btn,
+  .accessibility-button,
+  .accessibility-menu-btn,
+  .accessibility-icon,
+  [id*='accessibility-btn'],
+  [id*='accessibility-icon'],
+  [class*='accessibility-btn'],
+  [class*='accessibility-icon'],
+  :has(> .bi-universal-access-circle),
+  :has(> i.bi-universal-access-circle),
+  :has(> svg.bi-universal-access-circle),
+  :has(> .bi-universal-access),
+  button:has(> .bi-universal-access-circle),
+  div:has(> button > .bi-universal-access-circle),
+  div:has(> .bi-universal-access-circle) {
+    bottom: 5.25rem !important; /* 84px (64px barra + 20px respiro) */
+    right: 1rem !important; /* 16px */
+  }
+}
