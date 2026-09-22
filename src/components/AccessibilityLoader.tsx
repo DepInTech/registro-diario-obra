@@ -29,6 +29,8 @@ const EXTERNAL_SELECTORS = [
   '.asw-menu',
   '#asw-widget',
   '.asw-widget',
+  '.asw-btn',
+  '#asw-btn',
 ]
 
 function checkExternalPluginPresent(): boolean {
@@ -307,7 +309,7 @@ export function AccessibilityLoader() {
     <aside
       id="epa-native-accessibility"
       aria-label="Ferramentas de acessibilidade"
-      className="fixed z-40 select-none bottom-20 right-4 lg:bottom-6 lg:right-6 print:hidden"
+      className="fixed z-[45] select-none bottom-20 right-4 lg:bottom-6 lg:right-6 print:hidden"
     >
       {/* Botão flutuante para abrir menu de acessibilidade nativo */}
       {!isOpen && (
@@ -319,7 +321,8 @@ export function AccessibilityLoader() {
           className="flex h-12 w-12 items-center justify-center rounded-full bg-[#086B63] text-white shadow-xl hover:bg-[#06544e] focus:outline-none focus:ring-2 focus:ring-[#086B63] focus:ring-offset-2 transition-transform active:scale-95 cursor-pointer"
           title="Opções de Acessibilidade"
         >
-          <Accessibility className="h-6 w-6" />
+          {/* Universal Access Circle Icon (Accessibility do lucide-react) */}
+          <Accessibility className="h-6 w-6" aria-hidden="true" />
         </button>
       )}
 

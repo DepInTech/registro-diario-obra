@@ -131,7 +131,7 @@
 }
 
 /* Ajustes de acessibilidade para o plugin PrabothCharith / accessibility-menu e fallback nativo EPA */
-/* Garante que o menu/botão flutuante não sobreponha a barra mobile inferior (h-16 / 64px) nem fique atrás de modais (z-50) */
+/* Garante posicionamento fixo no canto inferior direito, z-index 45 (abaixo de modais z-50) e espaçamento mobile */
 #accessibility-menu,
 .accessibility-menu,
 [class*='accessibility-menu'],
@@ -144,11 +144,17 @@
 .asw-menu,
 #asw-widget,
 .asw-widget,
+.asw-btn,
+#asw-btn,
 #epa-native-accessibility {
+  position: fixed !important;
+  right: 1.5rem !important;
+  left: auto !important;
+  bottom: 1.5rem !important;
   z-index: 45 !important;
 }
 
-/* Em telas móveis, garante espaçamento em relação à barra inferior de navegação do app */
+/* Em telas móveis, garante espaçamento em relação à barra inferior de navegação do app (h-16 / 64px) */
 @media (max-width: 1024px) {
   #accessibility-menu,
   .accessibility-menu,
@@ -162,7 +168,11 @@
   .asw-menu,
   #asw-widget,
   .asw-widget,
+  .asw-btn,
+  #asw-btn,
   #epa-native-accessibility {
+    right: 1rem !important;
+    left: auto !important;
     bottom: 5.5rem !important; /* acima dos 64px (4rem) da barra mobile */
   }
 }
