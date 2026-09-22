@@ -242,20 +242,20 @@ export function Layout({
   )
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      {/* Sidebar fixa no desktop (>1024px) */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-gradient-to-b from-[#04332f] via-[#086B63] to-[#02201d] xl:flex">
+      {/* Sidebar fixa no desktop (>=1024px) */}
+      <aside className="epa-sidebar fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-gradient-to-b from-[#04332f] via-[#086B63] to-[#02201d] lg:flex">
         {sidebar}
       </aside>
 
-      {/* Sidebar gaveta recolhível (mobile <768px e tablet 768px-1024px / <1280px) */}
+      {/* Sidebar gaveta recolhível (mobile e tablet <1024px) */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 xl:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           <button
             className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
           />
-          <aside className="relative flex h-full w-[280px] max-w-[85vw] flex-col bg-[#086B63] text-white shadow-2xl">
+          <aside className="epa-sidebar relative flex h-full w-[280px] max-w-[85vw] flex-col bg-[#086B63] text-white shadow-2xl">
             {sidebar}
             <Button
               variant="ghost"
@@ -268,201 +268,215 @@ export function Layout({
           </aside>
         </div>
       )}
-      <div className="xl:pl-[252px]">
-        <header className="sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:px-6 dark:border-slate-800 dark:bg-slate-900/95">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setMobileOpen(true)}
-            className="xl:hidden h-10 w-10 shrink-0 text-slate-700 dark:text-slate-200"
-            aria-label="Abrir menu"
-          >
-            <Menu className="h-5 w-5" />
-          </Button>
-          <div className="hidden min-w-0 flex-1 md:block">
-            <h1 className="truncate text-base lg:text-lg font-semibold tracking-tight">
-              {titles[page].title}
-            </h1>
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-              {titles[page].subtitle}
-            </p>
-          </div>
-
-          {/* Sync Status Interactive Pill Indicator (Desktop & Mobile header) */}
-          <div className="flex items-center">
-            {failedCount > 0 ? (
-              <button
-                onClick={() => retryFailed()}
-                disabled={isSyncing}
-                title="Clique para tentar novamente a sincronização dos itens com falha"
-                className="flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-1 text-xs font-medium border border-rose-300 bg-rose-50 text-rose-800 hover:bg-rose-100 dark:border-rose-800/50 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-900/50 transition cursor-pointer"
-              >
-                <AlertTriangle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
-                <span className="hidden sm:inline">Falhou ({failedCount}) — Tentar novamente</span>
-                <span className="sm:hidden font-bold">({failedCount})</span>
-                <RefreshCw className={cn('h-3 w-3 ml-0.5', isSyncing && 'animate-spin')} />
-              </button>
-            ) : pendingCount > 0 ? (
-              <button
-                onClick={() => isOnline && syncNow()}
-                disabled={!isOnline || isSyncing}
-                title={
-                  isOnline ? 'Clique para sincronizar agora' : 'Alterações pendentes salvas offline'
-                }
-                className="flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-1 text-xs font-medium border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800/50 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/50 transition"
-              >
-                {!isOnline ? (
-                  <WifiOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                ) : (
-                  <RefreshCw
-                    className={cn(
-                      'h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0',
-                      isSyncing && 'animate-spin',
-                    )}
-                  />
-                )}
-                <span>
-                  {pendingCount}{' '}
-                  <span className="hidden sm:inline">pendente{pendingCount > 1 ? 's' : ''}</span>
-                </span>
-              </button>
-            ) : (
-              <div
-                className={cn(
-                  'flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-1 text-xs font-medium border transition',
-                  isOnline
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300'
-                    : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300',
-                )}
-                title={
-                  isOnline
-                    ? `Todos os dados sincronizados com o servidor às ${formatSyncTime(lastSyncTime)}`
-                    : 'Modo offline ativado — salvando no IndexedDB'
-                }
-              >
-                {isOnline ? (
-                  <Wifi className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                ) : (
-                  <WifiOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                )}
-                <span className="hidden sm:inline">
-                  {isOnline ? `Sincronizado ${formatSyncTime(lastSyncTime)}` : 'Offline'}
-                </span>
-                <span className="sm:hidden text-[11px]">
-                  {isOnline ? formatSyncTime(lastSyncTime) : 'Offline'}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Botão de busca mobile / Campo expandido */}
-          <div className="flex items-center sm:hidden">
+      <div className="epa-layout-content lg:pl-[252px]">
+        <header className="epa-header sticky top-0 z-30 flex h-[72px] w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:px-6 dark:border-slate-800 dark:bg-slate-900/95">
+          {/* SEÇÃO ESQUERDA: botão de menu (<1024px), título/subtítulo, busca desktop */}
+          <div className="flex min-w-0 flex-1 items-center gap-3 pr-2 sm:pr-4">
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-              className="h-10 w-10 text-slate-600 dark:text-slate-300"
-              aria-label="Abrir busca"
+              onClick={() => setMobileOpen(true)}
+              className="h-10 w-10 shrink-0 text-slate-700 lg:hidden dark:text-slate-200"
+              aria-label="Abrir menu"
             >
-              <Search className="h-5 w-5" />
+              <Menu className="h-5 w-5" />
             </Button>
+
+            <div className="hidden min-w-0 flex-1 sm:block md:flex-initial">
+              <h1 className="truncate text-base font-semibold tracking-tight lg:text-lg">
+                {titles[page].title}
+              </h1>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                {titles[page].subtitle}
+              </p>
+            </div>
+
+            {/* Busca desktop / tablet */}
+            <div className="relative hidden md:block md:w-64 lg:w-80">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                onChange={(e) => onSearch(e.target.value)}
+                placeholder="Buscar projeto, RDO..."
+                className="h-10 border-slate-200 bg-slate-50 pl-9 focus-visible:ring-emerald-600 dark:border-slate-800 dark:bg-slate-950"
+              />
+            </div>
           </div>
 
-          <div className="relative hidden flex-1 sm:block md:max-w-[320px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              onChange={(e) => onSearch(e.target.value)}
-              placeholder="Buscar projeto, RDO..."
-              className="h-10 border-slate-200 bg-slate-50 pl-9 focus-visible:ring-emerald-600 dark:border-slate-800 dark:bg-slate-950"
-            />
-          </div>
-
-          {/* Theme switcher */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            className="h-10 w-10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-            title={theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'}
-            aria-label="Alternar tema"
-          >
-            {theme === 'dark' ? (
-              <Sun className="h-5 w-5 text-amber-400" />
-            ) : (
-              <Moon className="h-5 w-5 text-slate-600" />
-            )}
-          </Button>
-
-          {/* User Profile dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition outline-none"
-                aria-label="Menu do usuário"
-              >
-                <Avatar className="h-9 w-9 border border-emerald-200 dark:border-emerald-800">
-                  <AvatarFallback className="bg-emerald-100 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                    {userInitials}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="hidden text-left xl:block">
-                  <span className="block text-xs font-semibold">{user?.name || 'Usuário'}</span>
-                  <span className="block text-[10px] text-slate-500 dark:text-slate-400">
-                    {userRoleLabel}
+          {/* SEÇÃO DIREITA: pílula de sincronização, busca mobile, botão de tema, avatar do usuário */}
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {/* Sync Status Interactive Pill Indicator */}
+            <div className="flex items-center">
+              {failedCount > 0 ? (
+                <button
+                  onClick={() => retryFailed()}
+                  disabled={isSyncing}
+                  title="Clique para tentar novamente a sincronização dos itens com falha"
+                  className="flex cursor-pointer items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-800 transition hover:bg-rose-100 sm:px-2.5 dark:border-rose-800/50 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-900/50"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400" />
+                  <span className="hidden sm:inline">
+                    Falhou ({failedCount}) — Tentar novamente
                   </span>
-                </span>
-                <ChevronDown className="hidden h-4 w-4 text-slate-400 xl:block" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-56 dark:border-slate-800 dark:bg-slate-900"
-            >
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user?.name || 'Usuário EPA'}</p>
-                  <p className="text-xs leading-none text-slate-500 dark:text-slate-400">
-                    {user?.email}
-                  </p>
-                  <span className="inline-block mt-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    {userRoleLabel}
+                  <span className="font-bold sm:hidden">({failedCount})</span>
+                  <RefreshCw className={cn('ml-0.5 h-3 w-3', isSyncing && 'animate-spin')} />
+                </button>
+              ) : pendingCount > 0 ? (
+                <button
+                  onClick={() => isOnline && syncNow()}
+                  disabled={!isOnline || isSyncing}
+                  title={
+                    isOnline
+                      ? 'Clique para sincronizar agora'
+                      : 'Alterações pendentes salvas offline'
+                  }
+                  className="flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 transition hover:bg-amber-100 sm:px-2.5 dark:border-amber-800/50 dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-900/50"
+                >
+                  {!isOnline ? (
+                    <WifiOff className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  ) : (
+                    <RefreshCw
+                      className={cn(
+                        'h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400',
+                        isSyncing && 'animate-spin',
+                      )}
+                    />
+                  )}
+                  <span>
+                    {pendingCount}{' '}
+                    <span className="hidden sm:inline">pendente{pendingCount > 1 ? 's' : ''}</span>
+                  </span>
+                </button>
+              ) : (
+                <div
+                  className={cn(
+                    'flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium transition sm:px-2.5',
+                    isOnline
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/40 dark:text-emerald-300'
+                      : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/40 dark:text-amber-300',
+                  )}
+                  title={
+                    isOnline
+                      ? `Todos os dados sincronizados com o servidor às ${formatSyncTime(lastSyncTime)}`
+                      : 'Modo offline ativado — salvando no IndexedDB'
+                  }
+                >
+                  {isOnline ? (
+                    <Wifi className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <WifiOff className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {isOnline ? `Sincronizado ${formatSyncTime(lastSyncTime)}` : 'Offline'}
+                  </span>
+                  <span className="text-[11px] sm:hidden">
+                    {isOnline ? formatSyncTime(lastSyncTime) : 'Offline'}
                   </span>
                 </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator className="dark:bg-slate-800" />
-              <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
-                {theme === 'dark' ? (
-                  <>
-                    <Sun className="mr-2 h-4 w-4 text-amber-400" />
-                    <span>Modo Claro</span>
-                  </>
-                ) : (
-                  <>
-                    <Moon className="mr-2 h-4 w-4" />
-                    <span>Modo Escuro</span>
-                  </>
-                )}
-              </DropdownMenuItem>
-              {isOnline && (
-                <DropdownMenuItem
-                  onClick={() => syncNow()}
-                  disabled={isSyncing}
-                  className="cursor-pointer"
-                >
-                  <RefreshCw className={cn('mr-2 h-4 w-4', isSyncing && 'animate-spin')} />
-                  <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Dados'}</span>
-                </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator className="dark:bg-slate-800" />
-              <DropdownMenuItem
-                onClick={handleLogoutClick}
-                className="cursor-pointer text-red-600 focus:text-red-600 dark:text-red-400"
+            </div>
+
+            {/* Botão de busca mobile (<768px onde a barra de busca fixa fica oculta) */}
+            <div className="flex items-center md:hidden">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+                className="h-10 w-10 text-slate-600 dark:text-slate-300"
+                aria-label="Abrir busca"
               >
-                <LogOut className="mr-2 h-4 w-4" />
-                <span>Sair da conta</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <Search className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Theme switcher */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="h-10 w-10 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              title={theme === 'dark' ? 'Alternar para tema claro' : 'Alternar para tema escuro'}
+              aria-label="Alternar tema"
+            >
+              {theme === 'dark' ? (
+                <Sun className="h-5 w-5 text-amber-400" />
+              ) : (
+                <Moon className="h-5 w-5 text-slate-600" />
+              )}
+            </Button>
+
+            {/* User Profile dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex items-center gap-2 rounded-xl p-1.5 transition outline-none hover:bg-slate-100 dark:hover:bg-slate-800"
+                  aria-label="Menu do usuário"
+                >
+                  <Avatar className="h-9 w-9 border border-emerald-200 dark:border-emerald-800">
+                    <AvatarFallback className="bg-emerald-100 text-xs font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                      {userInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="hidden text-left xl:block">
+                    <span className="block text-xs font-semibold">{user?.name || 'Usuário'}</span>
+                    <span className="block text-[10px] text-slate-500 dark:text-slate-400">
+                      {userRoleLabel}
+                    </span>
+                  </span>
+                  <ChevronDown className="hidden h-4 w-4 text-slate-400 xl:block" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-56 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {user?.name || 'Usuário EPA'}
+                    </p>
+                    <p className="text-xs leading-none text-slate-500 dark:text-slate-400">
+                      {user?.email}
+                    </p>
+                    <span className="mt-1 inline-block text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      {userRoleLabel}
+                    </span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="dark:bg-slate-800" />
+                <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
+                  {theme === 'dark' ? (
+                    <>
+                      <Sun className="mr-2 h-4 w-4 text-amber-400" />
+                      <span>Modo Claro</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="mr-2 h-4 w-4" />
+                      <span>Modo Escuro</span>
+                    </>
+                  )}
+                </DropdownMenuItem>
+                {isOnline && (
+                  <DropdownMenuItem
+                    onClick={() => syncNow()}
+                    disabled={isSyncing}
+                    className="cursor-pointer"
+                  >
+                    <RefreshCw className={cn('mr-2 h-4 w-4', isSyncing && 'animate-spin')} />
+                    <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Dados'}</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator className="dark:bg-slate-800" />
+                <DropdownMenuItem
+                  onClick={handleLogoutClick}
+                  className="cursor-pointer text-red-600 focus:text-red-600 dark:text-red-400"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sair da conta</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </header>
 
         {/* Barra de busca retrátil no celular */}

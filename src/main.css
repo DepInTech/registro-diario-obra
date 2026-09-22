@@ -130,17 +130,41 @@
   border-radius: 999px;
 }
 
-/* Isolamento seguro e mínimo do plugin de acessibilidade PrabothCharith */
+/* Proteção defensiva de layout estrutural (EPA Sidebar e Header) */
+aside.epa-sidebar {
+  box-sizing: border-box !important;
+}
+
+@media (min-width: 1024px) {
+  aside.epa-sidebar {
+    display: flex !important;
+    width: 252px !important;
+  }
+  .epa-layout-content {
+    padding-left: 252px !important;
+  }
+}
+
+header.epa-header {
+  width: 100% !important;
+  display: flex !important;
+  box-sizing: border-box !important;
+}
+
+/* Isolamento seguro e fixação do plugin de acessibilidade PrabothCharith */
 #accessibility-menu-btn,
 .accessibility-menu-btn,
 #accessibility-menu-holder,
 .accessibility-menu-holder,
 #accessibility-menu-container,
-.accessibility-menu-container {
+.accessibility-menu-container,
+[id*='accessibility-menu-btn'] {
   position: fixed !important;
   right: 1.25rem !important;
   bottom: 1.25rem !important;
-  z-index: 40 !important;
+  top: auto !important;
+  left: auto !important;
+  z-index: 50 !important;
   margin: 0 !important;
   float: none !important;
 }
@@ -151,7 +175,8 @@
   #accessibility-menu-holder,
   .accessibility-menu-holder,
   #accessibility-menu-container,
-  .accessibility-menu-container {
+  .accessibility-menu-container,
+  [id*='accessibility-menu-btn'] {
     bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px) + 3.5rem) !important;
   }
 }
@@ -160,5 +185,5 @@
 .accessibility-menu,
 #accessibility-menu-modal,
 .accessibility-menu-modal {
-  z-index: 45 !important;
+  z-index: 55 !important;
 }
