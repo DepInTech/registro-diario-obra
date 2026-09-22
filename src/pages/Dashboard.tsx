@@ -65,7 +65,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
   const loadStats = async (_options?: { silent?: boolean }) => {
     try {
-      // 1. If online and PocketBase available, fetch latest RDOs and FieldSheets to ensure fresh server data
+      // 1. Se online e PocketBase disponível, consulta diretamente o servidor e purga itens obsoletos locais
       if (navigator.onLine && pb.authStore.isValid) {
         try {
           const [serverRdos, serverSheets] = await Promise.all([
@@ -73,30 +73,49 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             pb.collection('field_spreadsheets').getFullList({ sort: '-created' }),
           ])
 
-          if (serverRdos.length > 0) {
-            const activeServerRdos = serverRdos.filter((r) => !r.deleted)
-            setRdoCount(activeServerRdos.length)
-            setPendingRdos(activeServerRdos.filter((r) => r.status === 'submitted').length)
-          } else {
-            const rdos = await offlineStorage.getAllRdos()
-            const activeRdos = rdos.filter((r) => !r.deleted)
-            setRdoCount(activeRdos.length)
-            setPendingRdos(activeRdos.filter((r) => r.status === 'submitted').length)
-          }
+          const serverRdoIds = new Set(serverRdos.map((r) => r.id))
+          const serverSheetIds = new Set(serverSheets.map((s) => s.id))
 
-          if (serverSheets.length > 0) {
-            const activeServerSheets = serverSheets.filter((s) => !s.deleted)
-            setSheetCount(activeServerSheets.length)
-          } else {
-            const sheets = await offlineStorage.getAllFieldSheets()
-            const activeSheets = sheets.filter((s) => !s.deleted)
-            setSheetCount(activeSheets.length)
-          }
+          // Purga registros órfãos ou pré-zeragem do IndexedDB
+          const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
+          await offlineStorage.purgePreWipeOperationalData(defaultWipe, {
+            knownServerRdoIds: serverRdoIds,
+            knownServerSheetIds: serverSheetIds,
+            purgeAllSynced: serverRdos.length === 0 && serverSheets.length === 0,
+          })
+
+          // Recalcula somando itens ativos do servidor + eventuais rascunhos pendentes offline novos
+          const localRdos = await offlineStorage.getAllRdos()
+          const pendingNewRdos = localRdos.filter(
+            (r) =>
+              !r.deleted &&
+              (r.syncStatus === 'pending_create' || r.syncStatus === 'pending_update') &&
+              !serverRdoIds.has(r.id),
+          )
+          const activeServerRdos = serverRdos.filter((r) => !r.deleted)
+          const totalActiveRdos = activeServerRdos.length + pendingNewRdos.length
+          const submittedRdosCount =
+            activeServerRdos.filter((r) => r.status === 'submitted').length +
+            pendingNewRdos.filter((r) => r.status === 'submitted').length
+          setRdoCount(totalActiveRdos)
+          setPendingRdos(submittedRdosCount)
+
+          const localSheets = await offlineStorage.getAllFieldSheets()
+          const pendingNewSheets = localSheets.filter(
+            (s) =>
+              !s.deleted &&
+              (s.syncStatus === 'pending_create' || s.syncStatus === 'pending_update') &&
+              !serverSheetIds.has(s.id),
+          )
+          const activeServerSheets = serverSheets.filter((s) => !s.deleted)
+          setSheetCount(activeServerSheets.length + pendingNewSheets.length)
         } catch (serverFetchErr) {
           console.warn(
             'Could not fetch server counts directly, using offline cache:',
             serverFetchErr,
           )
+          const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
+          await offlineStorage.purgePreWipeOperationalData(defaultWipe)
           const rdos = await offlineStorage.getAllRdos()
           const activeRdos = rdos.filter((r) => !r.deleted)
           setRdoCount(activeRdos.length)
@@ -107,6 +126,8 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
           setSheetCount(activeSheets.length)
         }
       } else {
+        const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
+        await offlineStorage.purgePreWipeOperationalData(defaultWipe)
         const rdos = await offlineStorage.getAllRdos()
         const activeRdos = rdos.filter((r) => !r.deleted)
         setRdoCount(activeRdos.length)

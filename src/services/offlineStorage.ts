@@ -397,4 +397,76 @@ export const offlineStorage = {
       req.onerror = () => reject(req.error)
     })
   },
+
+  /**
+   * Executa a purga de zeragem operacional no IndexedDB local.
+   * Regras:
+   * 1. Remove qualquer RDO ou Planilha cujo updatedAt/lastModified seja anterior a wipeTimestamp.
+   * 2. Remove QUALQUER registro sincronizado (syncStatus === 'synced' ou ID real de servidor)
+   *    que não exista mais no servidor (se knownServerIds for fornecido ou se o servidor estiver vazio).
+   * 3. PRESERVA rascunhos locais pendentes (pending_create / pending_update) criados/modificados
+   *    DEPOIS da data de zeragem.
+   * 4. Remove artefatos dependentes de registros descartados (report_wells, report_photos, etc.).
+   */
+  async purgePreWipeOperationalData(
+    wipeTimestamp: number,
+    options?: {
+      purgeAllSynced?: boolean
+      knownServerRdoIds?: Set<string>
+      knownServerSheetIds?: Set<string>
+    },
+  ): Promise<{ purgedRdos: number; purgedSheets: number }> {
+    const [rdos, sheets] = await Promise.all([this.getAllRdos(), this.getAllFieldSheets()])
+
+    let purgedRdos = 0
+    for (const r of rdos) {
+      // Data de referência do item: timestamp numérico de lastModified ou serverUpdatedAt
+      const itemTimestamp = Math.max(
+        r.lastModified || 0,
+        r.serverUpdatedAt ? new Date(r.serverUpdatedAt).getTime() : 0,
+      )
+
+      const isOlderThanWipe = itemTimestamp < wipeTimestamp
+      const isSynced = r.syncStatus === 'synced' || (!r.syncStatus && !r.id.startsWith('rdo_'))
+      const notOnServer = options?.knownServerRdoIds
+        ? !options.knownServerRdoIds.has(r.id)
+        : options?.purgeAllSynced
+
+      // Se for anterior à zeragem OU se for um item sincronizado que não existe no servidor
+      // E NÃO for um rascunho pendente pós-zeragem
+      const isPendingPostWipe =
+        (r.syncStatus === 'pending_create' || r.syncStatus === 'pending_update') &&
+        r.lastModified >= wipeTimestamp
+
+      if (!isPendingPostWipe && (isOlderThanWipe || (isSynced && notOnServer))) {
+        await this.deleteRdo(r.id)
+        purgedRdos++
+      }
+    }
+
+    let purgedSheets = 0
+    for (const s of sheets) {
+      const itemTimestamp = Math.max(
+        s.lastModified || 0,
+        s.serverUpdatedAt ? new Date(s.serverUpdatedAt).getTime() : 0,
+      )
+
+      const isOlderThanWipe = itemTimestamp < wipeTimestamp
+      const isSynced = s.syncStatus === 'synced' || (!s.syncStatus && !s.id.startsWith('field_'))
+      const notOnServer = options?.knownServerSheetIds
+        ? !options.knownServerSheetIds.has(s.id)
+        : options?.purgeAllSynced
+
+      const isPendingPostWipe =
+        (s.syncStatus === 'pending_create' || s.syncStatus === 'pending_update') &&
+        s.lastModified >= wipeTimestamp
+
+      if (!isPendingPostWipe && (isOlderThanWipe || (isSynced && notOnServer))) {
+        await this.deleteFieldSheet(s.id)
+        purgedSheets++
+      }
+    }
+
+    return { purgedRdos, purgedSheets }
+  },
 }

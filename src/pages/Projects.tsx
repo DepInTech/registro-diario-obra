@@ -26,12 +26,7 @@ import {
   isValidDeletionJustification,
   INVALID_JUSTIFICATION_MESSAGE,
 } from '@/lib/justificationValidator'
-import {
-  projects as staticProjects,
-  rdos as staticRdos,
-  fieldSheets as staticFieldSheets,
-  type EpaProject,
-} from '@/data/epa'
+import { projects as staticProjects, type EpaProject, type Status } from '@/data/epa'
 import { useAuth } from '@/context/AuthContext'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -1555,24 +1550,32 @@ function ProjectDetail({
             })),
           )
         } else {
-          // Static fallback
-          const mRdos = staticRdos.filter((r) => r.projectId === project.id)
-          const mSheets = staticFieldSheets.filter((s) => s.projectId === project.id)
+          // Fallback offline: buscar do offlineStorage local
+          const [allLocalRdos, allLocalSheets] = await Promise.all([
+            offlineStorage.getAllRdos(),
+            offlineStorage.getAllFieldSheets(),
+          ])
+          const mRdos = allLocalRdos.filter(
+            (r) => !r.deleted && (r.projectId === project.id || r.projectName === project.name),
+          )
+          const mSheets = allLocalSheets.filter(
+            (s) => !s.deleted && (s.projectId === project.id || s.projectName === project.name),
+          )
           setProjectRdos(
             mRdos.map((r) => ({
               id: r.id,
-              title: `RDO #${String(r.number).padStart(3, '0')} · ${r.activity}`,
-              date: r.date,
-              status: r.status,
+              title: `RDO #${String(r.number).padStart(3, '0')} · ${r.activityTitle || 'Sem título'}`,
+              date: r.reportDate || 'Hoje',
+              status: r.status as Status,
               type: 'RDO',
             })),
           )
           setProjectSheets(
             mSheets.map((s) => ({
               id: s.id,
-              title: `Planilha de Campo · ${s.area}`,
-              date: s.date,
-              status: s.status,
+              title: `Planilha de Campo · ${s.area || 'Geral'}`,
+              date: s.date || 'Hoje',
+              status: s.status as Status,
               type: 'Campo',
             })),
           )

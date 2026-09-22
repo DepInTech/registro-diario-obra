@@ -235,56 +235,46 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     try {
       // 0. VERIFICAÇÃO DE ZERAGEM OPERACIONAL NO SERVIDOR (Anti-ressincronização)
       // Se o servidor passou por um reset operacional (last_operation_wipe_at),
-      // qualquer rascunho ou pendência de RDO ou Planilha anterior a esse reset deve ser
-      // descartada do IndexedDB para evitar recriar dados que o usuário mandou apagar.
+      // qualquer registro local anterior à data da zeragem ou sincronizado não mais existente
+      // deve ser descartado do IndexedDB.
       try {
+        let wipeTimestamp = new Date('2025-05-28T00:00:00Z').getTime()
         const wipeSetting = await pb
           .collection('system_settings')
           .getFirstListItem('key = "last_operation_wipe_at"')
           .catch(() => null)
 
         if (wipeSetting && wipeSetting.value) {
-          const wipeTimestamp = new Date(wipeSetting.value).getTime()
-          const lastProcessedWipe = Number(localStorage.getItem('epa_last_processed_wipe') || '0')
+          wipeTimestamp = new Date(wipeSetting.value).getTime()
+        }
 
-          // Se o wipe ainda não foi totalmente expurgado do IndexedDB local
-          if (wipeTimestamp > lastProcessedWipe) {
-            console.log('Detectada data de zeragem operacional no servidor:', wipeSetting.value)
-            const [localRdos, localFields] = await Promise.all([
-              offlineStorage.getAllRdos(),
-              offlineStorage.getAllFieldSheets(),
-            ])
+        // Consultar contagem no servidor para detectar backend zerado
+        let serverRdoCount = 0
+        let serverSheetCount = 0
+        try {
+          const rdoRes = await pb.collection('reports_rdo').getList(1, 1, { fields: 'id' })
+          serverRdoCount = rdoRes.totalItems
+          const sheetRes = await pb.collection('field_spreadsheets').getList(1, 1, { fields: 'id' })
+          serverSheetCount = sheetRes.totalItems
+        } catch (cntErr) {
+          console.warn('Erro ao verificar contagem de registros no servidor:', cntErr)
+        }
 
-            let purgedRdos = 0
-            for (const r of localRdos) {
-              // Descarta qualquer registro modificado antes do timestamp de zeragem
-              if (r.lastModified < wipeTimestamp) {
-                await offlineStorage.deleteRdo(r.id)
-                purgedRdos++
-              }
-            }
+        const purgeResult = await offlineStorage.purgePreWipeOperationalData(wipeTimestamp, {
+          purgeAllSynced: serverRdoCount === 0 && serverSheetCount === 0,
+        })
 
-            let purgedFields = 0
-            for (const f of localFields) {
-              if (f.lastModified < wipeTimestamp) {
-                await offlineStorage.deleteFieldSheet(f.id)
-                purgedFields++
-              }
-            }
+        localStorage.setItem('epa_last_processed_wipe', String(wipeTimestamp))
 
-            localStorage.setItem('epa_last_processed_wipe', String(wipeTimestamp))
-
-            if (purgedRdos > 0 || purgedFields > 0) {
-              console.log(
-                `Anti-ressincronização: descartados ${purgedRdos} RDOs e ${purgedFields} Planilhas pré-zeragem.`,
-              )
-              toast({
-                title: 'Operação zerada pelo sistema',
-                description: `Cache local sincronizado com a zeragem operacional do servidor (${purgedRdos} RDOs e ${purgedFields} Planilhas antigas descartados).`,
-              })
-              await checkPending()
-            }
-          }
+        if (purgeResult.purgedRdos > 0 || purgeResult.purgedSheets > 0) {
+          console.log(
+            `Anti-ressincronização: descartados ${purgeResult.purgedRdos} RDOs e ${purgeResult.purgedSheets} Planilhas pré-zeragem.`,
+          )
+          toast({
+            title: 'Operação zerada pelo sistema',
+            description: `Cache local sincronizado com a zeragem operacional do servidor (${purgeResult.purgedRdos} RDOs e ${purgeResult.purgedSheets} Planilhas antigas descartados).`,
+          })
+          await checkPending()
         }
       } catch (wipeCheckErr) {
         console.warn('Erro ao verificar last_operation_wipe_at:', wipeCheckErr)
@@ -1189,33 +1179,24 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     // Anti-ressincronização inicial no carregamento se online
     if (navigator.onLine && pb.authStore.isValid) {
+      const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
       pb.collection('system_settings')
         .getFirstListItem('key = "last_operation_wipe_at"')
         .then(async (setting) => {
-          if (setting && setting.value) {
-            const wipeTimestamp = new Date(setting.value).getTime()
-            const lastProcessed = Number(localStorage.getItem('epa_last_processed_wipe') || '0')
-            if (wipeTimestamp > lastProcessed) {
-              const [localRdos, localFields] = await Promise.all([
-                offlineStorage.getAllRdos(),
-                offlineStorage.getAllFieldSheets(),
-              ])
-              for (const r of localRdos) {
-                if (r.lastModified < wipeTimestamp) {
-                  await offlineStorage.deleteRdo(r.id)
-                }
-              }
-              for (const f of localFields) {
-                if (f.lastModified < wipeTimestamp) {
-                  await offlineStorage.deleteFieldSheet(f.id)
-                }
-              }
-              localStorage.setItem('epa_last_processed_wipe', String(wipeTimestamp))
-              checkPending()
-            }
-          }
+          const wipeTimestamp =
+            setting && setting.value ? new Date(setting.value).getTime() : defaultWipe
+          await offlineStorage.purgePreWipeOperationalData(wipeTimestamp)
+          localStorage.setItem('epa_last_processed_wipe', String(wipeTimestamp))
+          checkPending()
         })
-        .catch(() => {})
+        .catch(async () => {
+          await offlineStorage.purgePreWipeOperationalData(defaultWipe)
+          checkPending()
+        })
+    } else {
+      // Offline fallback: purga imediatamente usando o timestamp de zeragem padrão
+      const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
+      offlineStorage.purgePreWipeOperationalData(defaultWipe).then(() => checkPending())
     }
 
     // Initial check

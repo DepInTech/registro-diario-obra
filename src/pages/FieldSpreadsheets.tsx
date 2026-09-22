@@ -53,7 +53,7 @@ import {
 import { authHeaders, exportUrl, updateFieldStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
-import { fieldSheets as mockFieldSheets, type Status } from '@/data/epa'
+import { type Status } from '@/data/epa'
 import {
   FIELD_SHEET_RETURN_OPTIONS,
   createFieldSheetSnapshot,
@@ -106,6 +106,23 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         return
       }
 
+      // Verificação da data da zeragem operacional do sistema (v0.0.70+)
+      // Fallback seguro: data de criação da zeragem no backend: 2025-05-28T00:00:00Z
+      let wipeTimestamp = new Date('2025-05-28T00:00:00Z').getTime()
+      try {
+        if (navigator.onLine && pb.authStore.isValid) {
+          const wipeSetting = await pb
+            .collection('system_settings')
+            .getFirstListItem('key = "last_operation_wipe_at"')
+            .catch(() => null)
+          if (wipeSetting?.value) {
+            wipeTimestamp = new Date(wipeSetting.value).getTime()
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao consultar data da zeragem em Planilhas:', err)
+      }
+
       let localSheets = await offlineStorage.getAllFieldSheets()
 
       if (navigator.onLine && pb.authStore.isValid) {
@@ -113,6 +130,15 @@ export function FieldSpreadsheets({ query }: { query: string }) {
           const records = await pb.collection('field_spreadsheets').getFullList({
             sort: '-date',
             expand: 'project,operator,deleted_by',
+          })
+
+          const serverSheetIds = new Set(records.map((r) => r.id))
+
+          // Purga do IndexedDB: qualquer registro pré-zeragem ou registro sincronizado que
+          // não exista no servidor é removido (preservando rascunhos pendentes pós-zeragem).
+          await offlineStorage.purgePreWipeOperationalData(wipeTimestamp, {
+            knownServerSheetIds: serverSheetIds,
+            purgeAllSynced: records.length === 0,
           })
 
           for (const rec of records) {
@@ -176,66 +202,9 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         } catch (err) {
           console.warn('Could not refresh sheets from server:', err)
         }
-      }
-
-      if (localSheets.length === 0) {
-        for (const m of mockFieldSheets) {
-          const item: OfflineFieldSheetItem = {
-            id: m.id,
-            projectId: m.projectId,
-            projectName: m.project,
-            clientName:
-              m.projectId === 'u6c77idn7hfi13c'
-                ? 'Saneamento Industrial do Maranhão'
-                : 'Petrobras — Refinaria Sul',
-            contractCode: m.projectId === 'u6c77idn7hfi13c' ? 'CT-2025-003' : 'CT-EPA-2025-017',
-            date: '2025-05-28',
-            area: m.area,
-            operator: user?.id || 'cfpekk93zx4j1pr',
-            operatorName: m.operator,
-            weather: 'Sol',
-            pluviometer: 0,
-            morning_time: '',
-            afternoon_time: '',
-            extraction_data: [
-              { well: 'PB-127', morning: '12540', afternoon: '12612', pump: '18', autopump: '72' },
-              { well: 'PB-128', morning: '9860', afternoon: '9918', pump: '20', autopump: '58' },
-            ],
-            infiltration_data: {
-              geralMorning: '830',
-              geralAfternoon: '910',
-              out1Morning: '210',
-              out1Afternoon: '235',
-            },
-            nutrient_done: true,
-            nutrient_map_kg: m.map,
-            nutrient_ureia_kg: m.urea,
-            compressor_data: {
-              hydro1: '2.481',
-              pressure1: '7,2 bar',
-              hydro2: '1.938',
-              pressure2: '7,0 bar',
-              oil1: 'OK',
-              oil2: 'OK',
-            },
-            oil_removal_data: {
-              sao1Volume: '2,5',
-              sao1Date: '2025-05-28',
-              sao2Volume: '1,2',
-              sao2Date: '2025-05-28',
-            },
-            waste_liquid_qty: m.liquidWaste,
-            waste_solid_qty: 1.0,
-            env_5s_check: m.environment,
-            env_checklist_monthly: m.environment,
-            observations: 'Operação dentro dos parâmetros previstos.',
-            status: m.status,
-            syncStatus: 'synced',
-            lastModified: Date.now(),
-            archived: false,
-          }
-          await offlineStorage.saveFieldSheet(item)
-        }
+      } else {
+        // Modo offline: purga local para garantir que nenhum dado pré-zeragem seja exibido
+        await offlineStorage.purgePreWipeOperationalData(wipeTimestamp)
         localSheets = await offlineStorage.getAllFieldSheets()
       }
 

@@ -50,7 +50,7 @@ import { offlineStorage, OfflineRdoItem } from '@/services/offlineStorage'
 import { authHeaders, exportUrl, updateRdoStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
-import { rdos as mockRdos, type Status } from '@/data/epa'
+import { type Status } from '@/data/epa'
 import { EPA_LOGO_BASE64 } from '@/components/epaLogoBase64'
 import { CorrectionHistorySection } from '@/components/CorrectionHistorySection'
 import {
@@ -105,15 +105,41 @@ export function RdosPage({ query }: { query: string }) {
         return
       }
 
+      // Verificação da data da zeragem operacional do sistema (v0.0.70+)
+      // Fallback seguro: data de criação da zeragem no backend: 2025-05-28T00:00:00Z
+      let wipeTimestamp = new Date('2025-05-28T00:00:00Z').getTime()
+      try {
+        if (navigator.onLine && pb.authStore.isValid) {
+          const wipeSetting = await pb
+            .collection('system_settings')
+            .getFirstListItem('key = "last_operation_wipe_at"')
+            .catch(() => null)
+          if (wipeSetting?.value) {
+            wipeTimestamp = new Date(wipeSetting.value).getTime()
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao consultar data da zeragem em RDOs:', err)
+      }
+
       let localRdos = await offlineStorage.getAllRdos()
 
-      // 2. If online and PocketBase available, fetch latest and sync cache
+      // 2. Se online e PocketBase disponível, sincroniza cache com os IDs reais do servidor
       if (navigator.onLine && pb.authStore.isValid) {
         try {
           const records = await pb.collection('reports_rdo').getFullList({
             sort: '-number',
             expand:
               'project,project.client,project.contract,project.company,performed_by,supervised_by,deleted_by',
+          })
+
+          const serverRdoIds = new Set(records.map((r) => r.id))
+
+          // Purga do IndexedDB: qualquer registro pré-zeragem ou registro sincronizado que
+          // não exista no servidor é removido (preservando rascunhos pendentes pós-zeragem).
+          await offlineStorage.purgePreWipeOperationalData(wipeTimestamp, {
+            knownServerRdoIds: serverRdoIds,
+            purgeAllSynced: records.length === 0,
           })
 
           for (const rec of records) {
@@ -208,66 +234,9 @@ export function RdosPage({ query }: { query: string }) {
         } catch (err) {
           console.warn('Could not refresh RDOs from server:', err)
         }
-      }
-
-      // If still empty (first run offline), seed from mock
-      if (localRdos.length === 0) {
-        for (const m of mockRdos) {
-          const item: OfflineRdoItem = {
-            id: m.id,
-            number: m.number,
-            projectId: m.projectId,
-            projectName: m.project,
-            clientName: 'Petrobras — Refinaria Sul',
-            contractCode: 'CT-EPA-2025-017',
-            companyName: 'EPA Gestão Ambiental',
-            location: 'Refinaria Sul — Área Industrial',
-            reportDate: '2025-05-28',
-            weather: m.weather,
-            performedBy: user?.id || 'cfpekk93zx4j1pr',
-            performedByName: m.operator,
-            supervisedBy: '2n6he1v3guzt3yt',
-            supervisedByName: m.technician,
-            activityTitle: m.activity,
-            activityDescription: m.description,
-            timeDisplacement: '01h20',
-            timeWaiting: 'Sem ocorrências',
-            interferences: 'Não houve',
-            planChanges: 'Não houve',
-            accidents: 'Não houve',
-            status: m.status,
-            reviewNotes: m.reviewNotes || '',
-            wells: [
-              { well_id: 'PZ-01', depth: 8.5, completion_date: '2025-05-28', diameter: '4 pol.' },
-              { well_id: 'PZ-02', depth: 10.2, completion_date: '2025-05-28', diameter: '4 pol.' },
-            ],
-            photos: [
-              {
-                id: 'p1',
-                caption: 'Leitura inicial do hidrômetro PZ-01',
-                order: 0,
-                image: 'https://img.usecurling.com/p/640/420?q=monitoring%20well',
-                category: 'general',
-              },
-              {
-                id: 'p2',
-                caption: 'Condição da bomba pneumática',
-                order: 1,
-                image: 'https://img.usecurling.com/p/640/420?q=water%20pump',
-                category: 'general',
-              },
-            ],
-            fieldPhoto: {
-              id: 'p_field_mock',
-              caption: 'Figura 01 – Mapa de localização da área de interesse.',
-              image: 'https://img.usecurling.com/p/640/420?q=field%20site',
-            },
-            syncStatus: 'synced',
-            lastModified: Date.now(),
-            archived: false,
-          }
-          await offlineStorage.saveRdo(item)
-        }
+      } else {
+        // Modo offline: purga local para garantir que nenhum dado pré-zeragem seja exibido
+        await offlineStorage.purgePreWipeOperationalData(wipeTimestamp)
         localRdos = await offlineStorage.getAllRdos()
       }
 
