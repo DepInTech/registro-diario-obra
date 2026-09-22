@@ -55,6 +55,19 @@ import {
   diffFieldSheet,
   appendOrUpdateReturnCycle,
 } from '@/services/historyDiffService'
+
+function isProvisionalId(id?: string | null): boolean {
+  if (!id) return false
+  return (
+    id.startsWith('rdo_') ||
+    id.startsWith('field_') ||
+    id.startsWith('proj_') ||
+    id.startsWith('user_') ||
+    id.startsWith('photo_') ||
+    id.startsWith('temp_') ||
+    id.startsWith('p_')
+  )
+}
 import { CorrectionHistorySection } from '@/components/CorrectionHistorySection'
 
 export function FieldSpreadsheets({ query }: { query: string }) {
@@ -754,7 +767,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                     </div>
                   </div>
                   <div className="mt-4 flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Por {sheet.operatorName || 'Operador'}</span>
+                    <span className="text-slate-400">Por {sheet.operatorName || 'Técnico'}</span>
                     <span className="font-semibold text-emerald-700 dark:text-emerald-400">
                       {sheet.deleted
                         ? 'Ver Arquivada →'
@@ -1081,11 +1094,28 @@ function FieldFullEditor({
       }
     }
 
+    // Garantir vínculo de projeto antes de salvar/sincronizar
+    if (!formData.projectId || isProvisionalId(formData.projectId)) {
+      try {
+        const localProjects = await offlineStorage.getAllProjects()
+        const activeProj =
+          localProjects.find((p) => !p.deleted && !p.archived && p.status === 'active') ||
+          localProjects[0]
+        if (activeProj && !isProvisionalId(activeProj.id)) {
+          formData.projectId = activeProj.id
+          formData.projectName = formData.projectName || activeProj.name
+        }
+      } catch (e) {
+        console.warn('Error resolving active project on FieldSheet save:', e)
+      }
+    }
+
+    const isProvisional = isNew || isProvisionalId(formData.id)
     const updatedItem: OfflineFieldSheetItem = {
       ...formData,
       status: effectiveStatus,
       change_history: updatedHistory,
-      syncStatus: isOnline ? 'pending_update' : isNew ? 'pending_create' : 'pending_update',
+      syncStatus: isProvisional ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
 
@@ -1215,7 +1245,7 @@ function FieldFullEditor({
         description:
           nextStatus === 'approved'
             ? 'A planilha foi bloqueada para novas edições.'
-            : 'O operador foi notificado para os ajustes.',
+            : 'O técnico foi notificado para os ajustes.',
       })
       onSaved()
     } catch (err) {
@@ -2481,7 +2511,7 @@ function FieldFullEditor({
               </Button>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              Informe os pontos ou medições que precisam de correção pelo operador.
+              Informe os pontos ou medições que precisam de correção pelo técnico.
             </p>
 
             <div className="mt-4 space-y-2">

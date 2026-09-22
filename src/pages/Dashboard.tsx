@@ -189,7 +189,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         </div>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 w-full sm:w-auto">
-          {(user?.role === 'admin' || user?.role === 'operator') && (
+          {(user?.role === 'admin' || user?.role === 'technician' || user?.role === 'operator') && (
             <Button
               onClick={() => navigate('rdos')}
               className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-500 shadow-md min-h-[44px] font-semibold text-xs justify-center"
@@ -198,7 +198,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               Novo RDO
             </Button>
           )}
-          {(user?.role === 'admin' || user?.role === 'technician') && (
+          {(user?.role === 'admin' || user?.role === 'technician' || user?.role === 'operator') && (
             <Button
               onClick={() => navigate('fields')}
               variant="outline"
@@ -415,7 +415,9 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               </button>
             )}
 
-            {(user?.role === 'admin' || user?.role === 'operator') && (
+            {(user?.role === 'admin' ||
+              user?.role === 'technician' ||
+              user?.role === 'operator') && (
               <button
                 onClick={() => navigate('rdos')}
                 className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
@@ -433,7 +435,9 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               </button>
             )}
 
-            {(user?.role === 'admin' || user?.role === 'technician') && (
+            {(user?.role === 'admin' ||
+              user?.role === 'technician' ||
+              user?.role === 'operator') && (
               <button
                 onClick={() => navigate('fields')}
                 className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
@@ -461,7 +465,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                   <div>
                     <p className="text-xs font-semibold">Gerenciar Usuários & Acessos</p>
                     <p className="text-[10px] text-slate-500">
-                      Controle de papéis (Admin, Técnico, Operador)
+                      Controle de papéis (Admin e Técnico)
                     </p>
                   </div>
                 </div>

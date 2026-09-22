@@ -44,7 +44,7 @@ export function UsersPage() {
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [role, setRole] = useState<Role>('operator')
+  const [role, setRole] = useState<Role>('technician')
   const [active, setActive] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
@@ -71,7 +71,7 @@ export function UsersPage() {
             id: r.id,
             name: r.name || 'Sem nome',
             email: r.email,
-            role: (r.role as Role) || 'operator',
+            role: (r.role as Role) || 'technician',
             active: r.active !== false,
             lastAccess: r.updated ? new Date(r.updated).toLocaleDateString('pt-BR') : 'Hoje',
           })),
@@ -124,7 +124,7 @@ export function UsersPage() {
     setPassword('')
     setPasswordConfirm('')
     setShowPassword(false)
-    setRole('operator')
+    setRole('technician')
     setActive(true)
     setFormError(null)
     setModalOpen(true)

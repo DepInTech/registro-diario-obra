@@ -86,11 +86,11 @@ export function RdosPage({ query }: { query: string }) {
     setLoading(true)
     try {
       // 1. Load from IndexedDB
-      // RBAC check: Only Admin and Operator can access RDOs
-      if (user && user.role !== 'admin' && user.role !== 'operator') {
+      // RBAC check: Técnico e Administrador têm acesso ao RDO
+      if (user && user.role !== 'admin' && user.role !== 'technician') {
         toast({
           title: 'Você não possui permissão para esta função.',
-          description: 'Acesso restrito ao perfil Operador e Administrador.',
+          description: 'Acesso restrito ao perfil Técnico e Administrador.',
           variant: 'destructive',
         })
         setItems([])
@@ -1388,14 +1388,14 @@ function RdoFullPageEditor({
   }
 
   const isOperator = user?.role === 'operator'
-  const canExportPdf = isAdmin || isOperator
+  // PDF Export (Admin e Técnico têm permissão de visualizar/exportar PDF do RDO)
+  const canExportPdf = isAdmin || isTechnician || isOperator
 
-  // PDF Export (Admin e Operador têm permissão de visualizar/exportar PDF do RDO)
   const handleExportPdf = async () => {
     if (!canExportPdf) {
       toast({
         title: 'Você não possui permissão para esta função.',
-        description: 'Exportação permitida para Administradores e Operadores.',
+        description: 'Exportação permitida para Administradores e Técnicos.',
         variant: 'destructive',
       })
       return
@@ -1848,7 +1848,7 @@ function RdoFullPageEditor({
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="epa-label">Realizado por (Operador/Executor)</label>
+            <label className="epa-label">Realizado por (Técnico/Executor)</label>
             <Input
               placeholder="Nome do operador ou executor"
               value={formData.performedByName ?? ''}

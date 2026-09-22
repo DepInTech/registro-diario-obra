@@ -1568,8 +1568,8 @@ function ProjectDetail({
   }, [project.id])
 
   const historyItems = [
-    ...(isAdmin || isOperator ? projectRdos : []),
-    ...(isAdmin || isTechnician ? projectSheets : []),
+    ...(isAdmin || isTechnician || isOperator ? projectRdos : []),
+    ...(isAdmin || isTechnician || isOperator ? projectSheets : []),
   ]
 
   return (
@@ -1748,7 +1748,7 @@ function ProjectDetail({
       </section>
 
       <div className="grid gap-5 md:grid-cols-3">
-        {(isAdmin || isOperator) && (
+        {(isAdmin || isTechnician || isOperator) && (
           <MiniStat
             label="RDOs emitidos"
             value={String(projectRdos.length)}

@@ -454,6 +454,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               })
             }
 
+            let photoErrorsCount = 0
             for (const p of allPhotosToSync) {
               try {
                 if (p.dataUrl && p.dataUrl.startsWith('data:image/')) {
@@ -472,9 +473,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                   )
                   photoFd.append('order', String(p.order))
                   photoFd.append('category', p.category || 'general')
-                  await pb.collection('report_photos').create(photoFd)
+                  const createdPhoto = await pb.collection('report_photos').create(photoFd)
+
+                  // Atualiza localmente a referência da foto com o arquivo persistido no servidor
+                  // mantendo fallback sem perder imagem se o offline for reaberto
+                  if (p.category === 'field_inspection' && rdo.fieldPhoto) {
+                    rdo.fieldPhoto.image = createdPhoto.image
+                    delete rdo.fieldPhoto.dataUrl
+                  } else if (rdo.photos) {
+                    const matched = rdo.photos.find((ph) => ph.order === p.order)
+                    if (matched) {
+                      matched.image = createdPhoto.image
+                      delete matched.dataUrl
+                    }
+                  }
                 }
-              } catch (photoErr) {
+              } catch (photoErr: any) {
+                photoErrorsCount++
                 console.warn('Could not sync photo for RDO:', photoErr)
               }
             }
@@ -482,12 +497,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             // Update local offline item to synced
             await offlineStorage.deleteRdo(rdo.id)
             rdo.id = record.id
-            rdo.syncStatus = 'synced'
-            rdo.serverUpdatedAt = record.updated
-            delete rdo.syncError
-            rdo.syncAttempts = 0
-            await offlineStorage.saveRdo(rdo)
-            totalSynced++
+            if (photoErrorsCount > 0) {
+              // Se o upload de fotos falhar, o RDO permanece pendente com aviso claro
+              rdo.syncStatus = 'failed'
+              rdo.serverUpdatedAt = record.updated
+              const warnMsg = `RDO criado no servidor (#${record.number || rdo.number}), porém ${photoErrorsCount} foto(s) falharam no upload. As fotos foram preservadas localmente e serão reenviadas na próxima sincronização.`
+              rdo.syncError = warnMsg
+              errorsList.push(warnMsg)
+              totalErrors++
+              await offlineStorage.saveRdo(rdo)
+            } else {
+              rdo.syncStatus = 'synced'
+              rdo.serverUpdatedAt = record.updated
+              delete rdo.syncError
+              rdo.syncAttempts = 0
+              await offlineStorage.saveRdo(rdo)
+              totalSynced++
+            }
           } catch (err: any) {
             console.error('Error syncing offline RDO create:', err)
             totalErrors++
@@ -631,6 +657,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
+            let updatePhotoErrorsCount = 0
             for (const p of photosToSync) {
               try {
                 if (p.dataUrl && p.dataUrl.startsWith('data:image/')) {
@@ -649,19 +676,43 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                   )
                   photoFd.append('order', String(p.order))
                   photoFd.append('category', p.category || 'general')
-                  await pb.collection('report_photos').create(photoFd)
+                  const createdPhoto = await pb.collection('report_photos').create(photoFd)
+
+                  // Atualiza localmente a referência da foto com o arquivo persistido no servidor
+                  if (p.category === 'field_inspection' && rdo.fieldPhoto) {
+                    rdo.fieldPhoto.image = createdPhoto.image
+                    delete rdo.fieldPhoto.dataUrl
+                  } else if (rdo.photos) {
+                    const matched = rdo.photos.find((ph) => ph.order === p.order)
+                    if (matched) {
+                      matched.image = createdPhoto.image
+                      delete matched.dataUrl
+                    }
+                  }
                 }
-              } catch (photoErr) {
+              } catch (photoErr: any) {
+                updatePhotoErrorsCount++
                 console.warn('Could not sync photo for RDO update:', photoErr)
               }
             }
 
-            rdo.syncStatus = 'synced'
-            rdo.serverUpdatedAt = updated.updated
-            delete rdo.syncError
-            rdo.syncAttempts = 0
-            await offlineStorage.saveRdo(rdo)
-            totalSynced++
+            if (updatePhotoErrorsCount > 0) {
+              // Se o upload de fotos falhar na atualização, o item permanece pendente com aviso claro
+              rdo.syncStatus = 'failed'
+              rdo.serverUpdatedAt = updated.updated
+              const warnMsg = `RDO atualizado (#${updated.number || rdo.number}), porém ${updatePhotoErrorsCount} foto(s) falharam no upload. As fotos continuam salvas no dispositivo para nova tentativa.`
+              rdo.syncError = warnMsg
+              errorsList.push(warnMsg)
+              totalErrors++
+              await offlineStorage.saveRdo(rdo)
+            } else {
+              rdo.syncStatus = 'synced'
+              rdo.serverUpdatedAt = updated.updated
+              delete rdo.syncError
+              rdo.syncAttempts = 0
+              await offlineStorage.saveRdo(rdo)
+              totalSynced++
+            }
           } catch (err: any) {
             console.error('Error syncing offline RDO update:', err)
             totalErrors++
