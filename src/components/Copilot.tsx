@@ -132,7 +132,7 @@ export function Copilot() {
       <button
         onClick={() => setOpen(true)}
         className={cn(
-          'fixed bottom-20 right-5 z-40 flex h-14 items-center gap-2.5 rounded-full bg-emerald-700 px-5 text-white shadow-xl shadow-emerald-900/25 transition hover:-translate-y-1 hover:bg-emerald-800 lg:bottom-7 lg:right-7',
+          'fixed bottom-20 right-5 z-40 flex h-14 items-center gap-2.5 rounded-full bg-emerald-700 px-5 text-white shadow-xl shadow-emerald-900/25 transition hover:-translate-y-1 hover:bg-emerald-800 md:bottom-7 md:right-7',
           open && 'pointer-events-none opacity-0',
         )}
         aria-label="Abrir assistente EPA Copilot"
@@ -147,7 +147,7 @@ export function Copilot() {
             'fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-emerald-900/15 bg-white shadow-2xl transition-all duration-200 dark:border-slate-800 dark:bg-slate-900',
             expanded
               ? 'bottom-4 right-4 h-[calc(100vh-32px)] w-[calc(100vw-32px)] max-w-4xl'
-              : 'bottom-20 right-3 h-[min(680px,82vh)] w-[calc(100vw-24px)] max-w-[490px] lg:bottom-7 lg:right-7',
+              : 'bottom-20 right-3 h-[min(680px,82vh)] w-[calc(100vw-24px)] max-w-[490px] md:bottom-7 md:right-7',
           )}
         >
           {/* Header */}

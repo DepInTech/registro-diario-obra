@@ -133,65 +133,98 @@
 /* ==========================================================================
    Posicionamento do botão flutuante do Plugin de Acessibilidade
    Plugin: PrabothCharith/accessibility-plugin (accessibility-menu)
-   Ícone: bi-universal-access-circle
+   Ícone: bi-universal-access-circle / bi-universal-access
    Regras:
    1. Fixo no canto inferior direito (bottom-right) sem quebrar/empurrar o layout.
    2. z-index: 40 (acima do conteúdo comum e barra z-30, abaixo de modais z-50).
-   3. Mobile (< 1024px): espaçado acima da barra inferior de navegação (h-16 / 64px)
-      para não cobrir itens do menu nem atrapalhar o toque nos formulários.
+   3. Isolado EXCLUSIVAMENTE nos seletores específicos do plugin (sem curingas abertos
+      como [id*='...'] ou [class*='...'] que casavam indevidamente com elementos do sistema).
+   4. Mobile (< 768px): espaçado acima da barra inferior de navegação (h-16 / 64px).
+   5. Tablet e Desktop (>= 768px): posicionado no canto inferior direito.
    ========================================================================== */
-#accessibility-icon,
-#accessibility-btn,
-#accessibility-button,
 #accessibility-menu-btn,
+#accessibility-menu-icon,
+#accessibility-btn,
+#accessibility-icon,
+#accessibility-button,
 #accessibility-trigger,
+.accessibility-menu-btn,
+.accessibility-menu-icon,
 .accessibility-btn,
 .accessibility-button,
-.accessibility-menu-btn,
 .accessibility-icon,
-[id*='accessibility-btn'],
-[id*='accessibility-icon'],
-[class*='accessibility-btn'],
-[class*='accessibility-icon'],
-button:has(> .bi-universal-access-circle),
-button:has(> .bi-universal-access) {
+button:has(> i.bi-universal-access-circle),
+button:has(> i.bi-universal-access),
+button:has(> svg.bi-universal-access-circle),
+button:has(> svg.bi-universal-access),
+div.accessibility-menu-btn,
+div#accessibility-menu-btn {
   position: fixed !important;
   right: 1.25rem !important; /* 20px */
-  bottom: 1.25rem !important; /* 20px no desktop */
+  bottom: 1.25rem !important; /* 20px no desktop e tablet */
   top: auto !important;
   left: auto !important;
   z-index: 40 !important; /* Acima do conteúdo e barra z-30, abaixo de modais z-50 */
   margin: 0 !important;
   float: none !important;
+  pointer-events: auto !important;
 }
 
-/* Garante que o menu suspenso aberto pelo plugin fique ancorado corretamente à direita inferior */
-.accessibility-menu,
+/* Garante que o menu suspenso aberto pelo plugin fique ancorado corretamente e abaixo de modais */
 #accessibility-menu,
-[id*='accessibility-menu-modal'],
-[class*='accessibility-menu-container'] {
+.accessibility-menu,
+#accessibility-menu-modal,
+.accessibility-menu-modal,
+.accessibility-menu-container {
   z-index: 45 !important; /* Abaixo de modais z-50 */
+  pointer-events: auto !important;
 }
 
-/* Ajuste Mobile: a barra de navegação inferior tem h-16 (64px) com z-30.
+/* Ajuste Mobile (< 768px): a barra de navegação inferior tem h-16 (64px) com z-30.
    Posiciona o botão acima da barra inferior (bottom: 5.25rem / ~84px) */
-@media screen and (max-width: 1023px) {
-  #accessibility-icon,
-  #accessibility-btn,
-  #accessibility-button,
+@media screen and (max-width: 767px) {
   #accessibility-menu-btn,
+  #accessibility-menu-icon,
+  #accessibility-btn,
+  #accessibility-icon,
+  #accessibility-button,
   #accessibility-trigger,
+  .accessibility-menu-btn,
+  .accessibility-menu-icon,
   .accessibility-btn,
   .accessibility-button,
-  .accessibility-menu-btn,
   .accessibility-icon,
-  [id*='accessibility-btn'],
-  [id*='accessibility-icon'],
-  [class*='accessibility-btn'],
-  [class*='accessibility-icon'],
-  button:has(> .bi-universal-access-circle),
-  button:has(> .bi-universal-access) {
+  button:has(> i.bi-universal-access-circle),
+  button:has(> i.bi-universal-access),
+  button:has(> svg.bi-universal-access-circle),
+  button:has(> svg.bi-universal-access),
+  div.accessibility-menu-btn,
+  div#accessibility-menu-btn {
     bottom: 5.25rem !important; /* 84px (64px barra + 20px respiro) */
     right: 1rem !important; /* 16px */
+  }
+}
+
+/* Ajuste Tablet (768px a 1024px): botão no canto inferior direito limpo */
+@media screen and (min-width: 768px) and (max-width: 1024px) {
+  #accessibility-menu-btn,
+  #accessibility-menu-icon,
+  #accessibility-btn,
+  #accessibility-icon,
+  #accessibility-button,
+  #accessibility-trigger,
+  .accessibility-menu-btn,
+  .accessibility-menu-icon,
+  .accessibility-btn,
+  .accessibility-button,
+  .accessibility-icon,
+  button:has(> i.bi-universal-access-circle),
+  button:has(> i.bi-universal-access),
+  button:has(> svg.bi-universal-access-circle),
+  button:has(> svg.bi-universal-access),
+  div.accessibility-menu-btn,
+  div#accessibility-menu-btn {
+    bottom: 1.25rem !important;
+    right: 1.25rem !important;
   }
 }

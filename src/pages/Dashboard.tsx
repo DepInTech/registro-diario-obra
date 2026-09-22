@@ -222,7 +222,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
       </section>
 
       {/* Main KPI Counters */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           {
             label: 'Projetos ativos',
@@ -360,7 +360,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
       </section>
 
       {/* Recent Activities & Quick Shortcuts */}
-      <section className="grid gap-5 xl:grid-cols-[1.1fr_.9fr]">
+      <section className="grid gap-5 lg:grid-cols-1 xl:grid-cols-[1.1fr_.9fr]">
         <article className="epa-card overflow-hidden">
           <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
             <div>

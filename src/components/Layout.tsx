@@ -242,42 +242,47 @@ export function Layout({
   )
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-gradient-to-b from-[#04332f] via-[#086B63] to-[#02201d] lg:flex">
+      {/* Sidebar fixa no desktop (>1024px) */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col bg-gradient-to-b from-[#04332f] via-[#086B63] to-[#02201d] xl:flex">
         {sidebar}
       </aside>
+
+      {/* Sidebar gaveta recolhível (mobile <768px e tablet 768px-1024px / <1280px) */}
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-50 xl:hidden">
           <button
             className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
             aria-label="Fechar menu"
           />
-          <aside className="relative flex h-full w-[280px] flex-col bg-[#086B63] text-white shadow-2xl">
+          <aside className="relative flex h-full w-[280px] max-w-[85vw] flex-col bg-[#086B63] text-white shadow-2xl">
             {sidebar}
             <Button
               variant="ghost"
               size="icon"
               onClick={() => setMobileOpen(false)}
-              className="absolute right-3 top-3 text-white"
+              className="absolute right-3 top-3 text-white hover:bg-white/10"
             >
               <X />
             </Button>
           </aside>
         </div>
       )}
-      <div className="lg:pl-[252px]">
-        <header className="sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:px-7 dark:border-slate-800 dark:bg-slate-900/95">
+      <div className="xl:pl-[252px]">
+        <header className="sticky top-0 z-30 flex h-[72px] items-center gap-3 border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:px-6 dark:border-slate-800 dark:bg-slate-900/95">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setMobileOpen(true)}
-            className="lg:hidden h-10 w-10"
+            className="xl:hidden h-10 w-10 shrink-0 text-slate-700 dark:text-slate-200"
             aria-label="Abrir menu"
           >
             <Menu className="h-5 w-5" />
           </Button>
           <div className="hidden min-w-0 flex-1 md:block">
-            <h1 className="truncate text-lg font-semibold tracking-tight">{titles[page].title}</h1>
+            <h1 className="truncate text-base lg:text-lg font-semibold tracking-tight">
+              {titles[page].title}
+            </h1>
             <p className="truncate text-xs text-slate-500 dark:text-slate-400">
               {titles[page].subtitle}
             </p>
@@ -485,7 +490,7 @@ export function Layout({
           </div>
         )}
 
-        <main className="mx-auto min-h-[calc(100vh-72px)] max-w-[1600px] px-3 sm:px-4 py-4 sm:py-5 pb-24 md:px-7 md:py-7 lg:pb-8">
+        <main className="mx-auto min-h-[calc(100vh-72px)] max-w-[1600px] px-3 sm:px-4 py-4 sm:py-5 pb-24 md:px-6 md:py-6 md:pb-8 xl:px-7 xl:py-7">
           {conflicts.length > 0 && (
             <div className="mb-6 rounded-2xl border border-amber-400 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/50">
               <div className="flex items-start gap-3">
@@ -535,7 +540,8 @@ export function Layout({
           {children}
         </main>
       </div>
-      <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:hidden safe-area-pb">
+      {/* Barra de abas inferior exclusivamente em celular (< 768px). No tablet e desktop usa o botão hambúrguer / sidebar */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 flex h-16 border-t bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 md:hidden safe-area-pb">
         {visiblePrimary.map((item) => {
           const Icon = item.icon
           const isActive = page === item.id
