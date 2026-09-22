@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   Accessibility,
   ZoomIn,
@@ -11,13 +11,44 @@ import {
   X,
 } from 'lucide-react'
 
+// URL exata do CDN solicitada pelo usuário (mantida rigorosamente)
 const CDN_URL =
   'https://cdn.jsdelivr.net/gh/PrabothCharith/accessibility-plugin@main/accessibility-menu.min.js'
 
+// Seletores comuns usados pelo plugin externo para seu botão flutuante e container
+const EXTERNAL_SELECTORS = [
+  '#accessibility-menu',
+  '.accessibility-menu',
+  "[class*='accessibility-menu']",
+  "[id*='accessibility-menu']",
+  "[id*='accessibility-btn']",
+  "[class*='accessibility-btn']",
+  "[id*='accessibility-icon']",
+  "[class*='accessibility-icon']",
+  '#asw-menu',
+  '.asw-menu',
+  '#asw-widget',
+  '.asw-widget',
+]
+
+function checkExternalPluginPresent(): boolean {
+  if (typeof document === 'undefined') return false
+  return EXTERNAL_SELECTORS.some((sel) => {
+    try {
+      const el = document.querySelector(sel)
+      return el !== null
+    } catch {
+      return false
+    }
+  })
+}
+
 export function AccessibilityLoader() {
   const [cdnLoaded, setCdnLoaded] = useState(false)
+  const [hasExternalMenu, setHasExternalMenu] = useState(false)
   const [useFallback, setUseFallback] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const observerRef = useRef<MutationObserver | null>(null)
 
   // Estados dos recursos de acessibilidade nativos do fallback
   const [fontSizeOffset, setFontSizeOffset] = useState<number>(0)
@@ -26,78 +57,183 @@ export function AccessibilityLoader() {
   const [highlightLinks, setHighlightLinks] = useState(false)
   const [readableFont, setReadableFont] = useState(false)
 
+  // 1. Tratamento global de erros para scripts externos / plugin de acessibilidade
+  // Impede que eventuais erros de runtime não tratados do script do CDN derrubem a aplicação React
+  useEffect(() => {
+    const handleWindowError = (event: ErrorEvent) => {
+      const filename = event.filename || ''
+      const message = (event.message || '').toLowerCase()
+
+      const isA11yPluginError =
+        filename.includes('accessibility') ||
+        filename.includes('jsdelivr') ||
+        filename.includes('PrabothCharith') ||
+        message.includes('accessibility') ||
+        message.includes('font-size') ||
+        message.includes('contrast')
+
+      if (isA11yPluginError) {
+        console.warn(
+          'Isolamento de erro no plugin de acessibilidade CDN:',
+          event.error || event.message,
+        )
+        // Previne que a exceção propague para os manipuladores globais que quebram a interface
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reasonStr = String(event.reason || '').toLowerCase()
+      if (
+        reasonStr.includes('accessibility') ||
+        reasonStr.includes('jsdelivr') ||
+        reasonStr.includes('prbothcharith')
+      ) {
+        console.warn('Isolamento de rejeição no plugin de acessibilidade CDN:', event.reason)
+        event.preventDefault()
+      }
+    }
+
+    window.addEventListener('error', handleWindowError, true)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+    return () => {
+      window.removeEventListener('error', handleWindowError, true)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [])
+
+  // 2. Observa o DOM para detectar se o script do CDN inseriu a UI no documento
+  useEffect(() => {
+    // Verificação inicial
+    if (checkExternalPluginPresent()) {
+      setHasExternalMenu(true)
+      setCdnLoaded(true)
+      setUseFallback(false)
+      return
+    }
+
+    const observer = new MutationObserver(() => {
+      if (checkExternalPluginPresent()) {
+        setHasExternalMenu(true)
+        setCdnLoaded(true)
+        setUseFallback(false)
+      }
+    })
+
+    observerRef.current = observer
+
+    try {
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+      })
+    } catch (e) {
+      console.warn('MutationObserver não pôde ser iniciado em document.body:', e)
+    }
+
+    return () => {
+      observer.disconnect()
+      observerRef.current = null
+    }
+  }, [])
+
+  // 3. Carregamento do script CDN original de forma segura e não bloqueante
   useEffect(() => {
     let isMounted = true
 
-    // Carregamento dinâmico assíncrono e resiliente do plugin externo
+    // Verifica se o script já existe no documento
+    const existingScript = document.querySelector(`script[src="${CDN_URL}"]`)
+    if (existingScript) {
+      // Script já adicionado anteriormente
+      setTimeout(() => {
+        if (!isMounted) return
+        if (checkExternalPluginPresent()) {
+          setCdnLoaded(true)
+          setHasExternalMenu(true)
+          setUseFallback(false)
+        } else {
+          setUseFallback(true)
+        }
+      }, 1000)
+      return
+    }
+
+    // Criar tag de script com atributos seguros
     const script = document.createElement('script')
     script.src = CDN_URL
     script.async = true
     script.defer = true
     script.crossOrigin = 'anonymous'
+    script.setAttribute('data-purpose', 'epa-external-accessibility-plugin')
 
+    // Timeout de segurança: se após 4s o script do CDN não tiver injetado sua UI, ativa o fallback nativo
     const timeoutId = setTimeout(() => {
-      // Se após 3.5 segundos o script do CDN não tiver injetado menu ou falhou, ativa fallback elegante
       if (isMounted) {
-        const existingExternalMenu =
-          document.querySelector('#accessibility-menu') ||
-          document.querySelector('.accessibility-menu') ||
-          document.querySelector("[class*='accessibility-menu']") ||
-          document.querySelector("[id*='accessibility-menu']") ||
-          document.querySelector("[id*='accessibility-btn']")
-        if (!existingExternalMenu) {
+        if (!checkExternalPluginPresent()) {
           setUseFallback(true)
         }
       }
-    }, 3500)
+    }, 4000)
 
     script.onload = () => {
       if (!isMounted) return
       clearTimeout(timeoutId)
-      // Checa se o plugin realmente instanciou a UI no DOM
-      setTimeout(() => {
-        if (!isMounted) return
-        const existingExternalMenu =
-          document.querySelector('#accessibility-menu') ||
-          document.querySelector('.accessibility-menu') ||
-          document.querySelector("[class*='accessibility-menu']") ||
-          document.querySelector("[id*='accessibility-menu']") ||
-          document.querySelector("[id*='accessibility-btn']")
-
-        if (existingExternalMenu) {
+      // O plugin pode levar alguns milissegundos para inicializar e criar a UI
+      const checkInterval = setInterval(() => {
+        if (!isMounted) {
+          clearInterval(checkInterval)
+          return
+        }
+        if (checkExternalPluginPresent()) {
           setCdnLoaded(true)
+          setHasExternalMenu(true)
           setUseFallback(false)
-        } else {
+          clearInterval(checkInterval)
+        }
+      }, 200)
+
+      setTimeout(() => {
+        clearInterval(checkInterval)
+        if (isMounted && !checkExternalPluginPresent()) {
+          // CDN carregou o JS mas não injetou UI, ativa fallback para o usuário ter acessibilidade
           setUseFallback(true)
         }
-      }, 500)
+      }, 3000)
     }
 
     script.onerror = () => {
       if (!isMounted) return
       clearTimeout(timeoutId)
       console.warn(
-        'Accessibility plugin CDN indisponível ou bloqueado por CSP/Offline. Ativando menu de acessibilidade nativo integrado.',
+        'Script de acessibilidade CDN indisponível (offline/CSP/rede). Ativando fallback EPA nativo.',
       )
       setUseFallback(true)
     }
 
-    try {
-      document.body.appendChild(script)
-    } catch (e) {
-      console.warn('Erro ao anexar script de acessibilidade:', e)
-      setUseFallback(true)
-    }
+    // Adiciona o script ao document.body de forma assíncrona pós-ciclo de montagem
+    const appendTimer = setTimeout(() => {
+      try {
+        if (isMounted && !document.querySelector(`script[src="${CDN_URL}"]`)) {
+          document.body.appendChild(script)
+        }
+      } catch (e) {
+        console.warn('Erro ao anexar script CDN de acessibilidade:', e)
+        if (isMounted) setUseFallback(true)
+      }
+    }, 100)
 
     return () => {
       isMounted = false
       clearTimeout(timeoutId)
+      clearTimeout(appendTimer)
     }
   }, [])
 
-  // Aplica estilos dinâmicos de acessibilidade caso o fallback nativo esteja ativo
+  // 4. Aplica estilos dinâmicos de acessibilidade apenas quando o fallback nativo EPA está ativado
   useEffect(() => {
-    if (!useFallback) return
+    if (!useFallback || hasExternalMenu) return
 
     // Ajuste de tamanho de fonte no HTML
     const htmlEl = document.documentElement
@@ -107,34 +243,40 @@ export function AccessibilityLoader() {
       htmlEl.style.fontSize = `${100 + fontSizeOffset * 10}%`
     }
 
-    // Alto contraste
+    // Classes de acessibilidade aplicadas ao body
+    const bodyCls = document.body.classList
     if (highContrast) {
-      document.body.classList.add('epa-a11y-high-contrast')
+      bodyCls.add('epa-a11y-high-contrast')
     } else {
-      document.body.classList.remove('epa-a11y-high-contrast')
+      bodyCls.remove('epa-a11y-high-contrast')
     }
 
-    // Inversão de cores
     if (inverted) {
-      document.body.classList.add('epa-a11y-inverted')
+      bodyCls.add('epa-a11y-inverted')
     } else {
-      document.body.classList.remove('epa-a11y-inverted')
+      bodyCls.remove('epa-a11y-inverted')
     }
 
-    // Destacar links
     if (highlightLinks) {
-      document.body.classList.add('epa-a11y-highlight-links')
+      bodyCls.add('epa-a11y-highlight-links')
     } else {
-      document.body.classList.remove('epa-a11y-highlight-links')
+      bodyCls.remove('epa-a11y-highlight-links')
     }
 
-    // Fonte de fácil leitura
     if (readableFont) {
-      document.body.classList.add('epa-a11y-readable-font')
+      bodyCls.add('epa-a11y-readable-font')
     } else {
-      document.body.classList.remove('epa-a11y-readable-font')
+      bodyCls.remove('epa-a11y-readable-font')
     }
-  }, [useFallback, fontSizeOffset, highContrast, inverted, highlightLinks, readableFont])
+  }, [
+    useFallback,
+    hasExternalMenu,
+    fontSizeOffset,
+    highContrast,
+    inverted,
+    highlightLinks,
+    readableFont,
+  ])
 
   const handleReset = () => {
     setFontSizeOffset(0)
@@ -151,12 +293,12 @@ export function AccessibilityLoader() {
     )
   }
 
-  // Se o script do CDN carregou com sucesso e inseriu seu próprio widget, o fallback não é renderizado
-  if (cdnLoaded && !useFallback) {
+  // Se o menu do CDN foi instanciado no DOM, NUNCA exibe o fallback nativo (evita sobreposição)
+  if (hasExternalMenu || (cdnLoaded && !useFallback)) {
     return null
   }
 
-  // Se fallback estiver ativado (CDN off/bloqueado/lento), renderiza menu flutuante elegante
+  // Se o fallback ainda não foi autorizado (aguardando CDN tentar carregar), não renderiza nada ainda
   if (!useFallback) {
     return null
   }
@@ -167,21 +309,21 @@ export function AccessibilityLoader() {
       aria-label="Ferramentas de acessibilidade"
       className="fixed z-40 select-none bottom-20 right-4 lg:bottom-6 lg:right-6 print:hidden"
     >
-      {/* Botão flutuante para abrir menu de acessibilidade */}
+      {/* Botão flutuante para abrir menu de acessibilidade nativo */}
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
           type="button"
           aria-label="Abrir menu de acessibilidade"
           aria-expanded={false}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-[#086B63] text-white shadow-xl hover:bg-[#06544e] focus:outline-none focus:ring-2 focus:ring-[#086B63] focus:ring-offset-2 transition-transform active:scale-95"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-[#086B63] text-white shadow-xl hover:bg-[#06544e] focus:outline-none focus:ring-2 focus:ring-[#086B63] focus:ring-offset-2 transition-transform active:scale-95 cursor-pointer"
           title="Opções de Acessibilidade"
         >
           <Accessibility className="h-6 w-6" />
         </button>
       )}
 
-      {/* Janela modal do menu de acessibilidade */}
+      {/* Janela modal do menu de acessibilidade nativo */}
       {isOpen && (
         <div
           role="dialog"
@@ -202,7 +344,7 @@ export function AccessibilityLoader() {
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+              className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 cursor-pointer"
               aria-label="Fechar menu de acessibilidade"
             >
               <X className="h-4 w-4" />
@@ -218,7 +360,7 @@ export function AccessibilityLoader() {
                   type="button"
                   onClick={() => setFontSizeOffset((prev) => Math.max(-2, prev - 1))}
                   disabled={fontSizeOffset <= -2}
-                  className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-40"
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                   aria-label="Diminuir texto"
                 >
                   <ZoomOut className="h-3.5 w-3.5" /> A-
@@ -232,7 +374,7 @@ export function AccessibilityLoader() {
                   type="button"
                   onClick={() => setFontSizeOffset((prev) => Math.min(4, prev + 1))}
                   disabled={fontSizeOffset >= 4}
-                  className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-40"
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-medium hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                   aria-label="Aumentar texto"
                 >
                   <ZoomIn className="h-3.5 w-3.5" /> A+
@@ -245,7 +387,7 @@ export function AccessibilityLoader() {
               <button
                 type="button"
                 onClick={() => setHighContrast(!highContrast)}
-                className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium border text-left transition ${
+                className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium border text-left transition cursor-pointer ${
                   highContrast
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200'
                     : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800'
@@ -258,7 +400,7 @@ export function AccessibilityLoader() {
               <button
                 type="button"
                 onClick={() => setInverted(!inverted)}
-                className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium border text-left transition ${
+                className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium border text-left transition cursor-pointer ${
                   inverted
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200'
                     : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800'
@@ -271,7 +413,7 @@ export function AccessibilityLoader() {
               <button
                 type="button"
                 onClick={() => setHighlightLinks(!highlightLinks)}
-                className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium border text-left transition ${
+                className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium border text-left transition cursor-pointer ${
                   highlightLinks
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200'
                     : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800'
@@ -284,7 +426,7 @@ export function AccessibilityLoader() {
               <button
                 type="button"
                 onClick={() => setReadableFont(!readableFont)}
-                className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium border text-left transition ${
+                className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-medium border text-left transition cursor-pointer ${
                   readableFont
                     ? 'border-emerald-600 bg-emerald-50 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-200'
                     : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-800/60 dark:hover:bg-slate-800'
@@ -300,7 +442,7 @@ export function AccessibilityLoader() {
               <button
                 type="button"
                 onClick={handleReset}
-                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/80 transition"
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700/80 transition cursor-pointer"
               >
                 <RotateCcw className="h-3.5 w-3.5" /> Redefinir Ajustes
               </button>

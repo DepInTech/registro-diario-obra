@@ -108,6 +108,13 @@ export default function Index() {
       )}
       {page === 'users' && user?.role === 'admin' && <UsersPage />}
       {page === 'audit' && user?.role === 'admin' && <AuditPage />}
+      {/* Fallback de navegação se o usuário tiver perfil que não se enquadre na rota */}
+      {(page === 'rdos' || page === 'fields') &&
+        user?.role !== 'admin' &&
+        user?.role !== 'technician' && <Dashboard navigate={handleNavigate} />}
+      {(page === 'users' || page === 'audit') && user?.role !== 'admin' && (
+        <Dashboard navigate={handleNavigate} />
+      )}
       <Toaster />
     </Layout>
   )

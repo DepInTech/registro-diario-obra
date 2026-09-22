@@ -131,7 +131,7 @@
 }
 
 /* Ajustes de acessibilidade para o plugin PrabothCharith / accessibility-menu e fallback nativo EPA */
-/* Garante que o menu/botão flutuante não sobreponha a barra mobile inferior (h-16 / 64px) nem fique atrás de modais */
+/* Garante que o menu/botão flutuante não sobreponha a barra mobile inferior (h-16 / 64px) nem fique atrás de modais (z-50) */
 #accessibility-menu,
 .accessibility-menu,
 [class*='accessibility-menu'],
@@ -140,6 +140,10 @@
 [class*='accessibility-btn'],
 [id*='accessibility-icon'],
 [class*='accessibility-icon'],
+#asw-menu,
+.asw-menu,
+#asw-widget,
+.asw-widget,
 #epa-native-accessibility {
   z-index: 45 !important;
 }
@@ -152,6 +156,12 @@
   [id*='accessibility-menu'],
   [id*='accessibility-btn'],
   [class*='accessibility-btn'],
+  [id*='accessibility-icon'],
+  [class*='accessibility-icon'],
+  #asw-menu,
+  .asw-menu,
+  #asw-widget,
+  .asw-widget,
   #epa-native-accessibility {
     bottom: 5.5rem !important; /* acima dos 64px (4rem) da barra mobile */
   }
