@@ -233,6 +233,63 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     const errorsList: string[] = []
 
     try {
+      // 0. VERIFICAÇÃO DE ZERAGEM OPERACIONAL NO SERVIDOR (Anti-ressincronização)
+      // Se o servidor passou por um reset operacional (last_operation_wipe_at),
+      // qualquer rascunho ou pendência de RDO ou Planilha anterior a esse reset deve ser
+      // descartada do IndexedDB para evitar recriar dados que o usuário mandou apagar.
+      try {
+        const wipeSetting = await pb
+          .collection('system_settings')
+          .getFirstListItem('key = "last_operation_wipe_at"')
+          .catch(() => null)
+
+        if (wipeSetting && wipeSetting.value) {
+          const wipeTimestamp = new Date(wipeSetting.value).getTime()
+          const lastProcessedWipe = Number(localStorage.getItem('epa_last_processed_wipe') || '0')
+
+          // Se o wipe ainda não foi totalmente expurgado do IndexedDB local
+          if (wipeTimestamp > lastProcessedWipe) {
+            console.log('Detectada data de zeragem operacional no servidor:', wipeSetting.value)
+            const [localRdos, localFields] = await Promise.all([
+              offlineStorage.getAllRdos(),
+              offlineStorage.getAllFieldSheets(),
+            ])
+
+            let purgedRdos = 0
+            for (const r of localRdos) {
+              // Descarta qualquer registro modificado antes do timestamp de zeragem
+              if (r.lastModified < wipeTimestamp) {
+                await offlineStorage.deleteRdo(r.id)
+                purgedRdos++
+              }
+            }
+
+            let purgedFields = 0
+            for (const f of localFields) {
+              if (f.lastModified < wipeTimestamp) {
+                await offlineStorage.deleteFieldSheet(f.id)
+                purgedFields++
+              }
+            }
+
+            localStorage.setItem('epa_last_processed_wipe', String(wipeTimestamp))
+
+            if (purgedRdos > 0 || purgedFields > 0) {
+              console.log(
+                `Anti-ressincronização: descartados ${purgedRdos} RDOs e ${purgedFields} Planilhas pré-zeragem.`,
+              )
+              toast({
+                title: 'Operação zerada pelo sistema',
+                description: `Cache local sincronizado com a zeragem operacional do servidor (${purgedRdos} RDOs e ${purgedFields} Planilhas antigas descartados).`,
+              })
+              await checkPending()
+            }
+          }
+        }
+      } catch (wipeCheckErr) {
+        console.warn('Erro ao verificar last_operation_wipe_at:', wipeCheckErr)
+      }
+
       // Helper to find an active server project ID fallback
       let fallbackProjectId: string | null = null
       const resolveFallbackProjectId = async (): Promise<string | null> => {
@@ -1129,6 +1186,37 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('offline', handleOffline)
     window.addEventListener('focus', handleWindowFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Anti-ressincronização inicial no carregamento se online
+    if (navigator.onLine && pb.authStore.isValid) {
+      pb.collection('system_settings')
+        .getFirstListItem('key = "last_operation_wipe_at"')
+        .then(async (setting) => {
+          if (setting && setting.value) {
+            const wipeTimestamp = new Date(setting.value).getTime()
+            const lastProcessed = Number(localStorage.getItem('epa_last_processed_wipe') || '0')
+            if (wipeTimestamp > lastProcessed) {
+              const [localRdos, localFields] = await Promise.all([
+                offlineStorage.getAllRdos(),
+                offlineStorage.getAllFieldSheets(),
+              ])
+              for (const r of localRdos) {
+                if (r.lastModified < wipeTimestamp) {
+                  await offlineStorage.deleteRdo(r.id)
+                }
+              }
+              for (const f of localFields) {
+                if (f.lastModified < wipeTimestamp) {
+                  await offlineStorage.deleteFieldSheet(f.id)
+                }
+              }
+              localStorage.setItem('epa_last_processed_wipe', String(wipeTimestamp))
+              checkPending()
+            }
+          }
+        })
+        .catch(() => {})
+    }
 
     // Initial check
     checkPending()

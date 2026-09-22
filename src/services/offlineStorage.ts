@@ -308,6 +308,28 @@ export const offlineStorage = {
     })
   },
 
+  async clearAllRdos(): Promise<void> {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('rdos', 'readwrite')
+      const store = tx.objectStore('rdos')
+      const req = store.clear()
+      req.onsuccess = () => resolve()
+      req.onerror = () => reject(req.error)
+    })
+  },
+
+  async clearAllFieldSheets(): Promise<void> {
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('field_sheets', 'readwrite')
+      const store = tx.objectStore('field_sheets')
+      const req = store.clear()
+      req.onsuccess = () => resolve()
+      req.onerror = () => reject(req.error)
+    })
+  },
+
   // Projects
   async saveProject(project: OfflineProjectItem): Promise<void> {
     const db = await openDB()
