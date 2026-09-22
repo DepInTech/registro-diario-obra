@@ -1094,7 +1094,7 @@ function FieldFullEditor({
       }
     }
 
-    // Garantir vínculo de projeto antes de salvar/sincronizar
+    // Tenta associar projeto ativo se disponível localmente, mas sem bloquear salvamento offline
     if (!formData.projectId || isProvisionalId(formData.projectId)) {
       try {
         const localProjects = await offlineStorage.getAllProjects()

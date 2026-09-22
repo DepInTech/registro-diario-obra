@@ -1387,15 +1387,14 @@ function RdoFullPageEditor({
     }
   }
 
-  const isOperator = user?.role === 'operator'
-  // PDF Export (Admin e Técnico têm permissão de visualizar/exportar PDF do RDO)
-  const canExportPdf = isAdmin || isTechnician || isOperator
+  // PDF Export (Apenas Administradores têm permissão de visualizar/exportar PDF do RDO)
+  const canExportPdf = isAdmin
 
   const handleExportPdf = async () => {
     if (!canExportPdf) {
       toast({
         title: 'Você não possui permissão para esta função.',
-        description: 'Exportação permitida para Administradores e Técnicos.',
+        description: 'Exportação permitida para Administradores.',
         variant: 'destructive',
       })
       return

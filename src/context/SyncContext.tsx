@@ -364,9 +364,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                 targetProjectId = resolved
                 rdo.projectId = resolved
               } else {
-                throw new Error(
-                  'Projeto obrigatório não selecionado para o RDO. Selecione um projeto válido.',
-                )
+                // Se não há projeto vinculado, NÃO enviar payload inválido para o servidor.
+                // Mantém localmente com pending_create e emite aviso explicativo no painel.
+                rdo.syncStatus = 'pending_create'
+                const warnMsg =
+                  'Registro salvo localmente. Aguardando vinculação de projeto pelo Administrador para envio ao servidor.'
+                rdo.syncError = warnMsg
+                errorsList.push(warnMsg)
+                await offlineStorage.saveRdo(rdo)
+                continue
               }
             }
 
@@ -748,7 +754,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                 targetProjectId = resolved
                 sheet.projectId = resolved
               } else {
-                throw new Error('Projeto obrigatório não selecionado para a Planilha de Campo.')
+                // Se não há projeto vinculado, NÃO enviar payload inválido para o servidor.
+                // Mantém localmente com pending_create e emite aviso explicativo no painel.
+                sheet.syncStatus = 'pending_create'
+                const warnMsg =
+                  'Registro salvo localmente. Aguardando vinculação de projeto pelo Administrador para envio ao servidor.'
+                sheet.syncError = warnMsg
+                errorsList.push(warnMsg)
+                await offlineStorage.saveFieldSheet(sheet)
+                continue
               }
             }
 
