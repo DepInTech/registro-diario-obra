@@ -257,7 +257,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               const num = typeof r.number === 'number' && r.number > 0 ? r.number : 0
               const label = num > 0 ? `RDO Nº ${num}` : 'RDO Offline'
               const performer = (r.expand?.performed_by as any) || {}
-              const userName = performer.name || performer.email || 'Operador EPA'
+              const userName = performer.name || performer.email || 'Técnico EPA'
               const proj = (r.expand?.project as any) || {}
               const projName = proj.name || 'Projeto Operacional'
               const timeDisplay = formatFullDateTime(r.created)
@@ -286,7 +286,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               const num = typeof s.number === 'number' && s.number > 0 ? s.number : 0
               const label = num > 0 ? `Planilha Nº ${num}` : 'Planilha Offline'
               const op = (s.expand?.operator as any) || {}
-              const userName = op.name || op.email || 'Operador EPA'
+              const userName = op.name || op.email || 'Técnico EPA'
               const proj = (s.expand?.project as any) || {}
               const projName = proj.name || 'Projeto Operacional'
               const timeDisplay = formatFullDateTime(s.created)
@@ -372,7 +372,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
             const num = typeof r.number === 'number' && r.number > 0 ? r.number : 0
             const label = num > 0 ? `RDO Nº ${num}` : 'RDO Offline'
-            const userName = r.performedByName || user?.name || 'Operador EPA'
+            const userName = r.performedByName || user?.name || 'Técnico EPA'
             const timeVal =
               r.serverCreatedAt || (r.lastModified ? new Date(r.lastModified).toISOString() : '')
             const timeDisplay = formatFullDateTime(timeVal)
@@ -399,7 +399,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
             const num = typeof s.number === 'number' && s.number > 0 ? s.number : 0
             const label = num > 0 ? `Planilha Nº ${num}` : 'Planilha Offline'
-            const userName = s.operatorName || user?.name || 'Operador EPA'
+            const userName = s.operatorName || user?.name || 'Técnico EPA'
             const timeVal =
               s.serverCreatedAt || (s.lastModified ? new Date(s.lastModified).toISOString() : '')
             const timeDisplay = formatFullDateTime(timeVal)
@@ -506,7 +506,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         </div>
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 w-full sm:w-auto">
-          {(user?.role === 'admin' || user?.role === 'technician' || user?.role === 'operator') && (
+          {(user?.role === 'admin' || user?.role === 'technician') && (
             <Button
               onClick={() => navigate('rdos')}
               className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-500 shadow-md min-h-[44px] font-semibold text-xs justify-center"
@@ -515,7 +515,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               Novo RDO
             </Button>
           )}
-          {(user?.role === 'admin' || user?.role === 'technician' || user?.role === 'operator') && (
+          {(user?.role === 'admin' || user?.role === 'technician') && (
             <Button
               onClick={() => navigate('fields')}
               variant="outline"
@@ -743,9 +743,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               </button>
             )}
 
-            {(user?.role === 'admin' ||
-              user?.role === 'technician' ||
-              user?.role === 'operator') && (
+            {(user?.role === 'admin' || user?.role === 'technician') && (
               <button
                 onClick={() => navigate('rdos')}
                 className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
@@ -763,9 +761,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               </button>
             )}
 
-            {(user?.role === 'admin' ||
-              user?.role === 'technician' ||
-              user?.role === 'operator') && (
+            {(user?.role === 'admin' || user?.role === 'technician') && (
               <button
                 onClick={() => navigate('fields')}
                 className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"

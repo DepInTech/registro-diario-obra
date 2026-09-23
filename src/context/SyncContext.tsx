@@ -93,7 +93,7 @@ function translateServerErrorMessage(err: unknown, entity: 'rdo' | 'field' | 'pr
       return 'Responsável pela execução (performer) obrigatório não encontrado.'
     }
     if (errObj.operator) {
-      return 'Operador responsável pela planilha não encontrado.'
+      return 'Técnico responsável pela planilha não encontrado.'
     }
     if (errObj.weather) {
       return 'Condição climática informada é inválida.'

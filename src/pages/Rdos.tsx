@@ -786,7 +786,7 @@ export function RdosPage({ query }: { query: string }) {
                       </p>
                     </td>
                     <td className="px-5 py-4">
-                      <p className="text-xs font-medium">{report.performedByName || 'Operador'}</p>
+                      <p className="text-xs font-medium">{report.performedByName || 'Técnico'}</p>
                       <p className="text-[10px] text-slate-400">
                         {report.supervisedByName || 'Técnico'}
                       </p>
@@ -1437,7 +1437,7 @@ function RdoFullPageEditor({
         description:
           nextStatus === 'approved'
             ? 'O relatório foi bloqueado para edições.'
-            : 'O operador/técnico foi notificado para os ajustes.',
+            : 'O técnico foi notificado para os ajustes.',
       })
       onSaved()
     } catch (err) {
@@ -1950,7 +1950,7 @@ function RdoFullPageEditor({
           <div className="sm:col-span-2">
             <label className="epa-label">Realizado por (Técnico/Executor)</label>
             <Input
-              placeholder="Nome do operador ou executor"
+              placeholder="Nome do técnico ou executor"
               value={formData.performedByName ?? ''}
               onChange={(e) => handleFieldChange('performedByName', e.target.value)}
               disabled={isLocked}

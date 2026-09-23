@@ -1639,7 +1639,7 @@ function FieldFullEditor({
 
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div>
-            <label className="epa-label">OPERADOR</label>
+            <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
             <Input
               value={formData.operatorName || ''}
               onChange={(e) => handleFieldChange('operatorName', e.target.value)}
@@ -2720,7 +2720,7 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
 
       <!-- CABEÇALHO DE METADADOS -->
       <tr>
-        <td class="label-col" style="width: 20%;">OPERADOR:</td>
+        <td class="label-col" style="width: 20%;">TÉCNICO / RESPONSÁVEL:</td>
         <td style="width: 25%; font-weight: bold;">${sheet.operatorName || ''}</td>
         <td class="label-col" style="width: 15%;">DATA:</td>
         <td colspan="2" style="width: 40%; font-weight: bold;">${sheet.date || ''}</td>

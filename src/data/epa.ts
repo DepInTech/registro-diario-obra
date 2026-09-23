@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'technician' | 'operator'
+export type Role = 'admin' | 'technician'
 export type Status = 'draft' | 'submitted' | 'approved' | 'returned'
 
 export interface EpaProject {

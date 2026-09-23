@@ -1,6 +1,6 @@
 import type { RecordModel } from 'pocketbase'
 
-export type UserRole = 'admin' | 'technician' | 'operator'
+export type UserRole = 'admin' | 'technician'
 export type EpaUser = RecordModel & {
   name: string
   email: string
@@ -213,7 +213,6 @@ export interface ChangeHistoryItem {
 export const roleLabels: Record<UserRole, string> = {
   admin: 'Administrador',
   technician: 'Técnico',
-  operator: 'Operador',
 }
 export const statusLabels: Record<string, string> = {
   active: 'Ativo',
