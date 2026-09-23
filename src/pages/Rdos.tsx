@@ -338,16 +338,34 @@ export function RdosPage({ query }: { query: string }) {
       console.warn('Could not read cached projects for new RDO:', e)
     }
 
-    // Pré-monta poços ativos cadastrados pelo Admin no projeto
+    // Pré-monta poços ativos cadastrados pelo Admin no projeto (híbrido: servidor se online, cache local se offline)
     let preloadedWells: OfflineRdoItem['wells'] = []
     if (initialProjectId) {
       try {
+        let wellRecords: any[] = []
         if (navigator.onLine && pb.authStore.isValid) {
-          const records = await pb.collection('wells').getFullList({
-            filter: `project = "${initialProjectId}" && active = true`,
-            sort: 'identification',
-          })
-          preloadedWells = records.map((w: any) => ({
+          try {
+            wellRecords = await pb.collection('wells').getFullList({
+              filter: `project = "${initialProjectId}" && active = true`,
+              sort: 'identification',
+            })
+            if (wellRecords.length > 0) {
+              await offlineStorage.saveProjectWells(initialProjectId, wellRecords)
+            }
+          } catch (serverErr) {
+            console.warn(
+              'Server wells fetch failed, falling back to local cache for new RDO:',
+              serverErr,
+            )
+            wellRecords = await offlineStorage.getProjectWells(initialProjectId)
+          }
+        } else {
+          // Offline: busca do cache local no IndexedDB
+          wellRecords = await offlineStorage.getProjectWells(initialProjectId)
+        }
+
+        if (wellRecords && wellRecords.length > 0) {
+          preloadedWells = wellRecords.map((w: any) => ({
             id: undefined,
             well_id: w.identification,
             depth: w.depth ?? '',
@@ -356,7 +374,7 @@ export function RdosPage({ query }: { query: string }) {
           }))
         }
       } catch (err) {
-        console.warn('Could not fetch active wells from server for new RDO:', err)
+        console.warn('Could not fetch active wells for new RDO:', err)
       }
     }
 
@@ -1066,7 +1084,7 @@ function RdoFullPageEditor({
   >([])
   const [loadingWells, setLoadingWells] = useState(false)
 
-  // Fetch active wells for the selected project
+  // Fetch active wells for the selected project (híbrido: PocketBase ou IndexedDB)
   useEffect(() => {
     let isMounted = true
     const fetchWells = async () => {
@@ -1075,22 +1093,10 @@ function RdoFullPageEditor({
         let list: Array<{ id: string; identification: string; depth?: number; diameter?: string }> =
           []
         if (formData.projectId) {
-          try {
-            const records = await pb.collection('wells').getFullList({
-              filter: `project = "${formData.projectId}" && active = true`,
-              sort: 'identification',
-            })
-            list = records.map((w: any) => ({
-              id: w.id,
-              identification: w.identification,
-              depth: w.depth,
-              diameter: w.diameter,
-            }))
-          } catch (pbErr) {
-            console.warn('Could not fetch wells with project filter, trying general list:', pbErr)
+          if (navigator.onLine && pb.authStore.isValid) {
             try {
               const records = await pb.collection('wells').getFullList({
-                filter: 'active = true',
+                filter: `project = "${formData.projectId}" && active = true`,
                 sort: 'identification',
               })
               list = records.map((w: any) => ({
@@ -1099,8 +1105,34 @@ function RdoFullPageEditor({
                 depth: w.depth,
                 diameter: w.diameter,
               }))
-            } catch (fallbackErr) {
-              console.warn('Fallback wells fetch failed:', fallbackErr)
+              if (records.length > 0) {
+                await offlineStorage.saveProjectWells(formData.projectId, records)
+              }
+            } catch (pbErr) {
+              console.warn(
+                'Could not fetch wells with project filter, checking local cache:',
+                pbErr,
+              )
+              const cached = await offlineStorage.getProjectWells(formData.projectId)
+              if (cached && cached.length > 0) {
+                list = cached.map((w: any) => ({
+                  id: w.id || w.identification,
+                  identification: w.identification,
+                  depth: w.depth,
+                  diameter: w.diameter,
+                }))
+              }
+            }
+          } else {
+            // Offline: busca do cache local no IndexedDB
+            const cached = await offlineStorage.getProjectWells(formData.projectId)
+            if (cached && cached.length > 0) {
+              list = cached.map((w: any) => ({
+                id: w.id || w.identification,
+                identification: w.identification,
+                depth: w.depth,
+                diameter: w.diameter,
+              }))
             }
           }
         }
@@ -1311,14 +1343,14 @@ function RdoFullPageEditor({
     }
 
     setIsSaving(true)
-    // Se o Admin estiver despachando (targetStatus === 'submitted'), o status gravado deve ser 'returned'
-    // para que o documento fique editável para o Técnico preencher os campos operacionais (sem violar
-    // a regra de bloqueio estrito onde o Técnico não pode editar RDOs com status 'submitted' ou 'approved').
-    // Para o Técnico, o statusToSave continua sendo 'submitted'.
+    // Se o Admin estiver despachando/atribuindo o RDO ao Técnico, o status mantém-se 'draft'
+    // (a permissão já permite ao Técnico editar rascunhos 'draft' e devoluções 'returned', sem sujar o histórico com devolução).
+    // O status 'returned' ocorre EXCLUSIVAMENTE quando o RDO já estava 'submitted' e o Admin clica expressamente em "Devolver para correção".
+    // Para o Técnico enviando para aprovação, targetStatus é 'submitted'.
     const effectiveStatus: Status =
       targetStatus === 'submitted'
         ? isAdmin
-          ? 'returned'
+          ? 'draft'
           : 'submitted'
         : targetStatus || formData.status
 
@@ -1363,12 +1395,15 @@ function RdoFullPageEditor({
         title:
           targetStatus === 'submitted'
             ? isAdmin
-              ? 'RDO enviado para o Técnico'
+              ? 'RDO disponibilizado ao Técnico'
               : 'RDO enviado para aprovação'
             : 'RDO salvo com sucesso',
-        description: isOnline
-          ? 'Dados sincronizados com o servidor.'
-          : 'Salvo localmente no dispositivo (IndexedDB). Sincronizará quando voltar a internet.',
+        description:
+          targetStatus === 'submitted' && isAdmin
+            ? 'RDO atribuído e liberado para preenchimento do Técnico.'
+            : isOnline
+              ? 'Dados sincronizados com o servidor.'
+              : 'Salvo localmente no dispositivo (IndexedDB). Sincronizará quando voltar a internet.',
       })
       onSaved()
     } catch (err) {
@@ -1676,15 +1711,14 @@ function RdoFullPageEditor({
                 )}
                 Salvar rascunho
               </Button>
-
               <Button
                 onClick={() => saveReport('submitted')}
                 disabled={isSaving || !formData.activityTitle.trim()}
-                className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
+                className="min-h-[44px] bg-emerald-700 hover:bg-emerald-800 text-white flex-1 sm:flex-none"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                {isAdmin ? 'Enviar para o técnico' : 'Enviar para aprovação'}
-              </Button>
+                {isAdmin ? 'Atribuir ao Técnico' : 'Enviar para aprovação'}
+              </Button>{' '}
             </>
           )}
 

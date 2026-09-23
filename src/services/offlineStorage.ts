@@ -1,6 +1,6 @@
 // IndexedDB Storage Service for offline-first EPA operations
 const DB_NAME = 'epa_offline_db'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 export interface OfflineRdoItem {
   id: string
@@ -179,6 +179,10 @@ function openDB(): Promise<IDBDatabase> {
         const projectStore = db.createObjectStore('projects', { keyPath: 'id' })
         projectStore.createIndex('syncStatus', 'syncStatus', { unique: false })
       }
+      if (!db.objectStoreNames.contains('wells')) {
+        const wellsStore = db.createObjectStore('wells', { keyPath: 'projectId' })
+        wellsStore.createIndex('projectId', 'projectId', { unique: true })
+      }
       if (!db.objectStoreNames.contains('cache')) {
         db.createObjectStore('cache', { keyPath: 'key' })
       }
@@ -339,6 +343,39 @@ export const offlineStorage = {
       req.onsuccess = () => resolve()
       req.onerror = () => reject(req.error)
     })
+  },
+
+  // Wells Cache by Project
+  async saveProjectWells(projectId: string, wells: any[]): Promise<void> {
+    if (!projectId) return
+    const db = await openDB()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('wells', 'readwrite')
+      const store = tx.objectStore('wells')
+      const req = store.put({ projectId, wells, updatedAt: Date.now() })
+      req.onsuccess = () => resolve()
+      req.onerror = () => reject(req.error)
+    })
+  },
+
+  async getProjectWells(projectId: string): Promise<any[]> {
+    if (!projectId) return []
+    try {
+      const db = await openDB()
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction('wells', 'readonly')
+        const store = tx.objectStore('wells')
+        const req = store.get(projectId)
+        req.onsuccess = () => {
+          const res = req.result
+          resolve(res && Array.isArray(res.wells) ? res.wells : [])
+        }
+        req.onerror = () => reject(req.error)
+      })
+    } catch (err) {
+      console.warn('Error reading project wells from IndexedDB:', err)
+      return []
+    }
   },
 
   // Projects

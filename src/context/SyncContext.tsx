@@ -398,6 +398,31 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
 
       // -------------------------------------------------------------
+      // 1.1 Cache Active Wells for all available Projects
+      // -------------------------------------------------------------
+      try {
+        const activeProjects = await pb.collection('projects').getFullList({
+          filter: 'deleted = false',
+          fields: 'id',
+        })
+        for (const pr of activeProjects) {
+          try {
+            const serverWells = await pb.collection('wells').getFullList({
+              filter: `project = "${pr.id}" && active = true`,
+              sort: 'identification',
+            })
+            if (serverWells && serverWells.length > 0) {
+              await offlineStorage.saveProjectWells(pr.id, serverWells)
+            }
+          } catch (wellErr) {
+            console.warn(`Could not cache wells for project ${pr.id}:`, wellErr)
+          }
+        }
+      } catch (wellsSyncErr) {
+        console.warn('Could not sync active wells during syncNow:', wellsSyncErr)
+      }
+
+      // -------------------------------------------------------------
       // 2. Sync RDOs
       // -------------------------------------------------------------
       const rdos = await offlineStorage.getAllRdos()

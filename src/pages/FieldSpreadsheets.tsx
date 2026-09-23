@@ -443,7 +443,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       console.warn('Could not read cached projects for new field spreadsheet:', e)
     }
 
-    // Carrega os poços reais cadastrados pelo Admin no projeto selecionado
+    // Carrega os poços reais cadastrados pelo Admin no projeto selecionado (híbrido: servidor se online, cache IndexedDB se offline)
     let initialExtractionData: Array<{
       well: string
       morning: string
@@ -456,12 +456,28 @@ export function FieldSpreadsheets({ query }: { query: string }) {
 
     if (initialProjectId) {
       try {
+        let wellRecords: any[] = []
         if (navigator.onLine && pb.authStore.isValid) {
-          const records = await pb.collection('wells').getFullList({
-            filter: `project = "${initialProjectId}" && active = true`,
-            sort: 'identification',
-          })
-          initialExtractionData = records.map((w: any) => ({
+          try {
+            wellRecords = await pb.collection('wells').getFullList({
+              filter: `project = "${initialProjectId}" && active = true`,
+              sort: 'identification',
+            })
+            // Atualiza cache local
+            if (wellRecords.length > 0) {
+              await offlineStorage.saveProjectWells(initialProjectId, wellRecords)
+            }
+          } catch (serverErr) {
+            console.warn('Server wells fetch failed, falling back to local cache:', serverErr)
+            wellRecords = await offlineStorage.getProjectWells(initialProjectId)
+          }
+        } else {
+          // Offline: busca do cache local no IndexedDB
+          wellRecords = await offlineStorage.getProjectWells(initialProjectId)
+        }
+
+        if (wellRecords && wellRecords.length > 0) {
+          initialExtractionData = wellRecords.map((w: any) => ({
             well: w.identification,
             morning: '',
             afternoon: '',
@@ -470,7 +486,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
           }))
         }
       } catch (err) {
-        console.warn('Could not fetch active wells from server for new field sheet:', err)
+        console.warn('Could not fetch active wells for new field sheet:', err)
       }
     }
 
@@ -1059,7 +1075,7 @@ function FieldFullEditor({
     }
   }, [formData.projectId])
 
-  // Load project wells from PocketBase (or fallback cache)
+  // Load project wells from PocketBase (or fallback cache do IndexedDB)
   useEffect(() => {
     let isMounted = true
     const fetchWells = async () => {
@@ -1067,22 +1083,34 @@ function FieldFullEditor({
       try {
         let list: Array<{ id: string; identification: string }> = []
         if (formData.projectId) {
-          try {
-            const records = await pb.collection('wells').getFullList({
-              filter: `project = "${formData.projectId}" && active = true`,
-              sort: 'identification',
-            })
-            list = records.map((w: any) => ({ id: w.id, identification: w.identification }))
-          } catch (pbErr) {
-            console.warn('Could not fetch wells with project filter, trying general list:', pbErr)
+          if (navigator.onLine && pb.authStore.isValid) {
             try {
               const records = await pb.collection('wells').getFullList({
-                filter: 'active = true',
+                filter: `project = "${formData.projectId}" && active = true`,
                 sort: 'identification',
               })
               list = records.map((w: any) => ({ id: w.id, identification: w.identification }))
-            } catch (fallbackErr) {
-              console.warn('Fallback wells fetch failed:', fallbackErr)
+              if (records.length > 0) {
+                await offlineStorage.saveProjectWells(formData.projectId, records)
+              }
+            } catch (pbErr) {
+              console.warn('Could not fetch wells from server, checking local cache:', pbErr)
+              const cached = await offlineStorage.getProjectWells(formData.projectId)
+              if (cached && cached.length > 0) {
+                list = cached.map((w: any) => ({
+                  id: w.id || w.identification,
+                  identification: w.identification,
+                }))
+              }
+            }
+          } else {
+            // Offline: busca do cache local no IndexedDB
+            const cached = await offlineStorage.getProjectWells(formData.projectId)
+            if (cached && cached.length > 0) {
+              list = cached.map((w: any) => ({
+                id: w.id || w.identification,
+                identification: w.identification,
+              }))
             }
           }
         }
@@ -1151,14 +1179,14 @@ function FieldFullEditor({
     }
 
     setIsSaving(true)
-    // Se o Admin estiver despachando (targetStatus === 'submitted'), o status gravado deve ser 'returned'
-    // para que a planilha fique editável para o Técnico preencher os campos operacionais (sem violar
-    // a regra onde o Técnico não pode editar planilhas com status 'submitted' ou 'approved').
-    // Para o Técnico, o statusToSave continua sendo 'submitted'.
+    // Se o Admin estiver despachando/atribuindo a planilha ao Técnico, o status mantém-se 'draft'
+    // (a permissão já permite ao Técnico editar rascunhos 'draft' e devoluções 'returned', sem sujar o histórico com devolução).
+    // O status 'returned' ocorre EXCLUSIVAMENTE quando já estava 'submitted' e o Admin clica expressamente em "Devolver para correção".
+    // Para o Técnico enviando para aprovação, targetStatus é 'submitted'.
     const effectiveStatus: Status =
       targetStatus === 'submitted'
         ? isAdmin
-          ? 'returned'
+          ? 'draft'
           : 'submitted'
         : targetStatus || formData.status
 
@@ -1225,13 +1253,13 @@ function FieldFullEditor({
         title:
           targetStatus === 'submitted'
             ? isAdmin
-              ? 'Planilha enviada para o Técnico'
+              ? 'Planilha disponibilizada ao Técnico'
               : 'Planilha enviada para aprovação'
             : 'Planilha salva com sucesso',
         description:
           targetStatus === 'submitted'
             ? isAdmin
-              ? 'Planilha despachada para preenchimento do Técnico.'
+              ? 'Planilha atribuída e liberada para preenchimento do Técnico.'
               : 'A planilha foi enviada para validação e aprovação do Administrador.'
             : isOnline
               ? 'Dados sincronizados com o servidor.'
@@ -1518,7 +1546,7 @@ function FieldFullEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                {isAdmin ? 'Enviar para o técnico' : 'Enviar para aprovação'}
+                {isAdmin ? 'Atribuir ao Técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}
@@ -2576,7 +2604,7 @@ function FieldFullEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 flex-1 sm:flex-none text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                {isAdmin ? 'Enviar para o técnico' : 'Enviar para aprovação'}
+                {isAdmin ? 'Atribuir ao Técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}
