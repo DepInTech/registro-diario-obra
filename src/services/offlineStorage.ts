@@ -139,6 +139,8 @@ export interface OfflineProjectItem {
   status: 'active' | 'paused' | 'completed'
   progress: number
   contract: string
+  company?: string
+  area?: string
   team: string[]
   rawClient?: string
   rawContract?: string

@@ -55,6 +55,8 @@ interface ProjectItem extends EpaProject {
   deletedBy?: string
   deletedByName?: string
   deletedAt?: string
+  company?: string
+  area?: string
 }
 
 export function Projects({
@@ -88,25 +90,20 @@ export function Projects({
   // Modal states
   const [modalOpen, setModalOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<ProjectItem | null>(null)
+  const [isReadOnlyView, setIsReadOnlyView] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
-  // Form states
+  // Form states (Campos de texto livre configuráveis pelo Admin)
   const [formName, setFormName] = useState('')
   const [formEpaCode, setFormEpaCode] = useState('')
-  const [formClientId, setFormClientId] = useState('')
-  const [formContractId, setFormContractId] = useState('')
-  const [formCompanyId, setFormCompanyId] = useState('')
-  const [formAreaId, setFormAreaId] = useState('')
+  const [formClient, setFormClient] = useState('')
   const [formLocation, setFormLocation] = useState('')
+  const [formCompany, setFormCompany] = useState('')
+  const [formContract, setFormContract] = useState('')
+  const [formArea, setFormArea] = useState('')
   const [formProgress, setFormProgress] = useState(0)
   const [formStatus, setFormStatus] = useState<'active' | 'paused' | 'completed'>('active')
   const [formAssignedUsers, setFormAssignedUsers] = useState<string[]>([])
-
-  // Quick auxiliary create modals inside form
-  const [showQuickClient, setShowQuickClient] = useState(false)
-  const [quickClientName, setQuickClientName] = useState('')
-  const [showQuickContract, setShowQuickContract] = useState(false)
-  const [quickContractCode, setQuickContractCode] = useState('')
 
   const { user } = useAuth()
   const { toast } = useToast()
@@ -150,6 +147,8 @@ export function Projects({
           const mapped: ProjectItem[] = records.map((rec) => {
             const expClient = rec.expand?.client as Client | undefined
             const expContract = rec.expand?.contract as Contract | undefined
+            const expCompany = rec.expand?.company as Company | undefined
+            const expArea = rec.expand?.area as Area | undefined
             const expAssigned = rec.expand?.assigned_users as EpaUser[] | undefined
             const expDeletedBy = rec.expand?.deleted_by as EpaUser | undefined
             const assignedIds: string[] = Array.isArray(rec.assigned_users)
@@ -172,6 +171,8 @@ export function Projects({
               status: (rec.status as 'active' | 'paused' | 'completed') || 'active',
               progress: rec.progress ?? 0,
               contract: expContract?.code || 'CT-2025',
+              company: expCompany?.name || 'Grupo EPA',
+              area: expArea?.name || 'Área Geral',
               team: teamNames,
               rawClient: rec.client,
               rawContract: rec.contract,
@@ -211,6 +212,8 @@ export function Projects({
               status: l.status,
               progress: l.progress,
               contract: l.contract,
+              company: l.company || 'Grupo EPA',
+              area: l.area || 'Área Geral',
               team: l.team,
               rawClient: l.rawClient,
               rawContract: l.rawContract,
@@ -244,6 +247,8 @@ export function Projects({
             status: l.status,
             progress: l.progress,
             contract: l.contract,
+            company: l.company || 'Grupo EPA',
+            area: l.area || 'Área Geral',
             team: l.team,
             rawClient: l.rawClient,
             rawContract: l.rawContract,
@@ -320,14 +325,15 @@ export function Projects({
       return
     }
 
+    setIsReadOnlyView(false)
     setEditingProject(null)
     setFormName('')
     setFormEpaCode(`EPA-${String(Math.floor(100 + Math.random() * 900))}`)
-    setFormClientId(clients[0]?.id || '')
-    setFormContractId(contracts[0]?.id || '')
-    setFormCompanyId(companies[0]?.id || '')
-    setFormAreaId(areas[0]?.id || '')
-    setFormLocation('Área Industrial')
+    setFormClient('')
+    setFormLocation('')
+    setFormCompany('Grupo EPA')
+    setFormContract('')
+    setFormArea('')
     setFormProgress(0)
     setFormStatus('active')
     // By default, assign all current users or at least current admin
@@ -339,22 +345,36 @@ export function Projects({
 
   const openEditProjectModal = (p: ProjectItem) => {
     if (!isAdmin) {
-      toast({
-        title: 'Você não possui permissão para esta função.',
-        description: 'Apenas Administradores podem editar projetos.',
-        variant: 'destructive',
-      })
+      // Se for técnico ou operador, abre em modo somente leitura com campos bloqueados 🔒
+      openViewProjectModal(p)
       return
     }
 
+    setIsReadOnlyView(false)
     setEditingProject(p)
     setFormName(p.name)
     setFormEpaCode(p.code)
-    setFormClientId(p.rawClient || clients[0]?.id || '')
-    setFormContractId(p.rawContract || contracts[0]?.id || '')
-    setFormCompanyId(p.rawCompany || companies[0]?.id || '')
-    setFormAreaId(p.rawArea || areas[0]?.id || '')
-    setFormLocation(p.location)
+    setFormClient(p.client || '')
+    setFormLocation(p.location || '')
+    setFormCompany(p.company || 'Grupo EPA')
+    setFormContract(p.contract || '')
+    setFormArea(p.area || '')
+    setFormProgress(p.progress)
+    setFormStatus(p.status)
+    setFormAssignedUsers(p.assignedUsersIds || [])
+    setModalOpen(true)
+  }
+
+  const openViewProjectModal = (p: ProjectItem) => {
+    setIsReadOnlyView(true)
+    setEditingProject(p)
+    setFormName(p.name)
+    setFormEpaCode(p.code)
+    setFormClient(p.client || '')
+    setFormLocation(p.location || '')
+    setFormCompany(p.company || 'Grupo EPA')
+    setFormContract(p.contract || '')
+    setFormArea(p.area || '')
     setFormProgress(p.progress)
     setFormStatus(p.status)
     setFormAssignedUsers(p.assignedUsersIds || [])
@@ -365,46 +385,6 @@ export function Projects({
     setFormAssignedUsers((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
     )
-  }
-
-  const handleCreateQuickClient = async () => {
-    if (!quickClientName.trim()) return
-    try {
-      const created = await pb.collection('clients').create<Client>({
-        name: quickClientName.trim(),
-        contact: 'Contato Direto',
-      })
-      setClients((prev) => [...prev, created])
-      setFormClientId(created.id)
-      setQuickClientName('')
-      setShowQuickClient(false)
-      toast({ title: 'Cliente adicionado com sucesso!' })
-    } catch {
-      toast({ title: 'Erro ao criar cliente rápido', variant: 'destructive' })
-    }
-  }
-
-  const handleCreateQuickContract = async () => {
-    if (!quickContractCode.trim()) return
-    if (!formClientId) {
-      toast({ title: 'Selecione um cliente antes de criar o contrato', variant: 'destructive' })
-      return
-    }
-    try {
-      const created = await pb.collection('contracts').create<Contract>({
-        code: quickContractCode.trim(),
-        client: formClientId,
-        company: formCompanyId || companies[0]?.id || undefined,
-        status: 'active',
-      })
-      setContracts((prev) => [...prev, created])
-      setFormContractId(created.id)
-      setQuickContractCode('')
-      setShowQuickContract(false)
-      toast({ title: 'Contrato adicionado com sucesso!' })
-    } catch {
-      toast({ title: 'Erro ao criar contrato rápido', variant: 'destructive' })
-    }
   }
 
   const confirmDeleteProject = async () => {
@@ -557,44 +537,93 @@ export function Projects({
       return
     }
 
-    // Ensure we have a client and contract (or create fallback if empty)
-    let finalClientId = formClientId
-    let finalContractId = formContractId
-    let finalCompanyId = formCompanyId
-    let finalAreaId = formAreaId
+    const trimmedClient = formClient.trim() || 'Cliente Geral EPA'
+    const trimmedLocation = formLocation.trim() || 'Área Operacional'
+    const trimmedCompany = formCompany.trim() || 'Grupo EPA'
+    const trimmedContract = formContract.trim() || 'CT-2026-001'
+    const trimmedArea = formArea.trim() || 'Área Operacional'
 
     setSubmitting(true)
 
     try {
       if (navigator.onLine && pb.authStore.isValid) {
-        // Fallback creations if none exist
-        if (!finalClientId && clients.length === 0) {
-          const autoClient = await pb.collection('clients').create<Client>({
-            name: 'Cliente Geral EPA',
+        // Resolve ou cria/atualiza os registros de texto livre nas coleções relacionais
+        // 1. Cliente
+        let targetClientId = ''
+        const existingClient = clients.find(
+          (c) => c.name.trim().toLowerCase() === trimmedClient.toLowerCase(),
+        )
+        if (existingClient) {
+          targetClientId = existingClient.id
+        } else {
+          const newClientRec = await pb.collection('clients').create<Client>({
+            name: trimmedClient,
+            contact: 'Cadastro via Projeto',
           })
-          finalClientId = autoClient.id
-          setClients([autoClient])
-        } else if (!finalClientId && clients.length > 0) {
-          finalClientId = clients[0].id
+          targetClientId = newClientRec.id
+          setClients((prev) => [...prev, newClientRec])
         }
 
-        if (!finalContractId && contracts.length === 0) {
-          const autoContract = await pb.collection('contracts').create<Contract>({
-            code: `CT-${new Date().getFullYear()}-001`,
-            client: finalClientId,
+        // 2. Empresa Executora
+        let targetCompanyId = ''
+        const existingCompany = companies.find(
+          (cp) => cp.name.trim().toLowerCase() === trimmedCompany.toLowerCase(),
+        )
+        if (existingCompany) {
+          targetCompanyId = existingCompany.id
+        } else {
+          const newCompRec = await pb.collection('companies').create<Company>({
+            name: trimmedCompany,
+          })
+          targetCompanyId = newCompRec.id
+          setCompanies((prev) => [...prev, newCompRec])
+        }
+
+        // 3. Contrato
+        let targetContractId = ''
+        const existingContract = contracts.find(
+          (ct) => ct.code.trim().toLowerCase() === trimmedContract.toLowerCase(),
+        )
+        if (existingContract) {
+          targetContractId = existingContract.id
+          if (
+            existingContract.client !== targetClientId ||
+            existingContract.company !== targetCompanyId
+          ) {
+            try {
+              await pb.collection('contracts').update(existingContract.id, {
+                client: targetClientId,
+                company: targetCompanyId,
+              })
+            } catch {
+              // ignore minor mismatch
+            }
+          }
+        } else {
+          const newCtRec = await pb.collection('contracts').create<Contract>({
+            code: trimmedContract,
+            client: targetClientId,
+            company: targetCompanyId,
             status: 'active',
           })
-          finalContractId = autoContract.id
-          setContracts([autoContract])
-        } else if (!finalContractId && contracts.length > 0) {
-          finalContractId = contracts[0].id
+          targetContractId = newCtRec.id
+          setContracts((prev) => [...prev, newCtRec])
         }
 
-        if (!finalCompanyId && companies.length > 0) {
-          finalCompanyId = companies[0].id
-        }
-        if (!finalAreaId && areas.length > 0) {
-          finalAreaId = areas[0].id
+        // 4. Área Operacional
+        let targetAreaId = ''
+        const existingArea = areas.find(
+          (ar) => ar.name.trim().toLowerCase() === trimmedArea.toLowerCase(),
+        )
+        if (existingArea) {
+          targetAreaId = existingArea.id
+        } else {
+          const newAreaRec = await pb.collection('areas').create<Area>({
+            name: trimmedArea,
+            description: `Área do projeto ${formName.trim()}`,
+          })
+          targetAreaId = newAreaRec.id
+          setAreas((prev) => [...prev, newAreaRec])
         }
 
         // Assigned users: ensure at least admin is assigned if empty
@@ -606,16 +635,15 @@ export function Projects({
         const payload: Record<string, any> = {
           name: formName.trim(),
           epa_code: formEpaCode.trim(),
-          client: finalClientId,
-          contract: finalContractId,
-          location: formLocation.trim() || 'Área Operacional',
+          client: targetClientId,
+          contract: targetContractId,
+          company: targetCompanyId,
+          area: targetAreaId,
+          location: trimmedLocation,
           progress: Number(formProgress) || 0,
           status: formStatus,
           assigned_users: assigned,
         }
-
-        if (finalCompanyId) payload.company = finalCompanyId
-        if (finalAreaId) payload.area = finalAreaId
 
         if (editingProject) {
           // Update
@@ -642,24 +670,19 @@ export function Projects({
         await loadProjects()
         setModalOpen(false)
       } else {
-        // Offline persistence in IndexedDB with pending queue
-        const clientObj = clients.find((c) => c.id === formClientId)
-        const contractObj = contracts.find((c) => c.id === formContractId)
-
+        // Modo offline
         const offlineItem: OfflineProjectItem = {
           id: editingProject ? editingProject.id : 'proj_' + Date.now(),
           name: formName.trim(),
-          client: clientObj?.name || 'Cliente EPA',
+          client: trimmedClient,
           code: formEpaCode.trim(),
-          location: formLocation.trim() || 'Área Operacional',
+          location: trimmedLocation,
+          company: trimmedCompany,
+          contract: trimmedContract,
+          area: trimmedArea,
           status: formStatus,
           progress: Number(formProgress) || 0,
-          contract: contractObj?.code || 'CT-2025',
           team: ['Annik Almeida', 'Carlos Oliveira'],
-          rawClient: formClientId,
-          rawContract: formContractId,
-          rawCompany: formCompanyId,
-          rawArea: formAreaId,
           assignedUsersIds: formAssignedUsers,
           syncStatus: editingProject ? 'pending_update' : 'pending_create',
           lastModified: Date.now(),
@@ -1069,7 +1092,7 @@ export function Projects({
                             openEditProjectModal(project)
                           }}
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                          title="Editar projeto"
+                          title="Editar projeto (Admin)"
                         >
                           <Edit2 className="h-3.5 w-3.5" />
                         </button>
@@ -1084,6 +1107,18 @@ export function Projects({
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </>
+                    )}
+                    {!isAdmin && !project.deleted && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openViewProjectModal(project)
+                        }}
+                        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
+                        title="Visualizar configuração (Somente leitura 🔒)"
+                      >
+                        <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                      </button>
                     )}
                     {project.deleted && (
                       <span className="rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-800 dark:bg-red-900/40 dark:text-red-300">
@@ -1182,11 +1217,22 @@ export function Projects({
           <div className="w-full max-w-2xl rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto sm:my-8">
             <div className="flex items-center justify-between border-b pb-4 dark:border-slate-800">
               <div>
-                <h3 className="font-bold text-lg text-slate-900 dark:text-white">
-                  {editingProject ? 'Editar Projeto / Obra' : 'Novo Projeto / Obra EPA'}
+                <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
+                  {isReadOnlyView ? (
+                    <>
+                      <Lock className="h-5 w-5 text-amber-600" />
+                      Visualização de Projeto / Obra
+                    </>
+                  ) : editingProject ? (
+                    'Editar Projeto / Obra'
+                  ) : (
+                    'Novo Projeto / Obra EPA'
+                  )}
                 </h3>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  Preencha os dados cadastrais, cliente, contrato e equipe atribuída.
+                  {isReadOnlyView
+                    ? 'Configuração fixa definida pelo Administrador (somente leitura para Técnicos e Operadores).'
+                    : 'Preencha os dados cadastrais (campos de texto livre), cliente, contrato e equipe atribuída.'}
                 </p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => setModalOpen(false)}>
@@ -1194,176 +1240,174 @@ export function Projects({
               </Button>
             </div>
 
+            {isReadOnlyView && (
+              <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-center gap-2">
+                <Lock className="h-4 w-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Acesso restrito:</strong> Apenas o Administrador pode cadastrar ou alterar
+                  as configurações estruturais deste projeto. Os campos abaixo estão bloqueados 🔒.
+                </span>
+              </div>
+            )}
+
             <form onSubmit={handleSubmitProject} className="mt-5 space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <label className="epa-label">Nome do Projeto / Obra *</label>
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Nome da Obra / Projeto *</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">Bloqueado 🔒</span>
+                    )}
+                  </label>
                   <Input
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    placeholder="Ex.: Recuperação Ambiental Lote A"
+                    placeholder="Ex.: Monitoramento Ambiental — Fase II"
                     required
-                    className="mt-1"
+                    readOnly={isReadOnlyView}
+                    disabled={isReadOnlyView}
+                    className="mt-1 disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
                   />
                 </div>
 
                 <div>
-                  <label className="epa-label">Código EPA *</label>
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Código EPA *</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">Bloqueado 🔒</span>
+                    )}
+                  </label>
                   <Input
                     value={formEpaCode}
                     onChange={(e) => setFormEpaCode(e.target.value)}
-                    placeholder="Ex.: EPA-RSL-A01"
+                    placeholder="Ex.: EPA-2025-01"
                     required
-                    className="mt-1 font-mono uppercase"
+                    readOnly={isReadOnlyView}
+                    disabled={isReadOnlyView}
+                    className="mt-1 font-mono uppercase disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
                   />
                 </div>
 
+                {/* Cliente (Texto Livre) */}
                 <div>
-                  <label className="epa-label">Localização da Obra *</label>
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Cliente {isReadOnlyView ? '🔒' : '*'}</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">
+                        Somente leitura 🔒
+                      </span>
+                    )}
+                  </label>
+                  <Input
+                    value={formClient}
+                    onChange={(e) => setFormClient(e.target.value)}
+                    placeholder="Ex.: Empresa ABC Ambiental"
+                    required
+                    readOnly={isReadOnlyView}
+                    disabled={isReadOnlyView}
+                    className="mt-1 disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
+                  />
+                </div>
+
+                {/* Localização do campo (Texto Livre) */}
+                <div>
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Localização do campo {isReadOnlyView ? '🔒' : '*'}</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">
+                        Somente leitura 🔒
+                      </span>
+                    )}
+                  </label>
                   <Input
                     value={formLocation}
                     onChange={(e) => setFormLocation(e.target.value)}
-                    placeholder="Ex.: Refinaria Sul — Área Industrial"
+                    placeholder="Ex.: Unidade Industrial — Área Norte"
                     required
-                    className="mt-1"
+                    readOnly={isReadOnlyView}
+                    disabled={isReadOnlyView}
+                    className="mt-1 disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
                   />
                 </div>
 
-                {/* Cliente */}
+                {/* Empresa Executora (Texto Livre) */}
                 <div>
-                  <div className="flex items-center justify-between">
-                    <label className="epa-label">Cliente *</label>
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickClient(!showQuickClient)}
-                      className="text-[10px] text-emerald-600 hover:underline dark:text-emerald-400"
-                    >
-                      + Novo cliente
-                    </button>
-                  </div>
-                  {showQuickClient ? (
-                    <div className="mt-1 flex gap-2">
-                      <Input
-                        value={quickClientName}
-                        onChange={(e) => setQuickClientName(e.target.value)}
-                        placeholder="Nome do cliente..."
-                        className="h-9 text-xs"
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleCreateQuickClient}
-                        className="h-9 bg-emerald-700 text-white text-xs"
-                      >
-                        Salvar
-                      </Button>
-                    </div>
-                  ) : (
-                    <select
-                      value={formClientId}
-                      onChange={(e) => setFormClientId(e.target.value)}
-                      className="epa-input mt-1"
-                      required
-                    >
-                      <option value="">Selecione um cliente</option>
-                      {clients.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Empresa executora {isReadOnlyView ? '🔒' : '*'}</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">
+                        Somente leitura 🔒
+                      </span>
+                    )}
+                  </label>
+                  <Input
+                    value={formCompany}
+                    onChange={(e) => setFormCompany(e.target.value)}
+                    placeholder="Ex.: Grupo EPA"
+                    required
+                    readOnly={isReadOnlyView}
+                    disabled={isReadOnlyView}
+                    className="mt-1 disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
+                  />
                 </div>
 
-                {/* Contrato */}
+                {/* Contrato (Texto Livre) */}
                 <div>
-                  <div className="flex items-center justify-between">
-                    <label className="epa-label">Contrato *</label>
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickContract(!showQuickContract)}
-                      className="text-[10px] text-emerald-600 hover:underline dark:text-emerald-400"
-                    >
-                      + Novo contrato
-                    </button>
-                  </div>
-                  {showQuickContract ? (
-                    <div className="mt-1 flex gap-2">
-                      <Input
-                        value={quickContractCode}
-                        onChange={(e) => setQuickContractCode(e.target.value)}
-                        placeholder="Ex.: CT-EPA-2025-018"
-                        className="h-9 text-xs"
-                      />
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleCreateQuickContract}
-                        className="h-9 bg-emerald-700 text-white text-xs"
-                      >
-                        Salvar
-                      </Button>
-                    </div>
-                  ) : (
-                    <select
-                      value={formContractId}
-                      onChange={(e) => setFormContractId(e.target.value)}
-                      className="epa-input mt-1"
-                      required
-                    >
-                      <option value="">Selecione um contrato</option>
-                      {contracts.map((ct) => (
-                        <option key={ct.id} value={ct.id}>
-                          {ct.code}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Contrato {isReadOnlyView ? '🔒' : '*'}</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">
+                        Somente leitura 🔒
+                      </span>
+                    )}
+                  </label>
+                  <Input
+                    value={formContract}
+                    onChange={(e) => setFormContract(e.target.value)}
+                    placeholder="Ex.: CT-2026-001"
+                    required
+                    readOnly={isReadOnlyView}
+                    disabled={isReadOnlyView}
+                    className="mt-1 disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
+                  />
                 </div>
 
-                {/* Empresa Executora */}
+                {/* Área Operacional (Texto Livre) */}
                 <div>
-                  <label className="epa-label">Empresa Executora</label>
-                  <select
-                    value={formCompanyId}
-                    onChange={(e) => setFormCompanyId(e.target.value)}
-                    className="epa-input mt-1"
-                  >
-                    <option value="">Selecione a empresa</option>
-                    {companies.map((cp) => (
-                      <option key={cp.id} value={cp.id}>
-                        {cp.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Área Operacional */}
-                <div>
-                  <label className="epa-label">Área Operacional</label>
-                  <select
-                    value={formAreaId}
-                    onChange={(e) => setFormAreaId(e.target.value)}
-                    className="epa-input mt-1"
-                  >
-                    <option value="">Selecione a área</option>
-                    {areas.map((ar) => (
-                      <option key={ar.id} value={ar.id}>
-                        {ar.name}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Área operacional {isReadOnlyView ? '🔒' : '*'}</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">
+                        Somente leitura 🔒
+                      </span>
+                    )}
+                  </label>
+                  <Input
+                    value={formArea}
+                    onChange={(e) => setFormArea(e.target.value)}
+                    placeholder="Ex.: Remediação — Setor 03"
+                    required
+                    readOnly={isReadOnlyView}
+                    disabled={isReadOnlyView}
+                    className="mt-1 disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
+                  />
                 </div>
 
                 {/* Status */}
                 <div>
-                  <label className="epa-label">Status do Projeto *</label>
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Status do Projeto *</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">Bloqueado 🔒</span>
+                    )}
+                  </label>
                   <select
                     value={formStatus}
+                    disabled={isReadOnlyView}
                     onChange={(e) =>
                       setFormStatus(e.target.value as 'active' | 'paused' | 'completed')
                     }
-                    className="epa-input mt-1"
+                    className="epa-input mt-1 disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
                   >
                     <option value="active">Ativo (Em operação)</option>
                     <option value="paused">Pausado (Aguardando)</option>
@@ -1373,23 +1417,31 @@ export function Projects({
 
                 {/* Progresso */}
                 <div>
-                  <label className="epa-label">Progresso Concluído (%)</label>
+                  <label className="epa-label flex items-center justify-between">
+                    <span>Progresso Concluído (%)</span>
+                    {isReadOnlyView && (
+                      <span className="text-[11px] font-normal text-amber-600">Bloqueado 🔒</span>
+                    )}
+                  </label>
                   <div className="flex items-center gap-3 mt-1">
                     <Input
                       type="number"
                       min={0}
                       max={100}
                       value={formProgress}
+                      readOnly={isReadOnlyView}
+                      disabled={isReadOnlyView}
                       onChange={(e) => setFormProgress(Number(e.target.value))}
-                      className="w-24 font-mono"
+                      className="w-24 font-mono disabled:opacity-85 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800"
                     />
                     <input
                       type="range"
                       min={0}
                       max={100}
                       value={formProgress}
+                      disabled={isReadOnlyView}
                       onChange={(e) => setFormProgress(Number(e.target.value))}
-                      className="flex-1 accent-emerald-600"
+                      className="flex-1 accent-emerald-600 disabled:opacity-50"
                     />
                   </div>
                 </div>
@@ -1403,7 +1455,9 @@ export function Projects({
                       Equipe Atribuída ao Projeto (Controle de Acesso)
                     </label>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                      Usuários selecionados terão acesso para emitir RDOs e Planilhas nesta obra.
+                      {isReadOnlyView
+                        ? 'Lista de profissionais cadastrados para esta obra.'
+                        : 'Usuários selecionados terão acesso para emitir RDOs e Planilhas nesta obra.'}
                     </p>
                   </div>
                   <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
@@ -1421,12 +1475,16 @@ export function Projects({
                         <button
                           key={u.id}
                           type="button"
+                          disabled={isReadOnlyView}
                           onClick={() => handleToggleAssignedUser(u.id)}
                           className={cn(
                             'flex items-center justify-between rounded-lg border p-2.5 text-left text-xs transition',
                             isAssigned
                               ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 font-medium dark:bg-emerald-950/40 dark:text-emerald-200'
-                              : 'border-slate-200 hover:bg-slate-50 text-slate-700 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/50',
+                              : 'border-slate-200 text-slate-700 dark:border-slate-800 dark:text-slate-300',
+                            isReadOnlyView
+                              ? 'cursor-default opacity-85'
+                              : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
                           )}
                         >
                           <div>
@@ -1457,25 +1515,37 @@ export function Projects({
               </div>
 
               <div className="mt-6 flex justify-end gap-2 pt-3 border-t dark:border-slate-800">
-                <Button variant="outline" type="button" onClick={() => setModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={submitting}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white min-h-[44px]"
-                >
-                  {submitting ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Salvando projeto...
-                    </span>
-                  ) : editingProject ? (
-                    'Salvar Alterações'
-                  ) : (
-                    'Criar Projeto'
-                  )}
-                </Button>
+                {isReadOnlyView ? (
+                  <Button
+                    type="button"
+                    onClick={() => setModalOpen(false)}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white min-h-[44px]"
+                  >
+                    Fechar
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" type="button" onClick={() => setModalOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={submitting}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white min-h-[44px]"
+                    >
+                      {submitting ? (
+                        <span className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Salvando projeto...
+                        </span>
+                      ) : editingProject ? (
+                        'Salvar Alterações'
+                      ) : (
+                        'Criar Projeto'
+                      )}
+                    </Button>
+                  </>
+                )}
               </div>
             </form>
           </div>
@@ -1512,9 +1582,149 @@ function ProjectDetail({
   const isTechnician = role === 'technician'
   const isAdmin = role === 'admin'
 
+  // Poços vinculados ao projeto
+  const [wells, setWells] = useState<Well[]>([])
+  const [loadingWells, setLoadingWells] = useState(true)
+  const [wellModalOpen, setWellModalOpen] = useState(false)
+  const [editingWell, setEditingWell] = useState<Well | null>(null)
+  const [wellName, setWellName] = useState('')
+  const [wellStatus, setWellStatus] = useState<'active' | 'inactive' | 'abandoned'>('active')
+  const [wellDepth, setWellDepth] = useState<number | ''>('')
+  const [wellDiameter, setWellDiameter] = useState<number | ''>('')
+  const [wellSaving, setWellSaving] = useState(false)
+  const [deletingWellId, setDeletingWellId] = useState<string | null>(null)
+
   const [projectRdos, setProjectRdos] = useState<any[]>([])
   const [projectSheets, setProjectSheets] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
+
+  const fetchWells = async () => {
+    setLoadingWells(true)
+    try {
+      if (navigator.onLine && pb.authStore.isValid) {
+        const records = await pb.collection('wells').getFullList<Well>({
+          filter: `project = "${project.id}"`,
+          sort: 'name',
+        })
+        setWells(records)
+      } else {
+        // Fallback local caso haja dados em cache
+        setWells([])
+      }
+    } catch (err) {
+      console.warn('Erro ao carregar poços do projeto:', err)
+      setWells([])
+    } finally {
+      setLoadingWells(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchWells()
+  }, [project.id])
+
+  const openNewWellModal = () => {
+    if (!isAdmin) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Apenas Administradores podem cadastrar poços no projeto.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setEditingWell(null)
+    setWellName('')
+    setWellStatus('active')
+    setWellDepth('')
+    setWellDiameter('')
+    setWellModalOpen(true)
+  }
+
+  const openEditWellModal = (w: Well) => {
+    if (!isAdmin) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Apenas Administradores podem editar poços do projeto.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setEditingWell(w)
+    setWellName(w.name)
+    setWellStatus((w.status as any) || 'active')
+    setWellDepth(w.depth ?? '')
+    setWellDiameter(w.diameter ?? '')
+    setWellModalOpen(true)
+  }
+
+  const handleSaveWell = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isAdmin) return
+    if (!wellName.trim()) {
+      toast({ title: 'Preencha o nome/identificador do poço (Ex.: PM-01)', variant: 'destructive' })
+      return
+    }
+
+    setWellSaving(true)
+    try {
+      const payload: Record<string, any> = {
+        name: wellName.trim(),
+        project: project.id,
+        status: wellStatus,
+        depth: wellDepth === '' ? null : Number(wellDepth),
+        diameter: wellDiameter === '' ? null : Number(wellDiameter),
+      }
+
+      if (editingWell) {
+        await pb.collection('wells').update(editingWell.id, payload)
+        toast({ title: 'Poço atualizado com sucesso!' })
+      } else {
+        await pb.collection('wells').create(payload)
+        toast({ title: `Poço ${wellName.trim()} vinculado ao projeto!` })
+      }
+
+      setWellModalOpen(false)
+      await fetchWells()
+    } catch (err: any) {
+      console.error('Erro ao salvar poço:', err)
+      toast({
+        title: 'Erro ao salvar poço',
+        description: err.message || 'Verifique a conexão ou os dados informados.',
+        variant: 'destructive',
+      })
+    } finally {
+      setWellSaving(false)
+    }
+  }
+
+  const handleDeleteWell = async (wellId: string) => {
+    if (!isAdmin) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Apenas Administradores podem excluir poços.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const confirmDelete = window.confirm('Deseja realmente remover este poço do projeto?')
+    if (!confirmDelete) return
+
+    setDeletingWellId(wellId)
+    try {
+      await pb.collection('wells').delete(wellId)
+      toast({ title: 'Poço removido do projeto' })
+      await fetchWells()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir poço',
+        description: err.message || 'Tente novamente.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingWellId(null)
+    }
+  }
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -1625,7 +1835,7 @@ function ProjectDetail({
             </Button>
           )}
 
-          {isAdmin && !project.deleted && (
+          {isAdmin && !project.deleted ? (
             <>
               <Button
                 variant="outline"
@@ -1646,7 +1856,17 @@ function ProjectDetail({
                 Excluir
               </Button>
             </>
-          )}
+          ) : !isAdmin && !project.deleted ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onEdit}
+              className="text-xs min-h-[38px] dark:border-slate-800 text-slate-700 dark:text-slate-300"
+            >
+              <Lock className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
+              Ver Configuração (Somente Leitura 🔒)
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -1779,9 +1999,9 @@ function ProjectDetail({
           />
         )}
         <MiniStat
-          label="Poços monitorados"
-          value="12"
-          helper="10 ativos · 2 tamponados"
+          label="Poços vinculados"
+          value={String(wells.length)}
+          helper={`${wells.filter((w) => w.status === 'active').length} ativos · ${wells.filter((w) => w.status !== 'active').length} inativos/abandonados`}
           icon={MapPin}
         />
         {(isAdmin || isTechnician) && (
@@ -1795,53 +2015,182 @@ function ProjectDetail({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
-        <section className="epa-card overflow-hidden">
-          <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
-            <div>
-              <h3 className="font-semibold text-sm">Histórico operacional</h3>
-              <p className="text-xs text-slate-500">RDOs e planilhas vinculados a esta obra</p>
-            </div>
-            <Button variant="ghost" size="icon">
-              <MoreHorizontal className="h-5 w-5" />
-            </Button>
-          </div>
-          <div className="divide-y dark:divide-slate-800">
-            {loadingHistory ? (
-              <div className="p-8 text-center text-xs text-slate-400">
-                <Loader2 className="mx-auto h-5 w-5 animate-spin text-emerald-600 mb-2" />
-                Carregando histórico...
+        <div className="space-y-6">
+          {/* Seção de Poços Vinculados ao Projeto */}
+          <section className="epa-card overflow-hidden">
+            <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
+              <div>
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-emerald-600" />
+                  Poços do Projeto (Pontos de Monitoramento)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {isAdmin
+                    ? 'Gerenciamento exclusivo do Administrador (PM-01, PM-02...)'
+                    : 'Lista fixa definida pelo Administrador (somente leitura para Técnicos 🔒)'}
+                </p>
               </div>
-            ) : historyItems.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">
-                Nenhum histórico operacional cadastrado para esta obra ainda.
-              </div>
-            ) : (
-              historyItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={item.type === 'RDO' ? onOpenRdo : onOpenField}
-                  className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-900/40 transition"
+              {isAdmin && !project.deleted && (
+                <Button
+                  size="sm"
+                  onClick={openNewWellModal}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs h-8"
                 >
-                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                    {item.type === 'RDO' ? (
-                      <ClipboardList className="h-4 w-4" />
-                    ) : (
-                      <FileSpreadsheet className="h-4 w-4" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{item.title}</p>
-                    <p className="text-[10px] text-slate-400">
-                      {item.date} · {item.type}
+                  <Plus className="mr-1 h-3.5 w-3.5" />
+                  Novo Poço
+                </Button>
+              )}
+            </div>
+
+            <div className="p-4">
+              {loadingWells ? (
+                <div className="py-6 text-center text-xs text-slate-400">
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin text-emerald-600 mb-2" />
+                  Carregando poços do projeto...
+                </div>
+              ) : wells.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-6 text-center">
+                  <p className="text-xs text-slate-500">
+                    Nenhum poço cadastrado para este projeto.
+                  </p>
+                  {isAdmin ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={openNewWellModal}
+                      className="mt-3 text-xs"
+                    >
+                      <Plus className="mr-1 h-3 w-3" />
+                      Cadastrar Primeiro Poço (Ex: PM-01)
+                    </Button>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      O Administrador ainda não cadastrou poços para esta obra.
                     </p>
-                  </div>
-                  <StatusBadge status={item.status} />
-                  <ArrowRight className="h-4 w-4 text-slate-300" />
-                </button>
-              ))
-            )}
-          </div>
-        </section>
+                  )}
+                </div>
+              ) : (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {wells.map((well) => (
+                    <div
+                      key={well.id}
+                      className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-slate-50/50 dark:bg-slate-900/40"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
+                            {well.name}
+                          </span>
+                          <span
+                            className={cn(
+                              'text-[10px] px-2 py-0.5 rounded-full font-medium',
+                              well.status === 'active'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                : well.status === 'abandoned'
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+                                  : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+                            )}
+                          >
+                            {well.status === 'active'
+                              ? 'Ativo'
+                              : well.status === 'abandoned'
+                                ? 'Abandonado'
+                                : 'Inativo'}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-500">
+                          {well.depth !== undefined && well.depth !== null && (
+                            <span>Prof: {well.depth} m</span>
+                          )}
+                          {well.diameter !== undefined && well.diameter !== null && (
+                            <span>Diâm: {well.diameter} mm</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {isAdmin ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openEditWellModal(well)}
+                            title="Editar poço"
+                            className="p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-slate-200 dark:hover:bg-slate-800"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteWell(well.id)}
+                            disabled={deletingWellId === well.id}
+                            title="Excluir poço"
+                            className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                          >
+                            {deletingWellId === well.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-red-600" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      ) : (
+                        <span title="Configuração definida pelo Admin (Somente leitura 🔒)">
+                          <Lock className="h-3.5 w-3.5 text-slate-400" />
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Histórico Operacional */}
+          <section className="epa-card overflow-hidden">
+            <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
+              <div>
+                <h3 className="font-semibold text-sm">Histórico operacional</h3>
+                <p className="text-xs text-slate-500">RDOs e planilhas vinculados a esta obra</p>
+              </div>
+              <Button variant="ghost" size="icon">
+                <MoreHorizontal className="h-5 w-5" />
+              </Button>
+            </div>
+            <div className="divide-y dark:divide-slate-800">
+              {loadingHistory ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin text-emerald-600 mb-2" />
+                  Carregando histórico...
+                </div>
+              ) : historyItems.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-400">
+                  Nenhum histórico operacional cadastrado para esta obra ainda.
+                </div>
+              ) : (
+                historyItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={item.type === 'RDO' ? onOpenRdo : onOpenField}
+                    className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-900/40 transition"
+                  >
+                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                      {item.type === 'RDO' ? (
+                        <ClipboardList className="h-4 w-4" />
+                      ) : (
+                        <FileSpreadsheet className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{item.title}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {item.date} · {item.type}
+                      </p>
+                    </div>
+                    <StatusBadge status={item.status} />
+                    <ArrowRight className="h-4 w-4 text-slate-300" />
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
 
         <section className="epa-card p-5">
           <h3 className="font-semibold text-sm">Equipe atribuída</h3>
@@ -1867,6 +2216,101 @@ function ProjectDetail({
           </div>
         </section>
       </div>
+
+      {/* MODAL CADASTRAR / EDITAR POÇO (ADMIN EXCLUSIVO) */}
+      {wellModalOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto">
+            <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
+              <h4 className="font-bold text-base text-slate-900 dark:text-white">
+                {editingWell ? 'Editar Poço do Projeto' : 'Cadastrar Poço no Projeto'}
+              </h4>
+              <Button variant="ghost" size="icon" onClick={() => setWellModalOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleSaveWell} className="mt-4 space-y-4">
+              <div>
+                <label className="epa-label">Identificação / Nome do Poço *</label>
+                <Input
+                  value={wellName}
+                  onChange={(e) => setWellName(e.target.value)}
+                  placeholder="Ex.: PM-01, PM-02..."
+                  required
+                  className="mt-1 font-mono uppercase"
+                />
+              </div>
+
+              <div>
+                <label className="epa-label">Status do Poço</label>
+                <select
+                  value={wellStatus}
+                  onChange={(e) => setWellStatus(e.target.value as any)}
+                  className="epa-input mt-1"
+                >
+                  <option value="active">Ativo</option>
+                  <option value="inactive">Inativo</option>
+                  <option value="abandoned">Tamponado / Abandonado</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="epa-label">Profundidade (m)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={wellDepth}
+                    onChange={(e) =>
+                      setWellDepth(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    placeholder="Ex.: 12.5"
+                    className="mt-1 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="epa-label">Diâmetro (mm)</label>
+                  <Input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    value={wellDiameter}
+                    onChange={(e) =>
+                      setWellDiameter(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    placeholder="Ex.: 50"
+                    className="mt-1 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2 pt-3 border-t dark:border-slate-800">
+                <Button variant="outline" type="button" onClick={() => setWellModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={wellSaving}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white min-h-[40px]"
+                >
+                  {wellSaving ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Salvando...
+                    </span>
+                  ) : editingWell ? (
+                    'Salvar Alterações'
+                  ) : (
+                    'Adicionar Poço'
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

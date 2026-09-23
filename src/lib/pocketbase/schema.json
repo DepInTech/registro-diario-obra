@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-23T12:40:36.460Z",
+  "generatedAt": "2026-09-23T14:25:47.465Z",
   "collections": [
     {
       "name": "users",
@@ -61,11 +61,11 @@
       "name": "clients",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true",
-        "view": "@request.auth.id != '' && @request.auth.active = true",
-        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.role = \"admin\"",
+        "update": "@request.auth.role = \"admin\"",
+        "delete": "@request.auth.role = \"admin\""
       },
       "fields": [
         {
@@ -107,11 +107,11 @@
       "name": "companies",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true",
-        "view": "@request.auth.id != '' && @request.auth.active = true",
-        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.role = \"admin\"",
+        "update": "@request.auth.role = \"admin\"",
+        "delete": "@request.auth.role = \"admin\""
       },
       "fields": [
         {
@@ -147,11 +147,11 @@
       "name": "areas",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true",
-        "view": "@request.auth.id != '' && @request.auth.active = true",
-        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.role = \"admin\"",
+        "update": "@request.auth.role = \"admin\"",
+        "delete": "@request.auth.role = \"admin\""
       },
       "fields": [
         {
@@ -187,11 +187,11 @@
       "name": "contracts",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true",
-        "view": "@request.auth.id != '' && @request.auth.active = true",
-        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.role = \"admin\"",
+        "update": "@request.auth.role = \"admin\"",
+        "delete": "@request.auth.role = \"admin\""
       },
       "fields": [
         {
@@ -382,11 +382,11 @@
       "name": "wells",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
-        "view": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || project.assigned_users ?~ @request.auth.id)",
-        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
-        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'"
+        "list": "@request.auth.id != \"\"",
+        "view": "@request.auth.id != \"\"",
+        "create": "@request.auth.role = \"admin\"",
+        "update": "@request.auth.role = \"admin\"",
+        "delete": "@request.auth.role = \"admin\""
       },
       "fields": [
         {

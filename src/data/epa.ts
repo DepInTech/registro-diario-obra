@@ -10,6 +10,8 @@ export interface EpaProject {
   status: 'active' | 'paused' | 'completed'
   progress: number
   contract: string
+  company?: string
+  area?: string
   team: string[]
 }
 
