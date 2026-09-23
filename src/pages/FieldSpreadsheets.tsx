@@ -443,6 +443,37 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       console.warn('Could not read cached projects for new field spreadsheet:', e)
     }
 
+    // Carrega os poços reais cadastrados pelo Admin no projeto selecionado
+    let initialExtractionData: Array<{
+      well: string
+      morning: string
+      afternoon: string
+      pump: string
+      autopump: string
+      autopump_condition?: string
+      autopump_condition_other?: string
+    }> = []
+
+    if (initialProjectId) {
+      try {
+        if (navigator.onLine && pb.authStore.isValid) {
+          const records = await pb.collection('wells').getFullList({
+            filter: `project = "${initialProjectId}" && active = true`,
+            sort: 'identification',
+          })
+          initialExtractionData = records.map((w: any) => ({
+            well: w.identification,
+            morning: '',
+            afternoon: '',
+            pump: '',
+            autopump: '',
+          }))
+        }
+      } catch (err) {
+        console.warn('Could not fetch active wells from server for new field sheet:', err)
+      }
+    }
+
     const newSheet: OfflineFieldSheetItem = {
       id: 'field_' + Date.now(),
       projectId: initialProjectId,
@@ -459,11 +490,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       afternoon_time: '',
       infiltration_morning_time: '',
       infiltration_afternoon_time: '',
-      extraction_data: [
-        { well: 'PR-01', morning: '', afternoon: '', pump: '', autopump: '' },
-        { well: 'PR-09', morning: '', afternoon: '', pump: '', autopump: '' },
-        { well: 'PR-10', morning: '', afternoon: '', pump: '', autopump: '' },
-      ],
+      extraction_data: initialExtractionData,
       infiltration_data: {
         geralMorning: '',
         geralAfternoon: '',
@@ -1637,7 +1664,7 @@ function FieldFullEditor({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
             <Input
@@ -1655,16 +1682,6 @@ function FieldFullEditor({
               value={formData.date}
               onChange={(e) => handleFieldChange('date', e.target.value)}
               disabled={isLocked}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <label className="epa-label">ÁREA</label>
-            <Input
-              value={formData.area}
-              onChange={(e) => handleFieldChange('area', e.target.value)}
-              disabled={isLocked}
-              placeholder="Ex.: OFICINA CENTRAL"
               className="mt-1"
             />
           </div>

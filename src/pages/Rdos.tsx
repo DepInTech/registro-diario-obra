@@ -338,6 +338,28 @@ export function RdosPage({ query }: { query: string }) {
       console.warn('Could not read cached projects for new RDO:', e)
     }
 
+    // Pré-monta poços ativos cadastrados pelo Admin no projeto
+    let preloadedWells: OfflineRdoItem['wells'] = []
+    if (initialProjectId) {
+      try {
+        if (navigator.onLine && pb.authStore.isValid) {
+          const records = await pb.collection('wells').getFullList({
+            filter: `project = "${initialProjectId}" && active = true`,
+            sort: 'identification',
+          })
+          preloadedWells = records.map((w: any) => ({
+            id: undefined,
+            well_id: w.identification,
+            depth: w.depth ?? '',
+            completion_date: '',
+            diameter: w.diameter ?? w.default_diameter ?? '',
+          }))
+        }
+      } catch (err) {
+        console.warn('Could not fetch active wells from server for new RDO:', err)
+      }
+    }
+
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
       number: undefined,
@@ -361,7 +383,7 @@ export function RdosPage({ query }: { query: string }) {
       planChanges: '',
       accidents: '',
       status: 'draft',
-      wells: [],
+      wells: preloadedWells,
       photos: [],
       fieldPhoto: undefined,
       syncStatus: 'pending_create',
@@ -1799,89 +1821,9 @@ function RdoFullPageEditor({
         <SectionHeader
           icon={FileText}
           title="1. Cabeçalho do Relatório"
-          subtitle="Identificação da obra, dados contratuais e condições operacionais"
+          subtitle="Data do relatório, condições climáticas, equipe responsável e numeração sequencial"
         />
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label className="epa-label">Cliente</label>
-            <Input
-              placeholder="Ex.: VALE S.A."
-              value={formData.clientName ?? ''}
-              onChange={(e) => handleFieldChange('clientName', e.target.value)}
-              disabled={isLocked || isTechnician}
-              className={cn(
-                'mt-1.5',
-                isTechnician &&
-                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-              )}
-            />
-          </div>
-          <div>
-            <label className="epa-label">Contrato</label>
-            <Input
-              placeholder="Ex.: 5900117667"
-              value={formData.contractCode ?? ''}
-              onChange={(e) => handleFieldChange('contractCode', e.target.value)}
-              disabled={isLocked || isTechnician}
-              className={cn(
-                'mt-1.5',
-                isTechnician &&
-                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-              )}
-            />
-          </div>
-          <div>
-            <div className="flex items-center justify-between">
-              <label className="epa-label">Local</label>
-              {isReturnedField('location') && (
-                <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
-                  🟨 CORREÇÃO SOLICITADA
-                </span>
-              )}
-            </div>
-            <Input
-              placeholder="Ex.: Açailândia - MA"
-              value={formData.location ?? ''}
-              onChange={(e) => {
-                handleFieldChange('location', e.target.value)
-                clearReturnedField('location')
-              }}
-              disabled={isLocked}
-              className={cn(
-                'mt-1.5',
-                isReturnedField('location') &&
-                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
-              )}
-            />
-          </div>
-          <div>
-            <label className="epa-label">Projeto EPA</label>
-            <Input
-              placeholder="Ex.: 24-0234"
-              value={formData.projectName ?? ''}
-              onChange={(e) => handleFieldChange('projectName', e.target.value)}
-              disabled={isLocked || isTechnician}
-              className={cn(
-                'mt-1.5',
-                isTechnician &&
-                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-              )}
-            />
-          </div>
-          <div>
-            <label className="epa-label">Empresa Executora</label>
-            <Input
-              placeholder="Ex.: EPA Engenharia de Proteção Ambiental"
-              value={formData.companyName ?? ''}
-              onChange={(e) => handleFieldChange('companyName', e.target.value)}
-              disabled={isLocked || isTechnician}
-              className={cn(
-                'mt-1.5',
-                isTechnician &&
-                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-              )}
-            />
-          </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <div className="flex items-center justify-between">
               <label className="epa-label">Data do Relatório</label>
@@ -1908,7 +1850,7 @@ function RdoFullPageEditor({
           </div>
           <div>
             <div className="flex items-center justify-between">
-              <label className="epa-label">Clima</label>
+              <label className="epa-label">Condição Climática</label>
               {isReturnedField('weather') && (
                 <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
                   🟨 CORREÇÃO SOLICITADA
@@ -1923,7 +1865,7 @@ function RdoFullPageEditor({
               }}
               disabled={isLocked}
               className={cn(
-                'epa-input',
+                'epa-input mt-1.5',
                 isReturnedField('weather') &&
                   'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
               )}
@@ -1942,23 +1884,23 @@ function RdoFullPageEditor({
               value={
                 typeof formData.number === 'number' && formData.number > 0
                   ? `RDO Nº ${formData.number}`
-                  : 'Gerado automaticamente ao enviar'
+                  : 'RDO Offline'
               }
               className="mt-1.5 font-mono min-h-[42px] bg-slate-100 cursor-not-allowed text-slate-700 font-semibold dark:bg-slate-800 dark:text-slate-300"
             />
           </div>
-          <div className="sm:col-span-2">
-            <label className="epa-label">Realizado por (Técnico/Executor)</label>
+          <div className="sm:col-span-1 lg:col-span-1.5">
+            <label className="epa-label">Realizado por (Técnico Executor)</label>
             <Input
-              placeholder="Nome do técnico ou executor"
+              placeholder="Nome do técnico executor"
               value={formData.performedByName ?? ''}
               onChange={(e) => handleFieldChange('performedByName', e.target.value)}
               disabled={isLocked}
               className="mt-1.5"
             />
           </div>
-          <div className="sm:col-span-2">
-            <label className="epa-label">Supervisionado por (Técnico/Responsável)</label>
+          <div className="sm:col-span-1 lg:col-span-1.5">
+            <label className="epa-label">Supervisionado por (Responsável Técnico)</label>
             <Input
               placeholder="Nome do responsável técnico ou supervisor"
               value={formData.supervisedByName ?? ''}
