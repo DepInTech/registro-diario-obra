@@ -11,22 +11,30 @@ onRecordCreateRequest(
     if (collectionName === 'reports_rdo') {
       // Busca o maior número já existente atomicamente no banco
       let nextNum = 1
+      let querySuccess = false
       try {
-        const row = $app
-          .db()
-          .newQuery('SELECT COALESCE(MAX(number), 0) + 1 AS next_val FROM reports_rdo')
-          .one()
-        if (row && row.next_val) {
-          nextNum = parseInt(row.next_val, 10) || 1
+        const records = $app.findRecordsByFilter('reports_rdo', '', '-number', 1, 0)
+        if (records && records.length > 0) {
+          const maxNum = records[0].getInt('number')
+          nextNum = (maxNum > 0 ? maxNum : 0) + 1
+          querySuccess = true
         }
-      } catch (err) {
-        console.warn('Erro ao calcular proximo numero de RDO via SQL:', err)
+      } catch (findErr) {
+        console.warn('Erro ao calcular proximo numero de RDO via findRecordsByFilter:', findErr)
+      }
+
+      if (!querySuccess) {
         try {
-          const records = $app.findRecordsByFilter('reports_rdo', '', '-number', 1, 0)
-          if (records.length > 0) {
-            nextNum = records[0].getInt('number') + 1
+          const row = $app
+            .db()
+            .newQuery('SELECT COALESCE(MAX(number), 0) + 1 AS next_val FROM reports_rdo')
+            .one()
+          if (row && row.next_val) {
+            nextNum = parseInt(row.next_val, 10) || 1
           }
-        } catch (_) {}
+        } catch (sqlErr) {
+          console.warn('Erro ao calcular proximo numero de RDO via SQL:', sqlErr)
+        }
       }
 
       e.record.set('number', nextNum)
@@ -42,22 +50,33 @@ onRecordCreateRequest(
     } else if (collectionName === 'field_spreadsheets') {
       // Busca o maior número já existente atomicamente no banco
       let nextNum = 1
+      let querySuccess = false
       try {
-        const row = $app
-          .db()
-          .newQuery('SELECT COALESCE(MAX(number), 0) + 1 AS next_val FROM field_spreadsheets')
-          .one()
-        if (row && row.next_val) {
-          nextNum = parseInt(row.next_val, 10) || 1
+        const records = $app.findRecordsByFilter('field_spreadsheets', '', '-number', 1, 0)
+        if (records && records.length > 0) {
+          const maxNum = records[0].getInt('number')
+          nextNum = (maxNum > 0 ? maxNum : 0) + 1
+          querySuccess = true
         }
-      } catch (err) {
-        console.warn('Erro ao calcular proximo numero de Planilha via SQL:', err)
+      } catch (findErr) {
+        console.warn(
+          'Erro ao calcular proximo numero de Planilha via findRecordsByFilter:',
+          findErr,
+        )
+      }
+
+      if (!querySuccess) {
         try {
-          const records = $app.findRecordsByFilter('field_spreadsheets', '', '-number', 1, 0)
-          if (records.length > 0) {
-            nextNum = records[0].getInt('number') + 1
+          const row = $app
+            .db()
+            .newQuery('SELECT COALESCE(MAX(number), 0) + 1 AS next_val FROM field_spreadsheets')
+            .one()
+          if (row && row.next_val) {
+            nextNum = parseInt(row.next_val, 10) || 1
           }
-        } catch (_) {}
+        } catch (sqlErr) {
+          console.warn('Erro ao calcular proximo numero de Planilha via SQL:', sqlErr)
+        }
       }
 
       e.record.set('number', nextNum)

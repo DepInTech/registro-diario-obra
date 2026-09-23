@@ -29,7 +29,7 @@ onRecordCreateRequest(
 
       log.set('details', {
         label: label,
-        server_timestamp: log.getString('created') || new Date().toISOString(),
+        server_timestamp: new Date().toISOString(),
       })
       $app.save(log)
     } catch (error) {
