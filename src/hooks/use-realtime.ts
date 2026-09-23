@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
-
-import pb from '@/lib/pocketbase/client'
+import { REALTIME_RECORD_UPDATE, type RealtimeRecordUpdateDetail } from '@/context/SyncContext'
 
 /**
  * Hook for real-time subscriptions to a PocketBase collection.
@@ -24,27 +23,22 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   useEffect(() => {
     if (!enabled) return
 
-    let unsubscribeFn: (() => Promise<void>) | undefined
-    let cancelled = false
+    const handleRealtimeUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
+      const detail = customEvent.detail
+      if (!detail || detail.collection !== collectionName) return
 
-    pb.collection<TRecord>(collectionName)
-      .subscribe('*', (e) => {
-        callbackRef.current(e)
+      // Converte o CustomEvent centralizado no formato RecordSubscription esperado
+      const record = (detail.record || { id: detail.id }) as TRecord
+      callbackRef.current({
+        action: detail.action,
+        record,
       })
-      .then((fn) => {
-        if (cancelled) {
-          fn().catch(() => {})
-        } else {
-          unsubscribeFn = fn
-        }
-      })
-      .catch(() => {})
+    }
 
+    window.addEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     return () => {
-      cancelled = true
-      if (unsubscribeFn) {
-        unsubscribeFn().catch(() => {})
-      }
+      window.removeEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
     }
   }, [collectionName, enabled])
 }

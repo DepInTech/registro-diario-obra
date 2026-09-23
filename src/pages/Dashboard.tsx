@@ -25,7 +25,7 @@ import {
 } from '@/context/SyncContext'
 import { offlineStorage } from '@/services/offlineStorage'
 import { Page } from '@/components/Layout'
-import { projects as staticProjects, auditEvents } from '@/data/epa'
+import { projects as staticProjects, type EpaProject } from '@/data/epa'
 import pb from '@/lib/pocketbase/client'
 
 export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
@@ -436,22 +436,11 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
           return b.sortTimestamp - a.sortTimestamp
         })
 
+        // Atualiza a lista de atividades recentes reais (sem fallback estático quando houver dados reais no sistema)
         if (activities.length > 0) {
           setRecentActivities(activities.slice(0, 8))
         } else {
-          // Fallback final com mocks adaptados para o padrão brasileiro
-          setRecentActivities(
-            auditEvents.slice(0, 5).map((e) => ({
-              id: e.id,
-              user: e.user,
-              initials: e.initials,
-              action: e.action,
-              entity: e.entity,
-              time: formatFullDateTime(new Date().toISOString()),
-              sortNumber: 0,
-              sortTimestamp: 0,
-            })),
-          )
+          setRecentActivities([])
         }
       } catch (actErr) {
         console.warn('Erro geral ao processar atividades recentes:', actErr)
@@ -472,7 +461,54 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
     const handleRealtimeUpdate = (e: Event) => {
       const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
-      const col = customEvent.detail?.collection
+      const detail = customEvent.detail
+      const col = detail?.collection
+      const action = detail?.action
+      const record = detail?.record
+
+      // Atualização incremental imediata de projetos sem depender exclusivamente de loadStats
+      if (col === 'projects' && record) {
+        setProjectsList((prev) => {
+          const id = record.id || detail.id
+          if (action === 'delete') {
+            return prev.filter((p) => p.id !== id)
+          }
+
+          const isAssigned =
+            user?.role === 'admin' ||
+            (Array.isArray(record.assigned_users)
+              ? record.assigned_users.includes(user?.id)
+              : record.assigned_users === user?.id)
+
+          if (!isAssigned) {
+            return prev.filter((p) => p.id !== id)
+          }
+
+          const mappedProj: EpaProject = {
+            id: String(record.id || detail.id),
+            name: String(record.name || 'Projeto Sem Nome'),
+            client: String(record.client || 'Cliente EPA'),
+            code: String(record.epa_code || 'EPA-001'),
+            location: String(record.location || 'Área Operacional'),
+            status:
+              record.status === 'paused' || record.status === 'completed'
+                ? record.status
+                : 'active',
+            progress: typeof record.progress === 'number' ? record.progress : 0,
+            contract: String(record.contract || 'CT-2025'),
+            team: ['Equipe EPA'],
+          }
+
+          const exists = prev.some((p) => p.id === id)
+          if (exists) {
+            return prev.map((p) => (p.id === id ? { ...p, ...mappedProj } : p))
+          } else {
+            return [mappedProj, ...prev]
+          }
+        })
+      }
+
+      // Reage incrementalmente para qualquer coleção relevante
       if (
         col === 'reports_rdo' ||
         col === 'field_spreadsheets' ||

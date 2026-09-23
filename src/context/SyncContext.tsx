@@ -1208,7 +1208,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
-  // Polling de segurança incremental a cada ~30s ou chamada direta
+  // Formata data ISO para o padrão PocketBase / SQLite: "YYYY-MM-DD HH:MM:SS.mmmZ"
+  const formatPbDateFilter = (dateObj: Date): string => {
+    return dateObj.toISOString().replace('T', ' ')
+  }
+
+  // Polling de segurança incremental a cada ~30s ou chamada direta com janela de segurança e fallback
   const pullIncrementalServerData = useCallback(async () => {
     if (pullInProgressRef.current) return
     if (!navigator.onLine || !pb.authStore.isValid) return
@@ -1219,23 +1224,48 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const isAdmin = authUser?.role === 'admin'
       const userId = authUser?.id || ''
 
-      const lastTimestamp = lastPullTimestampRef.current
-      const dateFilter = lastTimestamp ? `updated >= "${lastTimestamp}"` : ''
+      // Janela de segurança de ~2 minutos com formato PocketBase (substituindo T por espaço)
+      const safetyWindowDate = new Date(Date.now() - 120000)
+      const pbFormattedDate = formatPbDateFilter(safetyWindowDate)
+      const dateFilter = `updated >= "${pbFormattedDate}"`
 
-      let projectFilter = isAdmin
-        ? dateFilter || ''
-        : dateFilter
-          ? `assigned_users ~ "${userId}" && ${dateFilter}`
-          : `assigned_users ~ "${userId}"`
+      let projectFilter = isAdmin ? dateFilter : `assigned_users ~ "${userId}" && ${dateFilter}`
 
       let anyChangeDetected = false
+      let appliedChangesCount = 0
 
       // 1. Pull Projects
       try {
-        const serverProjects = await pb.collection('projects').getFullList({
-          filter: projectFilter || undefined,
-          sort: '-updated',
-        })
+        let serverProjects: any[] = []
+        try {
+          serverProjects = await pb.collection('projects').getFullList({
+            filter: projectFilter || undefined,
+            sort: '-updated',
+          })
+        } catch (filterErr) {
+          console.warn(
+            'Filtro de projetos falhou no polling, acionando fallback getFullList:',
+            filterErr,
+          )
+          const fallbackFilter = !isAdmin && userId ? `assigned_users ~ "${userId}"` : undefined
+          serverProjects = await pb.collection('projects').getFullList({
+            filter: fallbackFilter,
+            sort: '-updated',
+          })
+        }
+
+        // Fallback defensivo: se retorno vazio com filtro, buscar os mais recentes ordenados por -updated
+        if (serverProjects.length === 0) {
+          try {
+            const fallbackFilter = !isAdmin && userId ? `assigned_users ~ "${userId}"` : undefined
+            serverProjects = await pb.collection('projects').getFullList({
+              filter: fallbackFilter,
+              sort: '-updated',
+            })
+          } catch {
+            // ignore
+          }
+        }
 
         let hasProjectChanges = false
         for (const record of serverProjects) {
@@ -1282,6 +1312,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           }
           await offlineStorage.saveProject(updatedProject)
           hasProjectChanges = true
+          appliedChangesCount++
         }
 
         if (hasProjectChanges) {
@@ -1293,59 +1324,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           )
         }
       } catch (projErr: any) {
-        // Se a query falhar devido a dateFilter em formato estrito, tentar sem filtro de data
-        if (dateFilter) {
-          try {
-            const fallbackFilter = !isAdmin && userId ? `assigned_users ~ "${userId}"` : undefined
-            const serverProjects = await pb.collection('projects').getFullList({
-              filter: fallbackFilter,
-              sort: '-updated',
-            })
-            for (const record of serverProjects) {
-              const local = await offlineStorage.getProject(record.id)
-              if (
-                local &&
-                (local.syncStatus === 'pending_create' ||
-                  local.syncStatus === 'pending_update' ||
-                  local.syncStatus === 'conflict')
-              ) {
-                continue
-              }
-              const assignedIds: string[] = Array.isArray(record.assigned_users)
-                ? record.assigned_users
-                : record.assigned_users
-                  ? [record.assigned_users]
-                  : []
-              const updatedProject: OfflineProjectItem = {
-                id: record.id,
-                name: record.name,
-                client: local?.client || 'Cliente EPA',
-                code: record.epa_code || local?.code || 'EPA-001',
-                location: record.location || local?.location || 'Área Operacional',
-                status: record.status || local?.status || 'active',
-                progress: record.progress ?? local?.progress ?? 0,
-                contract: local?.contract || 'CT-2025',
-                team: local?.team || ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
-                rawClient: record.client,
-                rawContract: record.contract,
-                rawCompany: record.company,
-                rawArea: record.area,
-                assignedUsersIds: assignedIds,
-                archived: Boolean(record.archived),
-                deleted: Boolean(record.deleted),
-                deletedReason: record.deleted_reason || undefined,
-                deletedBy: record.deleted_by || undefined,
-                deletedAt: record.deleted_at || undefined,
-                syncStatus: 'synced',
-                lastModified: new Date(record.updated || Date.now()).getTime(),
-                serverUpdatedAt: record.updated,
-              }
-              await offlineStorage.saveProject(updatedProject)
-            }
-          } catch {
-            // ignore
-          }
-        }
         console.warn('Error pulling projects in polling:', projErr)
       }
 
@@ -1374,10 +1352,46 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             : `performed_by = "${userId}"`
         }
 
-        const serverRdos = await pb.collection('reports_rdo').getFullList({
-          filter: rdoFilter || undefined,
-          sort: '-updated',
-        })
+        let serverRdos: any[] = []
+        try {
+          serverRdos = await pb.collection('reports_rdo').getFullList({
+            filter: rdoFilter || undefined,
+            sort: '-updated',
+          })
+        } catch (rdoQueryErr) {
+          console.warn(
+            'Filtro de RDO falhou no polling, acionando fallback getFullList:',
+            rdoQueryErr,
+          )
+          let fallbackRdoFilter = ''
+          if (!isAdmin && allowedProjectIds.length > 0) {
+            fallbackRdoFilter = allowedProjectIds.map((pid) => `project = "${pid}"`).join(' || ')
+          } else if (!isAdmin && allowedProjectIds.length === 0) {
+            fallbackRdoFilter = `performed_by = "${userId}"`
+          }
+          serverRdos = await pb.collection('reports_rdo').getFullList({
+            filter: fallbackRdoFilter || undefined,
+            sort: '-updated',
+          })
+        }
+
+        // Fallback se vazio suspeito
+        if (serverRdos.length === 0) {
+          try {
+            let fallbackRdoFilter = ''
+            if (!isAdmin && allowedProjectIds.length > 0) {
+              fallbackRdoFilter = allowedProjectIds.map((pid) => `project = "${pid}"`).join(' || ')
+            } else if (!isAdmin && allowedProjectIds.length === 0) {
+              fallbackRdoFilter = `performed_by = "${userId}"`
+            }
+            serverRdos = await pb.collection('reports_rdo').getFullList({
+              filter: fallbackRdoFilter || undefined,
+              sort: '-updated',
+            })
+          } catch {
+            // ignore
+          }
+        }
 
         let hasRdoChanges = false
         for (const record of serverRdos) {
@@ -1438,6 +1452,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           }
           await offlineStorage.saveRdo(updatedRdo)
           hasRdoChanges = true
+          appliedChangesCount++
         }
 
         if (hasRdoChanges) {
@@ -1464,10 +1479,48 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             : `operator = "${userId}"`
         }
 
-        const serverSheets = await pb.collection('field_spreadsheets').getFullList({
-          filter: fieldFilter || undefined,
-          sort: '-updated',
-        })
+        let serverSheets: any[] = []
+        try {
+          serverSheets = await pb.collection('field_spreadsheets').getFullList({
+            filter: fieldFilter || undefined,
+            sort: '-updated',
+          })
+        } catch (sheetQueryErr) {
+          console.warn(
+            'Filtro de Planilhas falhou no polling, acionando fallback getFullList:',
+            sheetQueryErr,
+          )
+          let fallbackFieldFilter = ''
+          if (!isAdmin && allowedProjectIds.length > 0) {
+            fallbackFieldFilter = allowedProjectIds.map((pid) => `project = "${pid}"`).join(' || ')
+          } else if (!isAdmin && allowedProjectIds.length === 0) {
+            fallbackFieldFilter = `operator = "${userId}"`
+          }
+          serverSheets = await pb.collection('field_spreadsheets').getFullList({
+            filter: fallbackFieldFilter || undefined,
+            sort: '-updated',
+          })
+        }
+
+        // Fallback se vazio suspeito
+        if (serverSheets.length === 0) {
+          try {
+            let fallbackFieldFilter = ''
+            if (!isAdmin && allowedProjectIds.length > 0) {
+              fallbackFieldFilter = allowedProjectIds
+                .map((pid) => `project = "${pid}"`)
+                .join(' || ')
+            } else if (!isAdmin && allowedProjectIds.length === 0) {
+              fallbackFieldFilter = `operator = "${userId}"`
+            }
+            serverSheets = await pb.collection('field_spreadsheets').getFullList({
+              filter: fallbackFieldFilter || undefined,
+              sort: '-updated',
+            })
+          } catch {
+            // ignore
+          }
+        }
 
         let hasFieldChanges = false
         for (const record of serverSheets) {
@@ -1534,6 +1587,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           }
           await offlineStorage.saveFieldSheet(updatedSheet)
           hasFieldChanges = true
+          appliedChangesCount++
         }
 
         if (hasFieldChanges) {
@@ -1548,6 +1602,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         console.warn('Error pulling Field Sheets in polling:', sheetErr)
       }
 
+      console.log(`[Polling] ${appliedChangesCount} mudanças aplicadas`)
+
       // 4. Se qualquer alteração foi baixada pelo polling, emitir broadcast geral
       if (anyChangeDetected) {
         window.dispatchEvent(
@@ -1558,7 +1614,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
 
       // 5. Update and persist last pull timestamp
-      const newPullTimestamp = new Date().toISOString()
+      const newPullTimestamp = formatPbDateFilter(new Date())
       lastPullTimestampRef.current = newPullTimestamp
       localStorage.setItem('epa_last_pull_timestamp', newPullTimestamp)
     } catch (pullErr) {
@@ -1720,6 +1776,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // Helper: Merge and Handle RDO realtime events
     const handleRdoEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
       if (!record || !record.id) return
+      console.log(`[Realtime] Evento recebido: reports_rdo ${record.id} (${action})`)
       try {
         const allowed = await isRecordAllowedForTechnician('reports_rdo', record)
         if (!allowed && !isAdmin) {
@@ -1875,6 +1932,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // Helper: Merge and Handle Field Spreadsheet realtime events
     const handleFieldEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
       if (!record || !record.id) return
+      console.log(`[Realtime] Evento recebido: field_spreadsheets ${record.id} (${action})`)
       try {
         const allowed = await isRecordAllowedForTechnician('field_spreadsheets', record)
         if (!allowed && !isAdmin) {
@@ -1978,6 +2036,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // Helper: Merge and Handle Projects realtime events
     const handleProjectEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
       if (!record || !record.id) return
+      console.log(`[Realtime] Evento recebido: projects ${record.id} (${action})`)
       try {
         const allowed = await isRecordAllowedForTechnician('projects', record)
         if (!allowed && !isAdmin) {
@@ -2048,6 +2107,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       action: 'create' | 'update' | 'delete',
       record: any,
     ) => {
+      if (!record || !record.id) return
+      console.log(`[Realtime] Evento recebido: ${colName} ${record.id} (${action})`)
       if (colName === 'wells' && record?.project) {
         try {
           const updatedWells = await pb.collection('wells').getFullList({
@@ -2062,7 +2123,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       broadcastUpdate({ collection: colName, id: record?.id || '', action, record })
     }
 
-    // Cancelar subscrições ativas
+    // Cancelar subscrições ativas de forma limpa e segura
     const cancelExistingSubscriptions = async () => {
       while (unsubscribes.length > 0) {
         const fn = unsubscribes.pop()
@@ -2072,9 +2133,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // ignore
         }
       }
+      try {
+        await pb.realtime.unsubscribe()
+      } catch {
+        // ignore
+      }
     }
 
-    // Subscrição com retry e backoff exponencial
+    // Subscrição serializada com retry, tratamento para 403 e reconexão limpa
     const setupSubscriptions = async () => {
       if (cancelled || !navigator.onLine || !pb.authStore.isValid) return
       if (isSubscribing) return
@@ -2083,63 +2149,105 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       await cancelExistingSubscriptions()
 
       try {
-        const promises: Promise<() => Promise<void>>[] = [
-          pb.collection('reports_rdo').subscribe('*', (e) => {
-            handleRdoEvent(e.action as 'create' | 'update' | 'delete', e.record)
-          }),
-          pb.collection('field_spreadsheets').subscribe('*', (e) => {
-            handleFieldEvent(e.action as 'create' | 'update' | 'delete', e.record)
-          }),
-          pb.collection('projects').subscribe('*', (e) => {
-            handleProjectEvent(e.action as 'create' | 'update' | 'delete', e.record)
-          }),
-          pb.collection('report_wells').subscribe('*', (e) => {
-            handleReportSubCollection(
-              'report_wells',
-              e.action as 'create' | 'update' | 'delete',
-              e.record,
-            )
-          }),
-          pb.collection('report_photos').subscribe('*', (e) => {
-            handleReportSubCollection(
-              'report_photos',
-              e.action as 'create' | 'update' | 'delete',
-              e.record,
-            )
-          }),
-          pb.collection('wells').subscribe('*', (e) => {
-            handleReportSubCollection('wells', e.action as 'create' | 'update' | 'delete', e.record)
-          }),
+        const collectionsToSubscribe: Array<{
+          name: string
+          handler: (e: { action: string; record: any }) => void
+        }> = [
+          {
+            name: 'reports_rdo',
+            handler: (e) => handleRdoEvent(e.action as 'create' | 'update' | 'delete', e.record),
+          },
+          {
+            name: 'field_spreadsheets',
+            handler: (e) => handleFieldEvent(e.action as 'create' | 'update' | 'delete', e.record),
+          },
+          {
+            name: 'projects',
+            handler: (e) =>
+              handleProjectEvent(e.action as 'create' | 'update' | 'delete', e.record),
+          },
+          {
+            name: 'report_wells',
+            handler: (e) =>
+              handleReportSubCollection(
+                'report_wells',
+                e.action as 'create' | 'update' | 'delete',
+                e.record,
+              ),
+          },
+          {
+            name: 'report_photos',
+            handler: (e) =>
+              handleReportSubCollection(
+                'report_photos',
+                e.action as 'create' | 'update' | 'delete',
+                e.record,
+              ),
+          },
+          {
+            name: 'wells',
+            handler: (e) =>
+              handleReportSubCollection(
+                'wells',
+                e.action as 'create' | 'update' | 'delete',
+                e.record,
+              ),
+          },
         ]
 
         if (isAdmin) {
-          promises.push(
-            pb.collection('audit_logs').subscribe('*', (e) => {
+          collectionsToSubscribe.push({
+            name: 'audit_logs',
+            handler: (e) => {
               broadcastUpdate({
                 collection: 'audit_logs',
                 id: e.record.id,
                 action: e.action as 'create' | 'update' | 'delete',
                 record: e.record,
               })
-            }),
-          )
+            },
+          })
         }
 
-        const subs = await Promise.all(promises)
+        // SERIALIZAÇÃO DAS SUBSCRIÇÕES (evita concorrência e erro 403 no handshake SSE)
+        for (const item of collectionsToSubscribe) {
+          if (cancelled || !pb.authStore.isValid) break
+          const unsub = await pb.collection(item.name).subscribe('*', item.handler)
+          if (cancelled) {
+            unsub().catch(() => {})
+          } else {
+            unsubscribes.push(unsub)
+          }
+        }
 
-        if (cancelled) {
-          subs.forEach((fn) => fn().catch(() => {}))
-        } else {
-          unsubscribes.push(...subs)
+        if (!cancelled && unsubscribes.length > 0) {
           retryAttempt = 0 // reset backoff on success
-          console.log('[Realtime] Subscrições PocketBase conectadas com sucesso.')
+          console.log('[Realtime] Subscrições conectadas')
         }
-      } catch (subErr) {
+      } catch (subErr: any) {
         console.warn('[Realtime] Erro ao subscrever coleções PocketBase:', subErr)
+
+        const errMsg = String(subErr?.message || subErr || '')
+        const is403 =
+          subErr?.status === 403 ||
+          errMsg.includes('403') ||
+          errMsg.toLowerCase().includes('authorization')
+
+        if (is403) {
+          console.warn(
+            '[Realtime] Detectado 403 no handshake realtime. Desconectando e reiniciando canal SSE limpo...',
+          )
+          try {
+            await pb.realtime.unsubscribe()
+          } catch {
+            // ignore
+          }
+        }
+
         // Retry com backoff exponencial: 2s, 4s, 8s, até max 30s
         if (!cancelled && navigator.onLine) {
           retryAttempt++
-          const delay = Math.min(1000 * Math.pow(2, retryAttempt), 30000)
+          const delay = is403 ? 1500 : Math.min(1000 * Math.pow(2, retryAttempt), 30000)
           clearTimeout(reconnectTimeout)
           reconnectTimeout = setTimeout(() => {
             if (!cancelled && navigator.onLine && pb.authStore.isValid) {
@@ -2182,16 +2290,21 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // 3. Observa mudanças de autenticação/token no pb.authStore
+    // 3. Observa mudanças de autenticação/token no pb.authStore com debounce
+    let authDebounceTimer: any = null
     const unsubAuth = pb.authStore.onChange(() => {
-      if (pb.authStore.isValid) {
-        setupSubscriptions()
-      }
+      clearTimeout(authDebounceTimer)
+      authDebounceTimer = setTimeout(() => {
+        if (pb.authStore.isValid && !cancelled) {
+          setupSubscriptions()
+        }
+      }, 300)
     })
 
     return () => {
       cancelled = true
       clearTimeout(reconnectTimeout)
+      clearTimeout(authDebounceTimer)
       window.removeEventListener('online', handleOnlineEvent)
       unsubAuth()
       cancelExistingSubscriptions()
