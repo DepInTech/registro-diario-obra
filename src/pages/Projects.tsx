@@ -33,7 +33,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
-import { useToast } from '@/hooks/use-toast'
+import { useToast, toast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 import { offlineStorage, OfflineProjectItem } from '@/services/offlineStorage'
 import {
@@ -41,6 +41,8 @@ import {
   REALTIME_RECORD_UPDATE,
   RealtimeRecordUpdateDetail,
 } from '@/context/SyncContext'
+import { Well } from '@/types/epa'
+import { Eye } from 'lucide-react'
 import type { Client, Contract, Company, Area, EpaUser } from '@/types/epa'
 
 interface ProjectItem extends EpaProject {
@@ -345,7 +347,6 @@ export function Projects({
 
   const openEditProjectModal = (p: ProjectItem) => {
     if (!isAdmin) {
-      // Se for técnico ou operador, abre em modo somente leitura com campos bloqueados 🔒
       openViewProjectModal(p)
       return
     }
@@ -1115,9 +1116,9 @@ export function Projects({
                           openViewProjectModal(project)
                         }}
                         className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"
-                        title="Visualizar configuração (Somente leitura 🔒)"
+                        title="Visualizar configuração (Somente leitura)"
                       >
-                        <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                        <Eye className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
                       </button>
                     )}
                     {project.deleted && (
@@ -1218,20 +1219,15 @@ export function Projects({
             <div className="flex items-center justify-between border-b pb-4 dark:border-slate-800">
               <div>
                 <h3 className="font-bold text-lg text-slate-900 dark:text-white flex items-center gap-2">
-                  {isReadOnlyView ? (
-                    <>
-                      <Lock className="h-5 w-5 text-amber-600" />
-                      Visualização de Projeto / Obra
-                    </>
-                  ) : editingProject ? (
-                    'Editar Projeto / Obra'
-                  ) : (
-                    'Novo Projeto / Obra EPA'
-                  )}
+                  {isReadOnlyView
+                    ? 'Visualização de Projeto / Obra'
+                    : editingProject
+                      ? 'Editar Projeto / Obra'
+                      : 'Novo Projeto / Obra EPA'}
                 </h3>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                   {isReadOnlyView
-                    ? 'Configuração fixa definida pelo Administrador (somente leitura para Técnicos e Operadores).'
+                    ? 'Configuração fixa definida pelo Administrador (somente leitura para Técnicos).'
                     : 'Preencha os dados cadastrais (campos de texto livre), cliente, contrato e equipe atribuída.'}
                 </p>
               </div>
@@ -1241,12 +1237,12 @@ export function Projects({
             </div>
 
             {isReadOnlyView && (
-              <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-center gap-2">
-                <Lock className="h-4 w-4 text-amber-600 shrink-0" />
-                <span>
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-800/60 dark:text-slate-300">
+                <p>
                   <strong>Acesso restrito:</strong> Apenas o Administrador pode cadastrar ou alterar
-                  as configurações estruturais deste projeto. Os campos abaixo estão bloqueados 🔒.
-                </span>
+                  as configurações estruturais deste projeto. Os campos abaixo são exibidos em modo
+                  somente leitura.
+                </p>
               </div>
             )}
 
@@ -1254,9 +1250,11 @@ export function Projects({
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label className="epa-label flex items-center justify-between">
-                    <span>Nome da Obra / Projeto *</span>
+                    <span>Nome da Obra / Projeto {isReadOnlyView ? '' : '*'}</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">Bloqueado 🔒</span>
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
+                      </span>
                     )}
                   </label>
                   <Input
@@ -1272,9 +1270,11 @@ export function Projects({
 
                 <div>
                   <label className="epa-label flex items-center justify-between">
-                    <span>Código EPA *</span>
+                    <span>Código EPA {isReadOnlyView ? '' : '*'}</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">Bloqueado 🔒</span>
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
+                      </span>
                     )}
                   </label>
                   <Input
@@ -1291,10 +1291,10 @@ export function Projects({
                 {/* Cliente (Texto Livre) */}
                 <div>
                   <label className="epa-label flex items-center justify-between">
-                    <span>Cliente {isReadOnlyView ? '🔒' : '*'}</span>
+                    <span>Cliente {isReadOnlyView ? '' : '*'}</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">
-                        Somente leitura 🔒
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
                       </span>
                     )}
                   </label>
@@ -1312,10 +1312,10 @@ export function Projects({
                 {/* Localização do campo (Texto Livre) */}
                 <div>
                   <label className="epa-label flex items-center justify-between">
-                    <span>Localização do campo {isReadOnlyView ? '🔒' : '*'}</span>
+                    <span>Localização do campo {isReadOnlyView ? '' : '*'}</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">
-                        Somente leitura 🔒
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
                       </span>
                     )}
                   </label>
@@ -1333,10 +1333,10 @@ export function Projects({
                 {/* Empresa Executora (Texto Livre) */}
                 <div>
                   <label className="epa-label flex items-center justify-between">
-                    <span>Empresa executora {isReadOnlyView ? '🔒' : '*'}</span>
+                    <span>Empresa executora {isReadOnlyView ? '' : '*'}</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">
-                        Somente leitura 🔒
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
                       </span>
                     )}
                   </label>
@@ -1354,10 +1354,10 @@ export function Projects({
                 {/* Contrato (Texto Livre) */}
                 <div>
                   <label className="epa-label flex items-center justify-between">
-                    <span>Contrato {isReadOnlyView ? '🔒' : '*'}</span>
+                    <span>Contrato {isReadOnlyView ? '' : '*'}</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">
-                        Somente leitura 🔒
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
                       </span>
                     )}
                   </label>
@@ -1375,10 +1375,10 @@ export function Projects({
                 {/* Área Operacional (Texto Livre) */}
                 <div>
                   <label className="epa-label flex items-center justify-between">
-                    <span>Área operacional {isReadOnlyView ? '🔒' : '*'}</span>
+                    <span>Área operacional {isReadOnlyView ? '' : '*'}</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">
-                        Somente leitura 🔒
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
                       </span>
                     )}
                   </label>
@@ -1396,9 +1396,11 @@ export function Projects({
                 {/* Status */}
                 <div>
                   <label className="epa-label flex items-center justify-between">
-                    <span>Status do Projeto *</span>
+                    <span>Status do Projeto {isReadOnlyView ? '' : '*'}</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">Bloqueado 🔒</span>
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
+                      </span>
                     )}
                   </label>
                   <select
@@ -1420,7 +1422,9 @@ export function Projects({
                   <label className="epa-label flex items-center justify-between">
                     <span>Progresso Concluído (%)</span>
                     {isReadOnlyView && (
-                      <span className="text-[11px] font-normal text-amber-600">Bloqueado 🔒</span>
+                      <span className="text-[11px] font-normal text-slate-500">
+                        Somente leitura
+                      </span>
                     )}
                   </label>
                   <div className="flex items-center gap-3 mt-1">
@@ -1490,11 +1494,7 @@ export function Projects({
                           <div>
                             <p className="font-semibold">{u.name}</p>
                             <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                              {u.role === 'admin'
-                                ? 'Administrador'
-                                : u.role === 'technician'
-                                  ? 'Técnico'
-                                  : 'Operador'}
+                              {u.role === 'admin' ? 'Administrador' : 'Técnico'}
                             </p>
                           </div>
                           <div
@@ -1578,7 +1578,6 @@ function ProjectDetail({
 }) {
   const { user } = useAuth()
   const role = user?.role
-  const isOperator = role === 'operator'
   const isTechnician = role === 'technician'
   const isAdmin = role === 'admin'
 
@@ -1587,10 +1586,9 @@ function ProjectDetail({
   const [loadingWells, setLoadingWells] = useState(true)
   const [wellModalOpen, setWellModalOpen] = useState(false)
   const [editingWell, setEditingWell] = useState<Well | null>(null)
-  const [wellName, setWellName] = useState('')
-  const [wellStatus, setWellStatus] = useState<'active' | 'inactive' | 'abandoned'>('active')
-  const [wellDepth, setWellDepth] = useState<number | ''>('')
-  const [wellDiameter, setWellDiameter] = useState<number | ''>('')
+  const [wellIdentification, setWellIdentification] = useState('')
+  const [wellDefaultDiameter, setWellDefaultDiameter] = useState('')
+  const [wellActive, setWellActive] = useState(true)
   const [wellSaving, setWellSaving] = useState(false)
   const [deletingWellId, setDeletingWellId] = useState<string | null>(null)
 
@@ -1604,7 +1602,7 @@ function ProjectDetail({
       if (navigator.onLine && pb.authStore.isValid) {
         const records = await pb.collection('wells').getFullList<Well>({
           filter: `project = "${project.id}"`,
-          sort: 'name',
+          sort: 'identification',
         })
         setWells(records)
       } else {
@@ -1633,10 +1631,9 @@ function ProjectDetail({
       return
     }
     setEditingWell(null)
-    setWellName('')
-    setWellStatus('active')
-    setWellDepth('')
-    setWellDiameter('')
+    setWellIdentification('')
+    setWellDefaultDiameter('2"')
+    setWellActive(true)
     setWellModalOpen(true)
   }
 
@@ -1650,29 +1647,27 @@ function ProjectDetail({
       return
     }
     setEditingWell(w)
-    setWellName(w.name)
-    setWellStatus((w.status as any) || 'active')
-    setWellDepth(w.depth ?? '')
-    setWellDiameter(w.diameter ?? '')
+    setWellIdentification(w.identification)
+    setWellDefaultDiameter(w.default_diameter || '')
+    setWellActive(Boolean(w.active))
     setWellModalOpen(true)
   }
 
   const handleSaveWell = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!isAdmin) return
-    if (!wellName.trim()) {
-      toast({ title: 'Preencha o nome/identificador do poço (Ex.: PM-01)', variant: 'destructive' })
+    if (!wellIdentification.trim()) {
+      toast({ title: 'Preencha a identificação do poço (Ex.: PM-01)', variant: 'destructive' })
       return
     }
 
     setWellSaving(true)
     try {
       const payload: Record<string, any> = {
-        name: wellName.trim(),
+        identification: wellIdentification.trim().toUpperCase(),
         project: project.id,
-        status: wellStatus,
-        depth: wellDepth === '' ? null : Number(wellDepth),
-        diameter: wellDiameter === '' ? null : Number(wellDiameter),
+        default_diameter: wellDefaultDiameter.trim() || undefined,
+        active: wellActive,
       }
 
       if (editingWell) {
@@ -1680,7 +1675,7 @@ function ProjectDetail({
         toast({ title: 'Poço atualizado com sucesso!' })
       } else {
         await pb.collection('wells').create(payload)
-        toast({ title: `Poço ${wellName.trim()} vinculado ao projeto!` })
+        toast({ title: `Poço ${wellIdentification.trim().toUpperCase()} vinculado ao projeto!` })
       }
 
       setWellModalOpen(false)
@@ -1800,8 +1795,8 @@ function ProjectDetail({
   }, [project.id])
 
   const historyItems = [
-    ...(isAdmin || isTechnician || isOperator ? projectRdos : []),
-    ...(isAdmin || isTechnician || isOperator ? projectSheets : []),
+    ...(isAdmin || isTechnician ? projectRdos : []),
+    ...(isAdmin || isTechnician ? projectSheets : []),
   ]
 
   return (
@@ -1863,8 +1858,8 @@ function ProjectDetail({
               onClick={onEdit}
               className="text-xs min-h-[38px] dark:border-slate-800 text-slate-700 dark:text-slate-300"
             >
-              <Lock className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
-              Ver Configuração (Somente Leitura 🔒)
+              <Eye className="mr-1.5 h-3.5 w-3.5 text-slate-500" />
+              Ver Configuração (Somente Leitura)
             </Button>
           ) : null}
         </div>
@@ -1990,7 +1985,7 @@ function ProjectDetail({
       </section>
 
       <div className="grid gap-5 md:grid-cols-3">
-        {(isAdmin || isTechnician || isOperator) && (
+        {(isAdmin || isTechnician) && (
           <MiniStat
             label="RDOs emitidos"
             value={String(projectRdos.length)}
@@ -2001,7 +1996,7 @@ function ProjectDetail({
         <MiniStat
           label="Poços vinculados"
           value={String(wells.length)}
-          helper={`${wells.filter((w) => w.status === 'active').length} ativos · ${wells.filter((w) => w.status !== 'active').length} inativos/abandonados`}
+          helper={`${wells.filter((w) => w.active).length} ativos · ${wells.filter((w) => !w.active).length} inativos`}
           icon={MapPin}
         />
         {(isAdmin || isTechnician) && (
@@ -2016,7 +2011,7 @@ function ProjectDetail({
 
       <div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
         <div className="space-y-6">
-          {/* Seção de Poços Vinculados ao Projeto */}
+          {/* Seção de Poços do Projeto (Gerenciamento exclusivo do Admin; somente leitura para Técnico) */}
           <section className="epa-card overflow-hidden">
             <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
               <div>
@@ -2027,7 +2022,7 @@ function ProjectDetail({
                 <p className="text-xs text-slate-500">
                   {isAdmin
                     ? 'Gerenciamento exclusivo do Administrador (PM-01, PM-02...)'
-                    : 'Lista fixa definida pelo Administrador (somente leitura para Técnicos 🔒)'}
+                    : 'Lista fixa definida pelo Administrador (somente leitura para Técnicos)'}
                 </p>
               </div>
               {isAdmin && !project.deleted && (
@@ -2079,36 +2074,27 @@ function ProjectDetail({
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
-                            {well.name}
+                            {well.identification}
                           </span>
                           <span
                             className={cn(
                               'text-[10px] px-2 py-0.5 rounded-full font-medium',
-                              well.status === 'active'
+                              well.active
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                : well.status === 'abandoned'
-                                  ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
-                                  : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+                                : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
                             )}
                           >
-                            {well.status === 'active'
-                              ? 'Ativo'
-                              : well.status === 'abandoned'
-                                ? 'Abandonado'
-                                : 'Inativo'}
+                            {well.active ? 'Ativo' : 'Inativo'}
                           </span>
                         </div>
-                        <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-500">
-                          {well.depth !== undefined && well.depth !== null && (
-                            <span>Prof: {well.depth} m</span>
-                          )}
-                          {well.diameter !== undefined && well.diameter !== null && (
-                            <span>Diâm: {well.diameter} mm</span>
-                          )}
-                        </div>
+                        {well.default_diameter && (
+                          <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-500">
+                            <span>Diâmetro padrão: {well.default_diameter}</span>
+                          </div>
+                        )}
                       </div>
 
-                      {isAdmin ? (
+                      {isAdmin && (
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => openEditWellModal(well)}
@@ -2130,10 +2116,6 @@ function ProjectDetail({
                             )}
                           </button>
                         </div>
-                      ) : (
-                        <span title="Configuração definida pelo Admin (Somente leitura 🔒)">
-                          <Lock className="h-3.5 w-3.5 text-slate-400" />
-                        </span>
                       )}
                     </div>
                   ))}
@@ -2207,7 +2189,7 @@ function ProjectDetail({
                 <div className="flex-1">
                   <p className="text-sm font-medium">{member}</p>
                   <p className="text-[10px] text-slate-400">
-                    {index === 0 ? 'Administrador' : index === 1 ? 'Operador' : 'Técnico'}
+                    {index === 0 ? 'Administrador' : 'Técnico'}
                   </p>
                 </div>
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -2232,58 +2214,36 @@ function ProjectDetail({
 
             <form onSubmit={handleSaveWell} className="mt-4 space-y-4">
               <div>
-                <label className="epa-label">Identificação / Nome do Poço *</label>
+                <label className="epa-label">Identificação do Poço *</label>
                 <Input
-                  value={wellName}
-                  onChange={(e) => setWellName(e.target.value)}
-                  placeholder="Ex.: PM-01, PM-02..."
+                  value={wellIdentification}
+                  onChange={(e) => setWellIdentification(e.target.value)}
+                  placeholder="Ex.: PM-01, PM-02, PM-03..."
                   required
                   className="mt-1 font-mono uppercase"
                 />
               </div>
 
               <div>
+                <label className="epa-label">Diâmetro Padrão</label>
+                <Input
+                  value={wellDefaultDiameter}
+                  onChange={(e) => setWellDefaultDiameter(e.target.value)}
+                  placeholder='Ex.: 2" ou 4" ou 50mm'
+                  className="mt-1 font-mono"
+                />
+              </div>
+
+              <div>
                 <label className="epa-label">Status do Poço</label>
                 <select
-                  value={wellStatus}
-                  onChange={(e) => setWellStatus(e.target.value as any)}
+                  value={wellActive ? 'active' : 'inactive'}
+                  onChange={(e) => setWellActive(e.target.value === 'active')}
                   className="epa-input mt-1"
                 >
                   <option value="active">Ativo</option>
                   <option value="inactive">Inativo</option>
-                  <option value="abandoned">Tamponado / Abandonado</option>
                 </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="epa-label">Profundidade (m)</label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={wellDepth}
-                    onChange={(e) =>
-                      setWellDepth(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    placeholder="Ex.: 12.5"
-                    className="mt-1 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="epa-label">Diâmetro (mm)</label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={wellDiameter}
-                    onChange={(e) =>
-                      setWellDiameter(e.target.value === '' ? '' : Number(e.target.value))
-                    }
-                    placeholder="Ex.: 50"
-                    className="mt-1 font-mono"
-                  />
-                </div>
               </div>
 
               <div className="mt-6 flex justify-end gap-2 pt-3 border-t dark:border-slate-800">
