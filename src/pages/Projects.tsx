@@ -1534,7 +1534,7 @@ function ProjectDetail({
           setProjectRdos(
             rdosRec.map((r) => ({
               id: r.id,
-              title: `RDO #${String(r.number).padStart(3, '0')} · ${r.activity_title || 'Sem título'}`,
+              title: `${typeof r.number === 'number' && r.number > 0 ? `RDO Nº ${r.number}` : 'RDO Offline'} · ${r.activity_title || 'Sem título'}`,
               date: r.report_date ? r.report_date.slice(0, 10) : 'Hoje',
               status: r.status,
               type: 'RDO',
@@ -1564,7 +1564,7 @@ function ProjectDetail({
           setProjectRdos(
             mRdos.map((r) => ({
               id: r.id,
-              title: `RDO #${String(r.number).padStart(3, '0')} · ${r.activityTitle || 'Sem título'}`,
+              title: `${typeof r.number === 'number' && r.number > 0 ? `RDO Nº ${r.number}` : 'RDO Offline'} · ${r.activityTitle || 'Sem título'}`,
               date: r.reportDate || 'Hoje',
               status: r.status as Status,
               type: 'RDO',

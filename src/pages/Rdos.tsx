@@ -461,9 +461,13 @@ export function RdosPage({ query }: { query: string }) {
         setEditing(null)
       }
 
+      const deleteLabel =
+        typeof rdoToDelete.number === 'number' && rdoToDelete.number > 0
+          ? `RDO Nº ${rdoToDelete.number}`
+          : 'RDO Offline'
       toast({
         title: 'RDO excluído e arquivado com sucesso',
-        description: `O RDO #${String(rdoToDelete.number).padStart(3, '0')} foi movido para os itens excluídos com justificativa registrada.`,
+        description: `O ${deleteLabel} foi movido para os itens excluídos com justificativa registrada.`,
       })
       setDeleteModalRdo(null)
       setDeleteReason('')
@@ -514,11 +518,13 @@ export function RdosPage({ query }: { query: string }) {
         setEditing(updated)
       }
 
+      const archiveLabel =
+        typeof rdo.number === 'number' && rdo.number > 0 ? `RDO Nº ${rdo.number}` : 'RDO Offline'
       toast({
         title: nextArchived ? 'RDO arquivado' : 'RDO desarquivado',
         description: nextArchived
-          ? `O RDO #${String(rdo.number).padStart(3, '0')} foi movido para os arquivados.`
-          : `O RDO #${String(rdo.number).padStart(3, '0')} foi restaurado para a listagem ativa.`,
+          ? `O ${archiveLabel} foi movido para os arquivados.`
+          : `O ${archiveLabel} foi restaurado para a listagem ativa.`,
       })
     } catch (err: any) {
       console.error('Toggle archive error:', err)

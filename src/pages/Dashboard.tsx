@@ -36,6 +36,19 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
   const [sheetCount, setSheetCount] = useState<number>(0)
   const [userCount, setUserCount] = useState<number>(4)
   const [projectsList, setProjectsList] = useState(staticProjects)
+  const [recentActivities, setRecentActivities] = useState<
+    Array<{
+      id: string
+      user: string
+      initials: string
+      action: string
+      entity: string
+      time: string
+      sortNumber: number
+      sortTimestamp: number
+    }>
+  >([])
+  const [loadingActivities, setLoadingActivities] = useState<boolean>(true)
 
   // Automatic greeting based on real local time
   // 05:00–11:59 "Bom dia, [Nome]!"
@@ -182,6 +195,268 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         } catch (projErr) {
           console.warn('Projects fetch error:', projErr)
         }
+      }
+
+      // 4. Carregar Atividades Recentes reais combinando servidor, logs de auditoria e armazenamento offline
+      try {
+        const activities: Array<{
+          id: string
+          user: string
+          initials: string
+          action: string
+          entity: string
+          time: string
+          sortNumber: number
+          sortTimestamp: number
+        }> = []
+
+        const formatFullDateTime = (dateVal: string | number | undefined | null) => {
+          if (!dateVal) return ''
+          const d = new Date(dateVal)
+          if (isNaN(d.getTime())) return ''
+          return d.toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        }
+
+        const getInitials = (nameStr: string) => {
+          const parts = (nameStr || 'Sistema').trim().split(/\s+/)
+          return (
+            parts
+              .slice(0, 2)
+              .map((p) => p[0])
+              .join('')
+              .toUpperCase() || 'EP'
+          )
+        }
+
+        // Buscar do servidor se online
+        if (navigator.onLine && pb.authStore.isValid) {
+          try {
+            const [recentRdos, recentSheets, recentLogs] = await Promise.all([
+              pb.collection('reports_rdo').getList(1, 10, {
+                sort: '-created',
+                expand: 'performed_by,project',
+              }),
+              pb.collection('field_spreadsheets').getList(1, 10, {
+                sort: '-created',
+                expand: 'operator,project',
+              }),
+              pb.collection('audit_logs').getList(1, 10, {
+                sort: '-created',
+                expand: 'actor',
+              }),
+            ])
+
+            // Processar RDOs do servidor
+            for (const r of recentRdos.items) {
+              const num = typeof r.number === 'number' && r.number > 0 ? r.number : 0
+              const label = num > 0 ? `RDO Nº ${num}` : 'RDO Offline'
+              const performer = (r.expand?.performed_by as any) || {}
+              const userName = performer.name || performer.email || 'Operador EPA'
+              const proj = (r.expand?.project as any) || {}
+              const projName = proj.name || 'Projeto Operacional'
+              const timeDisplay = formatFullDateTime(r.created)
+              const sortTimestamp = r.created ? new Date(r.created).getTime() : 0
+
+              let actionText = `emitiu o ${label}`
+              if (r.status === 'submitted') actionText = `enviou o ${label} para aprovação`
+              else if (r.status === 'approved') actionText = `aprovou o ${label}`
+              else if (r.status === 'returned') actionText = `devolveu o ${label} para correção`
+              else if (r.deleted) actionText = `excluiu o ${label}`
+
+              activities.push({
+                id: `server_rdo_${r.id}`,
+                user: userName,
+                initials: getInitials(userName),
+                action: actionText,
+                entity: `${projName}${r.activity_title ? ` · ${r.activity_title}` : ''}`,
+                time: timeDisplay,
+                sortNumber: num,
+                sortTimestamp,
+              })
+            }
+
+            // Processar Planilhas de Campo do servidor
+            for (const s of recentSheets.items) {
+              const num = typeof s.number === 'number' && s.number > 0 ? s.number : 0
+              const label = num > 0 ? `Planilha Nº ${num}` : 'Planilha Offline'
+              const op = (s.expand?.operator as any) || {}
+              const userName = op.name || op.email || 'Operador EPA'
+              const proj = (s.expand?.project as any) || {}
+              const projName = proj.name || 'Projeto Operacional'
+              const timeDisplay = formatFullDateTime(s.created)
+              const sortTimestamp = s.created ? new Date(s.created).getTime() : 0
+
+              let actionText = `preencheu a ${label}`
+              if (s.status === 'submitted') actionText = `enviou a ${label} para aprovação`
+              else if (s.status === 'approved') actionText = `aprovou a ${label}`
+              else if (s.status === 'returned') actionText = `devolveu a ${label} para correção`
+              else if (s.deleted) actionText = `excluiu a ${label}`
+
+              activities.push({
+                id: `server_sheet_${s.id}`,
+                user: userName,
+                initials: getInitials(userName),
+                action: actionText,
+                entity: `${projName} · Área ${s.area || 'Geral'}`,
+                time: timeDisplay,
+                sortNumber: num,
+                sortTimestamp,
+              })
+            }
+
+            // Processar Logs de Auditoria do servidor
+            for (const log of recentLogs.items) {
+              const actor = (log.expand?.actor as any) || {}
+              const userName = actor.name || actor.email || 'Sistema'
+              const details = (log.details as any) || {}
+              const label = details.label || ''
+              const timeDisplay = formatFullDateTime(log.created)
+              const sortTimestamp = log.created ? new Date(log.created).getTime() : 0
+
+              let actionText = log.action
+              if (log.action === 'soft_delete') {
+                actionText = details.deleted_reason
+                  ? `excluiu e arquivou (Motivo: "${details.deleted_reason}")`
+                  : 'excluiu e arquivou o registro'
+              } else if (log.action === 'restore') actionText = 'restaurou o registro excluído'
+              else if (log.action === 'archive') actionText = 'arquivou o registro'
+              else if (log.action === 'unarchive') actionText = 'desarquivou o registro'
+              else if (log.action === 'delete') actionText = 'excluiu registro definitivamente'
+              else if (log.action === 'approve') actionText = 'aprovou o relatório'
+              else if (log.action === 'return') actionText = 'devolveu para correção'
+              else if (log.action === 'create') actionText = 'criou o registro'
+              else if (log.action === 'update') actionText = 'atualizou informações'
+
+              let entityText = log.entity
+              if (log.entity === 'projects') entityText = 'Projeto'
+              else if (log.entity === 'reports_rdo') entityText = 'RDO'
+              else if (log.entity === 'field_spreadsheets') entityText = 'Planilha de Campo'
+              else if (log.entity === 'users') entityText = 'Usuários'
+              else if (log.entity === 'system_reset') entityText = 'Sistema'
+
+              activities.push({
+                id: `log_${log.id}`,
+                user: userName,
+                initials: getInitials(userName),
+                action: label ? `${actionText} (${label})` : actionText,
+                entity: entityText,
+                time: timeDisplay,
+                sortNumber: 0,
+                sortTimestamp,
+              })
+            }
+          } catch (serverActErr) {
+            console.warn('Erro ao carregar atividades do servidor:', serverActErr)
+          }
+        }
+
+        // Complementar / Fallback com offlineStorage
+        try {
+          const [offlineRdos, offlineSheets] = await Promise.all([
+            offlineStorage.getAllRdos(),
+            offlineStorage.getAllFieldSheets(),
+          ])
+
+          const existingIds = new Set(activities.map((a) => a.id))
+
+          for (const r of offlineRdos) {
+            const sid = `server_rdo_${r.id}`
+            const oid = `offline_rdo_${r.id}`
+            if (existingIds.has(sid) || existingIds.has(oid)) continue
+
+            const num = typeof r.number === 'number' && r.number > 0 ? r.number : 0
+            const label = num > 0 ? `RDO Nº ${num}` : 'RDO Offline'
+            const userName = r.performedByName || user?.name || 'Operador EPA'
+            const timeVal =
+              r.serverCreatedAt || (r.lastModified ? new Date(r.lastModified).toISOString() : '')
+            const timeDisplay = formatFullDateTime(timeVal)
+            const sortTimestamp = r.serverCreatedAt
+              ? new Date(r.serverCreatedAt).getTime()
+              : r.lastModified || 0
+
+            activities.push({
+              id: oid,
+              user: userName,
+              initials: getInitials(userName),
+              action: `${r.status === 'submitted' ? 'enviou para aprovação o' : 'editou o'} ${label}`,
+              entity: `${r.projectName || 'Projeto'}${r.activityTitle ? ` · ${r.activityTitle}` : ''}`,
+              time: timeDisplay,
+              sortNumber: num,
+              sortTimestamp,
+            })
+          }
+
+          for (const s of offlineSheets) {
+            const sid = `server_sheet_${s.id}`
+            const oid = `offline_sheet_${s.id}`
+            if (existingIds.has(sid) || existingIds.has(oid)) continue
+
+            const num = typeof s.number === 'number' && s.number > 0 ? s.number : 0
+            const label = num > 0 ? `Planilha Nº ${num}` : 'Planilha Offline'
+            const userName = s.operatorName || user?.name || 'Operador EPA'
+            const timeVal =
+              s.serverCreatedAt || (s.lastModified ? new Date(s.lastModified).toISOString() : '')
+            const timeDisplay = formatFullDateTime(timeVal)
+            const sortTimestamp = s.serverCreatedAt
+              ? new Date(s.serverCreatedAt).getTime()
+              : s.lastModified || 0
+
+            activities.push({
+              id: oid,
+              user: userName,
+              initials: getInitials(userName),
+              action: `${s.status === 'submitted' ? 'enviou para aprovação a' : 'editou a'} ${label}`,
+              entity: `${s.projectName || 'Projeto'} · Área ${s.area || 'Geral'}`,
+              time: timeDisplay,
+              sortNumber: num,
+              sortTimestamp,
+            })
+          }
+        } catch (offlineActErr) {
+          console.warn('Erro ao carregar atividades offline:', offlineActErr)
+        }
+
+        // Ordenação decrescente:
+        // Primeiro por número sequencial do servidor (sortNumber DESC),
+        // e para itens sem número (rascunhos / logs), pelo timestamp de criação (sortTimestamp DESC)
+        activities.sort((a, b) => {
+          if (a.sortNumber > 0 && b.sortNumber > 0) {
+            if (a.sortNumber !== b.sortNumber) return b.sortNumber - a.sortNumber
+          } else if (a.sortNumber > 0 && b.sortNumber === 0) {
+            return -1
+          } else if (b.sortNumber > 0 && a.sortNumber === 0) {
+            return 1
+          }
+          return b.sortTimestamp - a.sortTimestamp
+        })
+
+        if (activities.length > 0) {
+          setRecentActivities(activities.slice(0, 8))
+        } else {
+          // Fallback final com mocks adaptados para o padrão brasileiro
+          setRecentActivities(
+            auditEvents.slice(0, 5).map((e) => ({
+              id: e.id,
+              user: e.user,
+              initials: e.initials,
+              action: e.action,
+              entity: e.entity,
+              time: formatFullDateTime(new Date().toISOString()),
+              sortNumber: 0,
+              sortTimestamp: 0,
+            })),
+          )
+        }
+      } catch (actErr) {
+        console.warn('Erro geral ao processar atividades recentes:', actErr)
+      } finally {
+        setLoadingActivities(false)
       }
     } catch (err) {
       console.warn('Dashboard stats error:', err)
@@ -414,25 +689,36 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             <span className="h-2 w-2 rounded-full bg-emerald-500 active-glow" />
           </div>
           <div className="divide-y dark:divide-slate-800">
-            {auditEvents.slice(0, 4).map((item) => (
-              <div
-                key={item.id}
-                className="flex gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-900/40"
-              >
-                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  {item.initials}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs leading-5 text-slate-700 dark:text-slate-300">
-                    <b>{item.user}</b> {item.action}
-                  </p>
-                  <p className="truncate text-[10px] text-slate-400">
-                    {item.entity} · {item.time}
-                  </p>
-                </div>
-                <CheckCircle2 className="mt-1 h-4 w-4 text-emerald-500" />
+            {loadingActivities ? (
+              <div className="p-8 text-center text-xs text-slate-400">
+                <RefreshCw className="mx-auto h-5 w-5 animate-spin text-emerald-600 mb-2" />
+                Carregando atividades recentes...
               </div>
-            ))}
+            ) : recentActivities.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">
+                Nenhuma atividade recente registrada no sistema.
+              </div>
+            ) : (
+              recentActivities.slice(0, 6).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                >
+                  <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                    {item.initials}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs leading-5 text-slate-700 dark:text-slate-300">
+                      <b>{item.user}</b> {item.action}
+                    </p>
+                    <p className="truncate text-[10px] text-slate-400">
+                      {item.entity} · {item.time}
+                    </p>
+                  </div>
+                  <CheckCircle2 className="mt-1 h-4 w-4 text-emerald-500 shrink-0" />
+                </div>
+              ))
+            )}
           </div>
         </article>
 

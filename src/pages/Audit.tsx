@@ -13,6 +13,7 @@ interface AuditItem {
   initials: string
   action: string
   entity: string
+  label?: string
   time: string
   color: string
 }
@@ -104,10 +105,13 @@ export function AuditPage() {
               else if (r.entity === 'reports_rdo') entityText = 'RDO'
               else if (r.entity === 'field_spreadsheets') entityText = 'Planilha de Campo'
 
+              const itemLabel = (r.details as any)?.label || ''
+
               const timeStr = r.created
                 ? new Date(r.created).toLocaleString('pt-BR', {
                     day: '2-digit',
-                    month: 'short',
+                    month: '2-digit',
+                    year: 'numeric',
                     hour: '2-digit',
                     minute: '2-digit',
                   })
@@ -119,6 +123,7 @@ export function AuditPage() {
                 initials: initials || 'EP',
                 action: actionText,
                 entity: entityText,
+                label: itemLabel,
                 time: timeStr,
                 color,
               }
@@ -140,7 +145,9 @@ export function AuditPage() {
   }, [])
 
   const filteredRows = rows.filter((r) =>
-    `${r.user} ${r.action} ${r.entity}`.toLowerCase().includes(query.toLowerCase()),
+    `${r.user} ${r.action} ${r.entity} ${r.label || ''}`
+      .toLowerCase()
+      .includes(query.toLowerCase()),
   )
   return (
     <div className="space-y-6">
@@ -208,9 +215,16 @@ export function AuditPage() {
                     </td>
                     <td className="px-5 py-4 text-sm text-slate-600">{row.action}</td>
                     <td className="px-5 py-4">
-                      <span className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[10px]">
-                        {row.entity}
-                      </span>
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-700">
+                          {row.entity}
+                        </span>
+                        {row.label && (
+                          <span className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                            {row.label}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-4 text-xs text-slate-500">{row.time}</td>
                     <td className="px-5 py-4">

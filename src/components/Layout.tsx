@@ -525,8 +525,14 @@ export function Layout({
                       >
                         <span className="font-medium">
                           {c.type === 'rdo'
-                            ? `RDO #${(c.localData as any).number}`
-                            : 'Planilha de Campo'}
+                            ? typeof (c.localData as any).number === 'number' &&
+                              (c.localData as any).number > 0
+                              ? `RDO Nº ${(c.localData as any).number}`
+                              : 'RDO Offline'
+                            : typeof (c.localData as any).number === 'number' &&
+                                (c.localData as any).number > 0
+                              ? `Planilha Nº ${(c.localData as any).number}`
+                              : 'Planilha Offline'}
                         </span>
                         <Button
                           size="sm"

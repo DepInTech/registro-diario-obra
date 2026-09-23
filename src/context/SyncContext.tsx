@@ -191,7 +191,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         ...failedRdos.map((r) => ({
           id: r.id,
           type: 'rdo' as const,
-          title: `RDO #${r.number} (${r.activityTitle || 'Sem título'})`,
+          title: `${typeof r.number === 'number' && r.number > 0 ? `RDO Nº ${r.number}` : 'RDO Offline'} (${r.activityTitle || 'Sem título'})`,
           error: r.syncError || 'Erro desconhecido',
           attempts: r.syncAttempts || 1,
           lastAttempt: r.lastModified,
@@ -573,7 +573,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               // Se o upload de fotos falhar, o RDO permanece pendente com aviso claro
               rdo.syncStatus = 'failed'
               rdo.serverUpdatedAt = record.updated
-              const warnMsg = `RDO criado no servidor (#${record.number || rdo.number}), porém ${photoErrorsCount} foto(s) falharam no upload. As fotos foram preservadas localmente e serão reenviadas na próxima sincronização.`
+              const rdoDisplay =
+                record.number || rdo.number
+                  ? `RDO Nº ${record.number || rdo.number}`
+                  : 'RDO Offline'
+              const warnMsg = `${rdoDisplay} criado no servidor, porém ${photoErrorsCount} foto(s) falharam no upload. As fotos foram preservadas localmente e serão reenviadas na próxima sincronização.`
               rdo.syncError = warnMsg
               errorsList.push(warnMsg)
               totalErrors++
@@ -661,9 +665,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                   serverData: serverRecord as unknown as Record<string, unknown>,
                 },
               ])
+              const conflictRdoLabel =
+                typeof rdo.number === 'number' && rdo.number > 0
+                  ? `RDO Nº ${rdo.number}`
+                  : 'RDO Offline'
               toast({
                 title: 'Conflito detectado',
-                description: `O RDO #${rdo.number} foi alterado em outro dispositivo.`,
+                description: `O ${conflictRdoLabel} foi alterado em outro dispositivo.`,
                 variant: 'destructive',
               })
               continue
@@ -777,7 +785,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               // Se o upload de fotos falhar na atualização, o item permanece pendente com aviso claro
               rdo.syncStatus = 'failed'
               rdo.serverUpdatedAt = updated.updated
-              const warnMsg = `RDO atualizado (#${updated.number || rdo.number}), porém ${updatePhotoErrorsCount} foto(s) falharam no upload. As fotos continuam salvas no dispositivo para nova tentativa.`
+              const rdoUpdateDisplay =
+                updated.number || rdo.number
+                  ? `RDO Nº ${updated.number || rdo.number}`
+                  : 'RDO Offline'
+              const warnMsg = `${rdoUpdateDisplay} atualizado, porém ${updatePhotoErrorsCount} foto(s) falharam no upload. As fotos continuam salvas no dispositivo para nova tentativa.`
               rdo.syncError = warnMsg
               errorsList.push(warnMsg)
               totalErrors++

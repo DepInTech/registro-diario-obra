@@ -11,12 +11,12 @@ onRecordDeleteRequest(
     if (entity === 'reports_rdo') {
       const num = e.record.getInt('number')
       const act = e.record.getString('activity_title') || 'Sem título'
-      label = `RDO #${num > 0 ? num : recordId} · ${act}`
+      label = `RDO Nº ${num > 0 ? num : recordId} · ${act}`
     } else if (entity === 'field_spreadsheets') {
       const num = e.record.getInt('number')
       const dt = e.record.getString('date') ? e.record.getString('date').slice(0, 10) : ''
       const area = e.record.getString('area') || ''
-      label = `Planilha #${num > 0 ? num : recordId} · ${dt} (${area})`
+      label = `Planilha Nº ${num > 0 ? num : recordId} · ${dt} (${area})`
     }
 
     e.next()
