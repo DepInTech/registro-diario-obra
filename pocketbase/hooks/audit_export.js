@@ -18,6 +18,7 @@ routerAdd(
     log.set('details', {
       filename: String(body.filename || ''),
       format: action === 'export_excel' ? 'Excel' : 'PDF',
+      server_timestamp: log.getString('created') || new Date().toISOString(),
     })
     $app.save(log)
     return e.json(200, { success: true, audit_id: log.id })

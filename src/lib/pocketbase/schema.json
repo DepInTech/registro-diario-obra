@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-22T19:14:52.168Z",
+  "generatedAt": "2026-09-23T12:02:09.929Z",
   "collections": [
     {
       "name": "users",
@@ -611,6 +611,24 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "submitted_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "approved_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "returned_at",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -949,6 +967,30 @@
         {
           "name": "change_history",
           "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "number",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "submitted_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "approved_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "returned_at",
+          "type": "date",
           "required": false,
           "system": false
         }

@@ -39,7 +39,7 @@ onRecordUpdateRequest((e) => {
   // 3. Campos controlados pelo Administrador: número do RDO e projeto
   if (e.record.original().getInt('number') !== e.record.getInt('number')) {
     throw new ForbiddenError(
-      'O número do RDO é controlado pelo Administrador e não pode ser alterado por técnicos',
+      'O número do RDO é controlado pelo Administrador/Servidor e não pode ser alterado por técnicos',
     )
   }
   if (e.record.original().getString('project') !== e.record.getString('project')) {

@@ -445,7 +445,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
 
             const payload: Record<string, unknown> = {
-              number: rdo.number,
               project: targetProjectId,
               empresa_executora: rdo.companyName || 'EPA Gestão Ambiental',
               report_date: rdo.reportDate,
@@ -469,7 +468,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
             }
+            // Deixar o backend calcular o número sequencial atômico (1, 2, 3...)
+            if (rdo.number && rdo.number > 0 && !isProvisionalId(rdo.id)) {
+              payload.number = rdo.number
+            }
             const record = await pb.collection('reports_rdo').create(payload)
+            rdo.number = record.number
+            rdo.submittedAt = record.submitted_at
+            rdo.approvedAt = record.approved_at
+            rdo.returnedAt = record.returned_at
             // create wells
             for (const well of rdo.wells || []) {
               if (well.well_id) {

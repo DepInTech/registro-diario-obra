@@ -14,6 +14,7 @@ onRecordUpdateRequest(
       const currentDeleted = e.record.getBool('deleted')
       const previousArchived = e.record.original().getBool('archived')
       const currentArchived = e.record.getBool('archived')
+      const currentStatus = e.record.getString('status')
 
       if (previousDeleted !== currentDeleted) {
         action = currentDeleted ? 'soft_delete' : 'restore'
@@ -21,15 +22,35 @@ onRecordUpdateRequest(
         action = currentArchived ? 'archive' : 'unarchive'
       } else if (
         (entity === 'reports_rdo' || entity === 'field_spreadsheets') &&
-        previousStatus !== e.record.getString('status')
+        previousStatus !== currentStatus
       ) {
-        if (e.record.getString('status') === 'approved') action = 'approve'
-        if (e.record.getString('status') === 'returned') action = 'return'
+        if (currentStatus === 'approved') action = 'approve'
+        else if (currentStatus === 'returned') action = 'return'
+        else if (currentStatus === 'submitted') action = 'update'
       }
+
+      let label =
+        e.record.getString('name') ||
+        e.record.getString('code') ||
+        e.record.getString('activity_title') ||
+        e.record.id
+
+      if (entity === 'reports_rdo') {
+        const num = e.record.getInt('number')
+        const act = e.record.getString('activity_title') || 'Sem título'
+        label = `RDO #${num > 0 ? num : e.record.id} · ${act}`
+      } else if (entity === 'field_spreadsheets') {
+        const num = e.record.getInt('number')
+        const dt = e.record.getString('date') ? e.record.getString('date').slice(0, 10) : ''
+        const area = e.record.getString('area') || ''
+        label = `Planilha #${num > 0 ? num : e.record.id} · ${dt} (${area})`
+      }
+
       log.set('action', action)
       log.set('entity', entity)
       log.set('entity_record', e.record.id)
       log.set('details', {
+        label: label,
         deleted: currentDeleted,
         previousDeleted: previousDeleted,
         deleted_reason: e.record.getString('deleted_reason') || '',
@@ -37,8 +58,9 @@ onRecordUpdateRequest(
         deleted_at: e.record.getString('deleted_at') || '',
         archived: currentArchived,
         previousArchived: previousArchived,
-        status: e.record.getString('status') || '',
+        status: currentStatus || '',
         previousStatus: previousStatus,
+        server_timestamp: log.getString('created') || new Date().toISOString(),
       })
       $app.save(log)
     } catch (error) {
