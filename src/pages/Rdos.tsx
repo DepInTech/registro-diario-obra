@@ -280,7 +280,8 @@ export function RdosPage({ query }: { query: string }) {
         col === 'reports_rdo' ||
         col === 'report_wells' ||
         col === 'report_photos' ||
-        col === 'projects'
+        col === 'projects' ||
+        col === 'wells'
       ) {
         loadRdos({ silent: true })
       }

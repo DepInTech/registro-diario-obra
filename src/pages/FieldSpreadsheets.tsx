@@ -251,7 +251,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     const handleRealtimeUpdate = (e: Event) => {
       const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
       const col = customEvent.detail?.collection
-      if (col === 'field_spreadsheets' || col === 'projects') {
+      if (col === 'field_spreadsheets' || col === 'projects' || col === 'wells') {
         loadSheets({ silent: true })
       }
     }

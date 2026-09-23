@@ -160,7 +160,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast()
 
   const syncInProgressRef = useRef(false)
+  const pullInProgressRef = useRef(false)
   const backoffDelayRef = useRef(0)
+  const lastPullTimestampRef = useRef<string>(localStorage.getItem('epa_last_pull_timestamp') || '')
 
   const checkPending = useCallback(async () => {
     try {
@@ -421,7 +423,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       } catch (wellsSyncErr) {
         console.warn('Could not sync active wells during syncNow:', wellsSyncErr)
       }
-
       // -------------------------------------------------------------
       // 2. Sync RDOs
       // -------------------------------------------------------------
@@ -1207,121 +1208,190 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     })
   }
 
-  // Network and window lifecycle listeners (online event, window focus, periodic tick)
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true)
-      toast({
-        title: '🟢 Conexão restabelecida',
-        description: 'Você está online. Sincronizando dados com o sistema...',
-      })
-      syncNow()
-    }
+  // Polling de segurança incremental a cada ~30s ou chamada direta
+  const pullIncrementalServerData = useCallback(async () => {
+    if (pullInProgressRef.current) return
+    if (!navigator.onLine || !pb.authStore.isValid) return
 
-    const handleOffline = () => {
-      setIsOnline(false)
-      toast({
-        title: '🟠 Trabalhando offline',
-        description: 'Sem conexão. Suas alterações serão salvas localmente no dispositivo.',
-      })
-    }
+    pullInProgressRef.current = true
+    try {
+      const authUser = pb.authStore.record
+      const isAdmin = authUser?.role === 'admin'
+      const userId = authUser?.id || ''
 
-    const handleWindowFocus = () => {
-      if (navigator.onLine && pb.authStore.isValid) {
-        checkPending().then(() => syncNow())
-      }
-    }
+      const lastTimestamp = lastPullTimestampRef.current
+      const dateFilter = lastTimestamp ? `updated >= "${lastTimestamp}"` : ''
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine && pb.authStore.isValid) {
-        checkPending().then(() => syncNow())
-      }
-    }
+      let projectFilter = isAdmin
+        ? dateFilter || ''
+        : dateFilter
+          ? `assigned_users ~ "${userId}" && ${dateFilter}`
+          : `assigned_users ~ "${userId}"`
 
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-    window.addEventListener('focus', handleWindowFocus)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
+      let anyChangeDetected = false
 
-    // Anti-ressincronização inicial no carregamento se online
-    if (navigator.onLine && pb.authStore.isValid) {
-      const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
-      pb.collection('system_settings')
-        .getFirstListItem('key = "last_operation_wipe_at"')
-        .then(async (setting) => {
-          const wipeTimestamp =
-            setting && setting.value ? new Date(setting.value).getTime() : defaultWipe
-          await offlineStorage.purgePreWipeOperationalData(wipeTimestamp)
-          localStorage.setItem('epa_last_processed_wipe', String(wipeTimestamp))
-          checkPending()
-        })
-        .catch(async () => {
-          await offlineStorage.purgePreWipeOperationalData(defaultWipe)
-          checkPending()
-        })
-    } else {
-      // Offline fallback: purga imediatamente usando o timestamp de zeragem padrão
-      const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
-      offlineStorage.purgePreWipeOperationalData(defaultWipe).then(() => checkPending())
-    }
-
-    // Initial check
-    checkPending()
-
-    // Periodic sync attempt every 30s when online
-    const interval = setInterval(() => {
-      if (navigator.onLine && pb.authStore.isValid && !syncInProgressRef.current) {
-        checkPending().then(() => {
-          syncNow()
-        })
-      }
-    }, 30000)
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-      window.removeEventListener('focus', handleWindowFocus)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      clearInterval(interval)
-    }
-  }, [syncNow, checkPending, toast])
-
-  // Centralized Realtime Subscriptions for PocketBase collections:
-  // 'reports_rdo', 'field_spreadsheets', 'projects', 'report_wells', 'report_photos'
-  useEffect(() => {
-    if (!isOnline || !pb.authStore.isValid) return
-
-    let cancelled = false
-    const unsubscribes: Array<() => Promise<void>> = []
-
-    const broadcastUpdate = (detail: RealtimeRecordUpdateDetail) => {
-      window.dispatchEvent(
-        new CustomEvent<RealtimeRecordUpdateDetail>(REALTIME_RECORD_UPDATE, { detail }),
-      )
-    }
-
-    // Helper: Handle RDO realtime events
-    const handleRdoEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
+      // 1. Pull Projects
       try {
-        const local = await offlineStorage.getRdo(record.id)
-        // PRESERVAÇÃO OFFLINE: se o registro local está pendente ou com conflito, NUNCA sobrescrever com dados remotos
-        if (
-          local &&
-          (local.syncStatus === 'pending_create' ||
-            local.syncStatus === 'pending_update' ||
-            local.syncStatus === 'conflict')
-        ) {
-          broadcastUpdate({ collection: 'reports_rdo', id: record.id, action, record })
-          return
+        const serverProjects = await pb.collection('projects').getFullList({
+          filter: projectFilter || undefined,
+          sort: '-updated',
+        })
+
+        let hasProjectChanges = false
+        for (const record of serverProjects) {
+          const local = await offlineStorage.getProject(record.id)
+          // Preservação de rascunhos offline
+          if (
+            local &&
+            (local.syncStatus === 'pending_create' ||
+              local.syncStatus === 'pending_update' ||
+              local.syncStatus === 'conflict')
+          ) {
+            continue
+          }
+
+          const assignedIds: string[] = Array.isArray(record.assigned_users)
+            ? record.assigned_users
+            : record.assigned_users
+              ? [record.assigned_users]
+              : []
+
+          const updatedProject: OfflineProjectItem = {
+            id: record.id,
+            name: record.name,
+            client: local?.client || 'Cliente EPA',
+            code: record.epa_code || local?.code || 'EPA-001',
+            location: record.location || local?.location || 'Área Operacional',
+            status: record.status || local?.status || 'active',
+            progress: record.progress ?? local?.progress ?? 0,
+            contract: local?.contract || 'CT-2025',
+            team: local?.team || ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
+            rawClient: record.client,
+            rawContract: record.contract,
+            rawCompany: record.company,
+            rawArea: record.area,
+            assignedUsersIds: assignedIds,
+            archived: Boolean(record.archived),
+            deleted: Boolean(record.deleted),
+            deletedReason: record.deleted_reason || undefined,
+            deletedBy: record.deleted_by || undefined,
+            deletedAt: record.deleted_at || undefined,
+            syncStatus: 'synced',
+            lastModified: new Date(record.updated || Date.now()).getTime(),
+            serverUpdatedAt: record.updated,
+          }
+          await offlineStorage.saveProject(updatedProject)
+          hasProjectChanges = true
         }
 
-        if (action === 'delete') {
-          if (local) {
-            await offlineStorage.deleteRdo(record.id)
+        if (hasProjectChanges) {
+          anyChangeDetected = true
+          window.dispatchEvent(
+            new CustomEvent<RealtimeRecordUpdateDetail>(REALTIME_RECORD_UPDATE, {
+              detail: { collection: 'projects', id: '', action: 'update', record: null },
+            }),
+          )
+        }
+      } catch (projErr: any) {
+        // Se a query falhar devido a dateFilter em formato estrito, tentar sem filtro de data
+        if (dateFilter) {
+          try {
+            const fallbackFilter = !isAdmin && userId ? `assigned_users ~ "${userId}"` : undefined
+            const serverProjects = await pb.collection('projects').getFullList({
+              filter: fallbackFilter,
+              sort: '-updated',
+            })
+            for (const record of serverProjects) {
+              const local = await offlineStorage.getProject(record.id)
+              if (
+                local &&
+                (local.syncStatus === 'pending_create' ||
+                  local.syncStatus === 'pending_update' ||
+                  local.syncStatus === 'conflict')
+              ) {
+                continue
+              }
+              const assignedIds: string[] = Array.isArray(record.assigned_users)
+                ? record.assigned_users
+                : record.assigned_users
+                  ? [record.assigned_users]
+                  : []
+              const updatedProject: OfflineProjectItem = {
+                id: record.id,
+                name: record.name,
+                client: local?.client || 'Cliente EPA',
+                code: record.epa_code || local?.code || 'EPA-001',
+                location: record.location || local?.location || 'Área Operacional',
+                status: record.status || local?.status || 'active',
+                progress: record.progress ?? local?.progress ?? 0,
+                contract: local?.contract || 'CT-2025',
+                team: local?.team || ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
+                rawClient: record.client,
+                rawContract: record.contract,
+                rawCompany: record.company,
+                rawArea: record.area,
+                assignedUsersIds: assignedIds,
+                archived: Boolean(record.archived),
+                deleted: Boolean(record.deleted),
+                deletedReason: record.deleted_reason || undefined,
+                deletedBy: record.deleted_by || undefined,
+                deletedAt: record.deleted_at || undefined,
+                syncStatus: 'synced',
+                lastModified: new Date(record.updated || Date.now()).getTime(),
+                serverUpdatedAt: record.updated,
+              }
+              await offlineStorage.saveProject(updatedProject)
+            }
+          } catch {
+            // ignore
           }
-        } else {
-          // create or update: atualizar o cache no IndexedDB preservando dados essenciais
-          const updatedItem: OfflineRdoItem = {
+        }
+        console.warn('Error pulling projects in polling:', projErr)
+      }
+
+      // Discover authorized project IDs for technician
+      let allowedProjectIds: string[] = []
+      if (!isAdmin && userId) {
+        try {
+          const cachedProjs = await offlineStorage.getAllProjects()
+          allowedProjectIds = cachedProjs
+            .filter((p) => !p.deleted && (p.assignedUsersIds || []).includes(userId))
+            .map((p) => p.id)
+        } catch {
+          // ignore
+        }
+      }
+
+      // 2. Pull RDOs
+      try {
+        let rdoFilter = dateFilter || ''
+        if (!isAdmin && allowedProjectIds.length > 0) {
+          const projClause = allowedProjectIds.map((pid) => `project = "${pid}"`).join(' || ')
+          rdoFilter = rdoFilter ? `(${projClause}) && ${rdoFilter}` : `(${projClause})`
+        } else if (!isAdmin && allowedProjectIds.length === 0) {
+          rdoFilter = rdoFilter
+            ? `performed_by = "${userId}" && ${rdoFilter}`
+            : `performed_by = "${userId}"`
+        }
+
+        const serverRdos = await pb.collection('reports_rdo').getFullList({
+          filter: rdoFilter || undefined,
+          sort: '-updated',
+        })
+
+        let hasRdoChanges = false
+        for (const record of serverRdos) {
+          const local = await offlineStorage.getRdo(record.id)
+          if (
+            local &&
+            (local.syncStatus === 'pending_create' ||
+              local.syncStatus === 'pending_update' ||
+              local.syncStatus === 'conflict')
+          ) {
+            continue
+          }
+
+          const updatedRdo: OfflineRdoItem = {
             id: record.id,
             number: record.number,
             projectId: record.project,
@@ -1366,34 +1436,51 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             deletedBy: record.deleted_by || undefined,
             deletedAt: record.deleted_at || undefined,
           }
-          await offlineStorage.saveRdo(updatedItem)
+          await offlineStorage.saveRdo(updatedRdo)
+          hasRdoChanges = true
         }
-      } catch (err) {
-        console.warn('Error handling realtime RDO event in offlineStorage:', err)
-      } finally {
-        broadcastUpdate({ collection: 'reports_rdo', id: record.id, action, record })
+
+        if (hasRdoChanges) {
+          anyChangeDetected = true
+          window.dispatchEvent(
+            new CustomEvent<RealtimeRecordUpdateDetail>(REALTIME_RECORD_UPDATE, {
+              detail: { collection: 'reports_rdo', id: '', action: 'update', record: null },
+            }),
+          )
+        }
+      } catch (rdoErr) {
+        console.warn('Error pulling RDOs in polling:', rdoErr)
       }
-    }
 
-    // Helper: Handle Field Spreadsheet realtime events
-    const handleFieldEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
+      // 3. Pull Field Spreadsheets
       try {
-        const local = await offlineStorage.getFieldSheet(record.id)
-        if (
-          local &&
-          (local.syncStatus === 'pending_create' ||
-            local.syncStatus === 'pending_update' ||
-            local.syncStatus === 'conflict')
-        ) {
-          broadcastUpdate({ collection: 'field_spreadsheets', id: record.id, action, record })
-          return
+        let fieldFilter = dateFilter || ''
+        if (!isAdmin && allowedProjectIds.length > 0) {
+          const projClause = allowedProjectIds.map((pid) => `project = "${pid}"`).join(' || ')
+          fieldFilter = fieldFilter ? `(${projClause}) && ${fieldFilter}` : `(${projClause})`
+        } else if (!isAdmin && allowedProjectIds.length === 0) {
+          fieldFilter = fieldFilter
+            ? `operator = "${userId}" && ${fieldFilter}`
+            : `operator = "${userId}"`
         }
 
-        if (action === 'delete') {
-          if (local) {
-            await offlineStorage.deleteFieldSheet(record.id)
+        const serverSheets = await pb.collection('field_spreadsheets').getFullList({
+          filter: fieldFilter || undefined,
+          sort: '-updated',
+        })
+
+        let hasFieldChanges = false
+        for (const record of serverSheets) {
+          const local = await offlineStorage.getFieldSheet(record.id)
+          if (
+            local &&
+            (local.syncStatus === 'pending_create' ||
+              local.syncStatus === 'pending_update' ||
+              local.syncStatus === 'conflict')
+          ) {
+            continue
           }
-        } else {
+
           const rawExt = ((record.extraction_data as any) || []) as any[]
           const fallbackMorning = rawExt.find((r) => r.morning_time)?.morning_time || ''
           const fallbackAfternoon = rawExt.find((r) => r.afternoon_time)?.afternoon_time || ''
@@ -1446,6 +1533,440 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             deletedAt: record.deleted_at || undefined,
           }
           await offlineStorage.saveFieldSheet(updatedSheet)
+          hasFieldChanges = true
+        }
+
+        if (hasFieldChanges) {
+          anyChangeDetected = true
+          window.dispatchEvent(
+            new CustomEvent<RealtimeRecordUpdateDetail>(REALTIME_RECORD_UPDATE, {
+              detail: { collection: 'field_spreadsheets', id: '', action: 'update', record: null },
+            }),
+          )
+        }
+      } catch (sheetErr) {
+        console.warn('Error pulling Field Sheets in polling:', sheetErr)
+      }
+
+      // 4. Se qualquer alteração foi baixada pelo polling, emitir broadcast geral
+      if (anyChangeDetected) {
+        window.dispatchEvent(
+          new CustomEvent(SYNC_BROADCAST_EVENT, {
+            detail: { syncedCount: 1, timestamp: Date.now() },
+          }),
+        )
+      }
+
+      // 5. Update and persist last pull timestamp
+      const newPullTimestamp = new Date().toISOString()
+      lastPullTimestampRef.current = newPullTimestamp
+      localStorage.setItem('epa_last_pull_timestamp', newPullTimestamp)
+    } catch (pullErr) {
+      console.warn('Error in pullIncrementalServerData:', pullErr)
+    } finally {
+      pullInProgressRef.current = false
+    }
+  }, [])
+
+  // Network and window lifecycle listeners (online event, window focus, periodic tick)
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true)
+      toast({
+        title: '🟢 Conexão restabelecida',
+        description: 'Você está online. Sincronizando dados com o sistema...',
+      })
+      syncNow()
+      pullIncrementalServerData()
+    }
+    const handleOffline = () => {
+      setIsOnline(false)
+      toast({
+        title: '🟠 Trabalhando offline',
+        description: 'Sem conexão. Suas alterações serão salvas localmente no dispositivo.',
+      })
+    }
+
+    const handleWindowFocus = () => {
+      if (navigator.onLine && pb.authStore.isValid) {
+        checkPending().then(() => {
+          syncNow()
+          pullIncrementalServerData()
+        })
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && pb.authStore.isValid) {
+        checkPending().then(() => {
+          syncNow()
+          pullIncrementalServerData()
+        })
+      }
+    }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Anti-ressincronização inicial no carregamento se online
+    if (navigator.onLine && pb.authStore.isValid) {
+      const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
+      pb.collection('system_settings')
+        .getFirstListItem('key = "last_operation_wipe_at"')
+        .then(async (setting) => {
+          const wipeTimestamp =
+            setting && setting.value ? new Date(setting.value).getTime() : defaultWipe
+          await offlineStorage.purgePreWipeOperationalData(wipeTimestamp)
+          localStorage.setItem('epa_last_processed_wipe', String(wipeTimestamp))
+          checkPending()
+        })
+        .catch(async () => {
+          await offlineStorage.purgePreWipeOperationalData(defaultWipe)
+          checkPending()
+        })
+    } else {
+      // Offline fallback: purga imediatamente usando o timestamp de zeragem padrão
+      const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
+      offlineStorage.purgePreWipeOperationalData(defaultWipe).then(() => checkPending())
+    }
+
+    // Initial check
+    checkPending()
+
+    // Polling de segurança a cada ~30s quando online para garantir que dados
+    // sincronizados remotos sejam baixados mesmo se o websocket falhar
+    const pollInterval = setInterval(() => {
+      if (navigator.onLine && pb.authStore.isValid && !syncInProgressRef.current) {
+        pullIncrementalServerData().then(() => {
+          checkPending()
+        })
+      }
+    }, 30000)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      clearInterval(pollInterval)
+    }
+  }, [syncNow, checkPending, toast])
+
+  // Centralized Realtime Subscriptions for PocketBase collections:
+  // 'reports_rdo', 'field_spreadsheets', 'projects', 'report_wells', 'report_photos', 'audit_logs'
+  // Com reconexão automática ao evento 'online' e ao realtime reconnect do SDK,
+  // tratamento de erro de subscrição com retry e backoff exponencial,
+  // e atualização imediata do estado compartilhado com MERGE OBRIGATÓRIO (sobrescreve synced,
+  // NUNCA rascunhos offline pendentes).
+  useEffect(() => {
+    if (!isOnline || !pb.authStore.isValid) return
+
+    let cancelled = false
+    const unsubscribes: Array<() => Promise<void>> = []
+    let reconnectTimeout: any = null
+    let retryAttempt = 0
+    let isSubscribing = false
+    const currentUserRecord = pb.authStore.record
+    const isAdmin = currentUserRecord?.role === 'admin'
+    const userId = currentUserRecord?.id || ''
+
+    const broadcastUpdate = (detail: RealtimeRecordUpdateDetail) => {
+      window.dispatchEvent(
+        new CustomEvent<RealtimeRecordUpdateDetail>(REALTIME_RECORD_UPDATE, { detail }),
+      )
+    }
+
+    // Helper: Verify if technician has permission to see an event/record
+    const isRecordAllowedForTechnician = async (
+      collection: 'projects' | 'reports_rdo' | 'field_spreadsheets',
+      record: any,
+    ): Promise<boolean> => {
+      if (isAdmin) return true
+      if (!userId) return false
+
+      if (collection === 'projects') {
+        const assigned: string[] = Array.isArray(record.assigned_users)
+          ? record.assigned_users
+          : record.assigned_users
+            ? [record.assigned_users]
+            : []
+        return assigned.includes(userId)
+      }
+
+      // Para RDO e Planilhas: se o técnico é o performer/operador ou está no projeto atribuído
+      if (collection === 'reports_rdo') {
+        if (record.performed_by === userId || record.supervised_by === userId) return true
+      }
+      if (collection === 'field_spreadsheets') {
+        if (record.operator === userId) return true
+      }
+
+      // Checa se o projeto do RDO/Planilha está entre os atribuídos ao técnico
+      const targetProjId = record.project
+      if (targetProjId) {
+        try {
+          const cachedProj = await offlineStorage.getProject(targetProjId)
+          if (cachedProj && (cachedProj.assignedUsersIds || []).includes(userId)) {
+            return true
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      return false
+    }
+
+    // Helper: Merge and Handle RDO realtime events
+    const handleRdoEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
+      if (!record || !record.id) return
+      try {
+        const allowed = await isRecordAllowedForTechnician('reports_rdo', record)
+        if (!allowed && !isAdmin) {
+          return
+        }
+
+        const local = await offlineStorage.getRdo(record.id)
+        // MERGE OBRIGATÓRIO: se o registro local é um rascunho offline pendente ou com conflito,
+        // NUNCA sobrescrever com dados do servidor
+        if (
+          local &&
+          (local.syncStatus === 'pending_create' ||
+            local.syncStatus === 'pending_update' ||
+            local.syncStatus === 'conflict')
+        ) {
+          broadcastUpdate({ collection: 'reports_rdo', id: record.id, action, record })
+          return
+        }
+
+        if (action === 'delete') {
+          if (local) {
+            await offlineStorage.deleteRdo(record.id)
+          }
+        } else {
+          // create ou update: dados do servidor sobrescrevem itens já sincronizados
+          let wells = local?.wells || []
+          let photos = local?.photos || []
+          let fieldPhoto = local?.fieldPhoto
+
+          try {
+            const [serverWells, serverPhotos] = await Promise.all([
+              pb
+                .collection('report_wells')
+                .getFullList({
+                  filter: `report = "${record.id}"`,
+                  sort: 'created',
+                })
+                .catch(() => []),
+              pb
+                .collection('report_photos')
+                .getFullList({
+                  filter: `report = "${record.id}"`,
+                  sort: 'order',
+                })
+                .catch(() => []),
+            ])
+
+            if (serverWells && serverWells.length > 0) {
+              wells = serverWells.map((w: any) => ({
+                id: w.id,
+                well_id: w.well_id,
+                depth: w.depth,
+                completion_date: w.completion_date ? w.completion_date.slice(0, 10) : undefined,
+                diameter: w.diameter,
+              }))
+            }
+
+            if (serverPhotos && serverPhotos.length > 0) {
+              const inspection = serverPhotos.find((p: any) => p.category === 'field_inspection')
+              const generals = serverPhotos.filter((p: any) => p.category !== 'field_inspection')
+              if (inspection) {
+                fieldPhoto = {
+                  id: inspection.id,
+                  image: inspection.image,
+                  caption: inspection.caption,
+                }
+              }
+              photos = generals.map((p: any) => ({
+                id: p.id,
+                image: p.image,
+                caption: p.caption,
+                order: p.order,
+                category: 'general' as const,
+              }))
+            }
+          } catch {
+            // Em caso de erro ao buscar sub-itens, mantém os anteriores
+          }
+
+          let projectName = local?.projectName || 'Projeto EPA'
+          let clientName = local?.clientName
+          let contractCode = local?.contractCode
+          let location = local?.location
+
+          if (record.project) {
+            try {
+              const cachedProj = await offlineStorage.getProject(record.project)
+              if (cachedProj) {
+                projectName = cachedProj.name || projectName
+                clientName = cachedProj.client || clientName
+                contractCode = cachedProj.contract || contractCode
+                location = cachedProj.location || location
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          const updatedItem: OfflineRdoItem = {
+            id: record.id,
+            number: record.number,
+            projectId: record.project,
+            projectName,
+            clientName,
+            contractCode,
+            companyName: record.empresa_executora || local?.companyName || 'EPA Gestão Ambiental',
+            location,
+            reportDate: record.report_date
+              ? record.report_date.slice(0, 10)
+              : local?.reportDate || '',
+            weather: record.weather || local?.weather || 'Sol',
+            performedBy: record.performed_by || local?.performedBy || '',
+            performedByName: local?.performedByName,
+            supervisedBy: record.supervised_by || local?.supervisedBy,
+            supervisedByName: local?.supervisedByName,
+            activityTitle: record.activity_title || '',
+            activityDescription: record.activity_description || '',
+            timeDisplacement: record.time_displacement || '',
+            timeWaiting: record.time_waiting || '',
+            interferences: record.interferences || '',
+            planChanges: record.plan_changes || '',
+            accidents: record.accidents || '',
+            status: record.status || 'draft',
+            reviewNotes: record.review_notes || '',
+            returned_fields: record.returned_fields || undefined,
+            returnedByName: record.returned_by_name || undefined,
+            returnedAt: record.returned_at || undefined,
+            submittedAt: record.submitted_at || local?.submittedAt,
+            approvedAt: record.approved_at || local?.approvedAt,
+            serverCreatedAt: record.created || local?.serverCreatedAt,
+            change_history: record.change_history || undefined,
+            wells,
+            photos,
+            fieldPhoto,
+            syncStatus: 'synced',
+            lastModified: new Date(record.updated || Date.now()).getTime(),
+            serverUpdatedAt: record.updated,
+            archived: Boolean(record.archived),
+            deleted: Boolean(record.deleted),
+            deletedReason: record.deleted_reason || undefined,
+            deletedBy: record.deleted_by || undefined,
+            deletedAt: record.deleted_at || undefined,
+          }
+          await offlineStorage.saveRdo(updatedItem)
+        }
+      } catch (err) {
+        console.warn('Error handling realtime RDO event in offlineStorage:', err)
+      } finally {
+        broadcastUpdate({ collection: 'reports_rdo', id: record.id, action, record })
+      }
+    }
+
+    // Helper: Merge and Handle Field Spreadsheet realtime events
+    const handleFieldEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
+      if (!record || !record.id) return
+      try {
+        const allowed = await isRecordAllowedForTechnician('field_spreadsheets', record)
+        if (!allowed && !isAdmin) {
+          return
+        }
+
+        const local = await offlineStorage.getFieldSheet(record.id)
+        // MERGE OBRIGATÓRIO: rascunhos pendentes locais NUNCA são sobrescritos
+        if (
+          local &&
+          (local.syncStatus === 'pending_create' ||
+            local.syncStatus === 'pending_update' ||
+            local.syncStatus === 'conflict')
+        ) {
+          broadcastUpdate({ collection: 'field_spreadsheets', id: record.id, action, record })
+          return
+        }
+
+        if (action === 'delete') {
+          if (local) {
+            await offlineStorage.deleteFieldSheet(record.id)
+          }
+        } else {
+          const rawExt = ((record.extraction_data as any) || []) as any[]
+          const fallbackMorning = rawExt.find((r) => r.morning_time)?.morning_time || ''
+          const fallbackAfternoon = rawExt.find((r) => r.afternoon_time)?.afternoon_time || ''
+
+          let projectName = local?.projectName || 'Projeto EPA'
+          let clientName = local?.clientName
+          let contractCode = local?.contractCode
+
+          if (record.project) {
+            try {
+              const cachedProj = await offlineStorage.getProject(record.project)
+              if (cachedProj) {
+                projectName = cachedProj.name || projectName
+                clientName = cachedProj.client || clientName
+                contractCode = cachedProj.contract || contractCode
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          const updatedSheet: OfflineFieldSheetItem = {
+            id: record.id,
+            number: record.number || local?.number,
+            projectId: record.project,
+            projectName,
+            clientName,
+            contractCode,
+            date: record.date ? record.date.slice(0, 10) : local?.date || '',
+            area: record.area || local?.area || 'Oficina Central',
+            operator: record.operator || local?.operator || '',
+            operatorName: local?.operatorName,
+            weather: record.weather || local?.weather || 'Sol',
+            pluviometer: record.pluviometer ?? local?.pluviometer ?? 0,
+            morning_time: record.morning_time || fallbackMorning,
+            afternoon_time: record.afternoon_time || fallbackAfternoon,
+            infiltration_morning_time: record.infiltration_morning_time || '',
+            infiltration_afternoon_time: record.infiltration_afternoon_time || '',
+            extraction_data: record.extraction_data || [],
+            infiltration_data: record.infiltration_data || {},
+            nutrient_done: Boolean(record.nutrient_done),
+            nutrient_map_kg: record.nutrient_map_kg || 0,
+            nutrient_ureia_kg: record.nutrient_ureia_kg || 0,
+            compressor_data: record.compressor_data || {},
+            oil_removal_data: record.oil_removal_data || {},
+            waste_liquid_qty: record.waste_liquid_qty || 0,
+            waste_solid_qty: record.waste_solid_qty || 0,
+            env_5s_check: Boolean(record.env_5s_check),
+            env_checklist_monthly: Boolean(record.env_checklist_monthly),
+            observations: record.observations || '',
+            status: record.status || 'draft',
+            reviewNotes: record.review_notes || '',
+            returned_fields: record.returned_fields || undefined,
+            returnedByName: record.returned_by_name || undefined,
+            returnedAt: record.returned_at || undefined,
+            submittedAt: record.submitted_at || local?.submittedAt,
+            approvedAt: record.approved_at || local?.approvedAt,
+            serverCreatedAt: record.created || local?.serverCreatedAt,
+            change_history: record.change_history || undefined,
+            syncStatus: 'synced',
+            lastModified: new Date(record.updated || Date.now()).getTime(),
+            serverUpdatedAt: record.updated,
+            archived: Boolean(record.archived),
+            deleted: Boolean(record.deleted),
+            deletedReason: record.deleted_reason || undefined,
+            deletedBy: record.deleted_by || undefined,
+            deletedAt: record.deleted_at || undefined,
+          }
+          await offlineStorage.saveFieldSheet(updatedSheet)
         }
       } catch (err) {
         console.warn('Error handling realtime FieldSheet event in offlineStorage:', err)
@@ -1454,10 +1975,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Helper: Handle Projects realtime events
+    // Helper: Merge and Handle Projects realtime events
     const handleProjectEvent = async (action: 'create' | 'update' | 'delete', record: any) => {
+      if (!record || !record.id) return
       try {
+        const allowed = await isRecordAllowedForTechnician('projects', record)
+        if (!allowed && !isAdmin) {
+          await offlineStorage.deleteProject(record.id)
+          broadcastUpdate({ collection: 'projects', id: record.id, action: 'delete', record })
+          return
+        }
+
         const local = await offlineStorage.getProject(record.id)
+        // MERGE OBRIGATÓRIO: rascunhos pendentes locais NUNCA são sobrescritos
         if (
           local &&
           (local.syncStatus === 'pending_create' ||
@@ -1512,18 +2042,48 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Helper: Handle child collections (report_wells, report_photos)
-    const handleReportSubCollection = (
+    // Helper: Handle child collections (report_wells, report_photos, wells)
+    const handleReportSubCollection = async (
       colName: string,
       action: 'create' | 'update' | 'delete',
       record: any,
     ) => {
-      broadcastUpdate({ collection: colName, id: record.id, action, record })
+      if (colName === 'wells' && record?.project) {
+        try {
+          const updatedWells = await pb.collection('wells').getFullList({
+            filter: `project = "${record.project}" && active = true`,
+            sort: 'identification',
+          })
+          await offlineStorage.saveProjectWells(record.project, updatedWells)
+        } catch (wErr) {
+          console.warn('Erro ao atualizar poços no IndexedDB via realtime:', wErr)
+        }
+      }
+      broadcastUpdate({ collection: colName, id: record?.id || '', action, record })
     }
 
+    // Cancelar subscrições ativas
+    const cancelExistingSubscriptions = async () => {
+      while (unsubscribes.length > 0) {
+        const fn = unsubscribes.pop()
+        try {
+          await fn?.()
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // Subscrição com retry e backoff exponencial
     const setupSubscriptions = async () => {
+      if (cancelled || !navigator.onLine || !pb.authStore.isValid) return
+      if (isSubscribing) return
+      isSubscribing = true
+
+      await cancelExistingSubscriptions()
+
       try {
-        const [subRdo, subField, subProj, subWells, subPhotos] = await Promise.all([
+        const promises: Promise<() => Promise<void>>[] = [
           pb.collection('reports_rdo').subscribe('*', (e) => {
             handleRdoEvent(e.action as 'create' | 'update' | 'delete', e.record)
           }),
@@ -1547,31 +2107,96 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               e.record,
             )
           }),
-        ])
+          pb.collection('wells').subscribe('*', (e) => {
+            handleReportSubCollection('wells', e.action as 'create' | 'update' | 'delete', e.record)
+          }),
+        ]
+
+        if (isAdmin) {
+          promises.push(
+            pb.collection('audit_logs').subscribe('*', (e) => {
+              broadcastUpdate({
+                collection: 'audit_logs',
+                id: e.record.id,
+                action: e.action as 'create' | 'update' | 'delete',
+                record: e.record,
+              })
+            }),
+          )
+        }
+
+        const subs = await Promise.all(promises)
 
         if (cancelled) {
-          subRdo().catch(() => {})
-          subField().catch(() => {})
-          subProj().catch(() => {})
-          subWells().catch(() => {})
-          subPhotos().catch(() => {})
+          subs.forEach((fn) => fn().catch(() => {}))
         } else {
-          unsubscribes.push(subRdo, subField, subProj, subWells, subPhotos)
+          unsubscribes.push(...subs)
+          retryAttempt = 0 // reset backoff on success
+          console.log('[Realtime] Subscrições PocketBase conectadas com sucesso.')
         }
       } catch (subErr) {
-        console.warn('Error setting up centralized realtime subscriptions:', subErr)
+        console.warn('[Realtime] Erro ao subscrever coleções PocketBase:', subErr)
+        // Retry com backoff exponencial: 2s, 4s, 8s, até max 30s
+        if (!cancelled && navigator.onLine) {
+          retryAttempt++
+          const delay = Math.min(1000 * Math.pow(2, retryAttempt), 30000)
+          clearTimeout(reconnectTimeout)
+          reconnectTimeout = setTimeout(() => {
+            if (!cancelled && navigator.onLine && pb.authStore.isValid) {
+              setupSubscriptions()
+            }
+          }, delay)
+        }
+      } finally {
+        isSubscribing = false
       }
     }
 
     setupSubscriptions()
 
+    // 1. Reconexão ao evento 'online' do navegador: cancelar e refazer subscrições + polling
+    const handleOnlineEvent = () => {
+      console.log('[Realtime] Evento online detectado: reconectando subscrições e puxando dados...')
+      retryAttempt = 0
+      clearTimeout(reconnectTimeout)
+      setupSubscriptions()
+      pullIncrementalServerData()
+    }
+    window.addEventListener('online', handleOnlineEvent)
+
+    // 2. Reconexão ao realtime reconnect do PocketBase SDK
+    // O PocketBase Client expõe o realtime (EventSource/SSE) com hooks e reconexão automática
+    const realtimeService = (pb as any).realtime
+    let handleSdkReconnect: (() => void) | null = null
+    if (realtimeService && typeof realtimeService.onConnect === 'function') {
+      handleSdkReconnect = () => {
+        console.log(
+          '[Realtime] PocketBase SDK reconectado ao servidor SSE. Renovando subscrições...',
+        )
+        pullIncrementalServerData()
+      }
+      try {
+        realtimeService.onConnect(handleSdkReconnect)
+      } catch {
+        // ignore if not supported
+      }
+    }
+
+    // 3. Observa mudanças de autenticação/token no pb.authStore
+    const unsubAuth = pb.authStore.onChange(() => {
+      if (pb.authStore.isValid) {
+        setupSubscriptions()
+      }
+    })
+
     return () => {
       cancelled = true
-      unsubscribes.forEach((fn) => {
-        fn().catch(() => {})
-      })
+      clearTimeout(reconnectTimeout)
+      window.removeEventListener('online', handleOnlineEvent)
+      unsubAuth()
+      cancelExistingSubscriptions()
     }
-  }, [isOnline])
+  }, [isOnline, pullIncrementalServerData])
 
   return (
     <SyncContext.Provider
