@@ -153,37 +153,41 @@ export function FieldSpreadsheets({ query }: { query: string }) {
 
               const item: OfflineFieldSheetItem = {
                 id: rec.id,
+                number: rec.number || undefined,
                 projectId: rec.project,
                 projectName: proj?.name || 'Recuperação Ambiental Lote A',
-                clientName: proj?.client || undefined,
-                contractCode: proj?.contract || proj?.code || undefined,
+                clientName: client?.name || 'Petrobras — Refinaria Sul',
+                contractCode: contract?.code || 'CT-EPA-2025-017',
                 date: rec.date ? rec.date.slice(0, 10) : '2025-05-28',
                 area: rec.area || 'Oficina Central',
                 operator: rec.operator,
                 operatorName: op?.name || 'Carlos Oliveira',
                 weather: rec.weather || 'Sol',
                 pluviometer: rec.pluviometer || 0,
-                morning_time: rec.morning_time || fallbackMorning,
-                afternoon_time: rec.afternoon_time || fallbackAfternoon,
-                infiltration_morning_time: (rec as any).infiltration_morning_time || '',
-                infiltration_afternoon_time: (rec as any).infiltration_afternoon_time || '',
-                extraction_data: (rec.extraction_data as any) || [],
-                infiltration_data: (rec.infiltration_data as any) || {},
-                nutrient_done: rec.nutrient_done || false,
+                morning_time: rec.morning_time || '',
+                afternoon_time: rec.afternoon_time || '',
+                infiltration_morning_time: rec.infiltration_morning_time || '',
+                infiltration_afternoon_time: rec.infiltration_afternoon_time || '',
+                extraction_data: rec.extraction_data || [],
+                infiltration_data: rec.infiltration_data || {},
+                nutrient_done: Boolean(rec.nutrient_done),
                 nutrient_map_kg: rec.nutrient_map_kg || 0,
                 nutrient_ureia_kg: rec.nutrient_ureia_kg || 0,
-                compressor_data: (rec.compressor_data as any) || {},
-                oil_removal_data: (rec.oil_removal_data as any) || {},
+                compressor_data: rec.compressor_data || {},
+                oil_removal_data: rec.oil_removal_data || {},
                 waste_liquid_qty: rec.waste_liquid_qty || 0,
                 waste_solid_qty: rec.waste_solid_qty || 0,
-                env_5s_check: rec.env_5s_check || false,
-                env_checklist_monthly: rec.env_checklist_monthly || false,
+                env_5s_check: Boolean(rec.env_5s_check),
+                env_checklist_monthly: Boolean(rec.env_checklist_monthly),
                 observations: rec.observations || '',
                 status: rec.status,
                 reviewNotes: rec.review_notes || '',
                 returned_fields: (rec as any).returned_fields || undefined,
                 returnedByName: (rec as any).returned_by_name || undefined,
                 returnedAt: (rec as any).returned_at || undefined,
+                submittedAt: (rec as any).submitted_at || undefined,
+                approvedAt: (rec as any).approved_at || undefined,
+                serverCreatedAt: rec.created || undefined,
                 change_history: (rec as any).change_history || undefined,
                 syncStatus: 'synced',
                 lastModified: new Date(rec.updated).getTime(),
@@ -208,7 +212,23 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         localSheets = await offlineStorage.getAllFieldSheets()
       }
 
-      localSheets.sort((a, b) => b.date.localeCompare(a.date))
+      // Ordenação cronológica / por número sequencial do servidor descendente
+      localSheets.sort((a, b) => {
+        const numA = typeof a.number === 'number' && a.number > 0 ? a.number : 0
+        const numB = typeof b.number === 'number' && b.number > 0 ? b.number : 0
+        if (numA !== numB) return numB - numA
+        const dateA = a.serverCreatedAt
+          ? new Date(a.serverCreatedAt).getTime()
+          : a.date
+            ? new Date(a.date).getTime()
+            : a.lastModified || 0
+        const dateB = b.serverCreatedAt
+          ? new Date(b.serverCreatedAt).getTime()
+          : b.date
+            ? new Date(b.date).getTime()
+            : b.lastModified || 0
+        return dateB - dateA
+      })
       setItems(localSheets)
     } catch (err) {
       console.error('Error loading field sheets:', err)
@@ -252,9 +272,12 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       matchesTab = !s.deleted && !s.archived
     }
     const matchesStatus = tabFilter === 'deleted' ? true : filter === 'all' || s.status === filter
-    const matchesQuery = `${s.projectName} ${s.area} ${s.date} ${s.deletedReason || ''}`
-      .toLowerCase()
-      .includes(query.toLowerCase())
+    const numDisplay =
+      typeof s.number === 'number' && s.number > 0 ? `Planilha Nº ${s.number}` : 'Planilha Offline'
+    const matchesQuery =
+      `${numDisplay} ${s.projectName} ${s.area} ${s.date} ${s.deletedReason || ''}`
+        .toLowerCase()
+        .includes(query.toLowerCase())
     return matchesTab && matchesStatus && matchesQuery
   })
 
@@ -731,12 +754,59 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                       )}
                     </div>
                   </div>
-                  <p className="mt-4 text-sm font-semibold group-hover:text-emerald-700 dark:group-hover:text-emerald-400">
+                  <div className="mt-3">
+                    {typeof sheet.number === 'number' && sheet.number > 0 ? (
+                      <span className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                        Planilha Nº {sheet.number}
+                      </span>
+                    ) : (
+                      <span className="rounded bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        Planilha Offline
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm font-semibold group-hover:text-emerald-700 dark:group-hover:text-emerald-400">
                     {sheet.projectName}
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     {sheet.area} · {sheet.date}
                   </p>
+                  {sheet.serverCreatedAt && (
+                    <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                      Criado:{' '}
+                      {new Date(sheet.serverCreatedAt).toLocaleString('pt-BR', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })}
+                    </p>
+                  )}
+                  {sheet.submittedAt && sheet.status !== 'draft' && (
+                    <p className="mt-0.5 text-[10px] text-blue-600 dark:text-blue-400">
+                      Enviado:{' '}
+                      {new Date(sheet.submittedAt).toLocaleString('pt-BR', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })}
+                    </p>
+                  )}
+                  {sheet.approvedAt && sheet.status === 'approved' && (
+                    <p className="mt-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                      Aprovado:{' '}
+                      {new Date(sheet.approvedAt).toLocaleString('pt-BR', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })}
+                    </p>
+                  )}
+                  {sheet.returnedAt && sheet.status === 'returned' && (
+                    <p className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                      Devolvido:{' '}
+                      {new Date(sheet.returnedAt).toLocaleString('pt-BR', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })}
+                    </p>
+                  )}
                   <div className="mt-4 grid grid-cols-3 divide-x border-y py-3 text-center dark:divide-slate-800 dark:border-slate-800">
                     <div>
                       <p className="font-mono text-sm font-semibold">
@@ -785,22 +855,27 @@ export function FieldSpreadsheets({ query }: { query: string }) {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Excluir Planilha de Campo
+                  Excluir{' '}
+                  {typeof deleteModalSheet.number === 'number' && deleteModalSheet.number > 0
+                    ? `Planilha Nº ${deleteModalSheet.number}`
+                    : 'Planilha de Campo'}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Exclusão com método de segurança e auditoria
+                  Data: {deleteModalSheet.date} — Área: {deleteModalSheet.area}
                 </p>
               </div>
             </div>
 
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
-              Você está prestes a excluir a planilha de{' '}
+              Você está prestes a excluir{' '}
               <b className="text-slate-900 dark:text-white">
-                {deleteModalSheet.date} — {deleteModalSheet.projectName} ({deleteModalSheet.area})
+                {typeof deleteModalSheet.number === 'number' && deleteModalSheet.number > 0
+                  ? `Planilha Nº ${deleteModalSheet.number}`
+                  : 'Planilha de Campo'}{' '}
+                do dia {deleteModalSheet.date} ({deleteModalSheet.projectName})
               </b>
               .
             </p>
-
             <div className="mt-3 rounded-lg bg-blue-50 p-3 text-xs text-blue-900 dark:bg-blue-950/40 dark:text-blue-300">
               🛡️ <b>Registro e Arquivamento:</b> O item não desaparecerá do banco de dados. Ele será
               marcado como excluído logicamente e ficará arquivado na aba <b>"Excluídas"</b>{' '}

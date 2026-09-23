@@ -4,7 +4,7 @@ const DB_VERSION = 2
 
 export interface OfflineRdoItem {
   id: string
-  number: number
+  number?: number
   projectId: string
   projectName: string
   clientName?: string
@@ -31,6 +31,8 @@ export interface OfflineRdoItem {
   returnedAt?: string
   submittedAt?: string
   approvedAt?: string
+  createdAt?: string
+  serverCreatedAt?: string
   change_history?: any[] // Lista de ReturnCycle
   archived?: boolean
   deleted?: boolean
@@ -112,6 +114,8 @@ export interface OfflineFieldSheetItem {
   returnedAt?: string
   submittedAt?: string
   approvedAt?: string
+  createdAt?: string
+  serverCreatedAt?: string
   change_history?: any[] // Lista de ReturnCycle
   archived?: boolean
   deleted?: boolean

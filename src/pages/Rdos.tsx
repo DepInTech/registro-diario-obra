@@ -195,6 +195,9 @@ export function RdosPage({ query }: { query: string }) {
                 returned_fields: (rec as any).returned_fields || undefined,
                 returnedByName: (rec as any).returned_by_name || undefined,
                 returnedAt: (rec as any).returned_at || undefined,
+                submittedAt: (rec as any).submitted_at || undefined,
+                approvedAt: (rec as any).approved_at || undefined,
+                serverCreatedAt: rec.created || undefined,
                 change_history: (rec as any).change_history || undefined,
                 wells: wells.map((w) => ({
                   id: w.id,
@@ -240,8 +243,19 @@ export function RdosPage({ query }: { query: string }) {
         localRdos = await offlineStorage.getAllRdos()
       }
 
-      // Sort by number descending
-      localRdos.sort((a, b) => b.number - a.number)
+      // Sort by number descending (se não tiver número no servidor, ordena pela data de criação/modificação)
+      localRdos.sort((a, b) => {
+        const numA = typeof a.number === 'number' && a.number > 0 ? a.number : 0
+        const numB = typeof b.number === 'number' && b.number > 0 ? b.number : 0
+        if (numA !== numB) return numB - numA
+        const dateA = a.serverCreatedAt
+          ? new Date(a.serverCreatedAt).getTime()
+          : a.lastModified || 0
+        const dateB = b.serverCreatedAt
+          ? new Date(b.serverCreatedAt).getTime()
+          : b.lastModified || 0
+        return dateB - dateA
+      })
       setItems(localRdos)
     } catch (err) {
       console.error('Error loading RDOs:', err)
@@ -290,15 +304,16 @@ export function RdosPage({ query }: { query: string }) {
       matchesTab = !r.deleted && !r.archived
     }
     const matchesStatus = tabFilter === 'deleted' ? true : filter === 'all' || r.status === filter
-    const matchesQuery = `${r.number} ${r.projectName} ${r.activityTitle} ${r.deletedReason || ''}`
-      .toLowerCase()
-      .includes(query.toLowerCase())
+    const numDisplay =
+      typeof r.number === 'number' && r.number > 0 ? `RDO Nº ${r.number}` : 'RDO Offline'
+    const matchesQuery =
+      `${numDisplay} ${r.projectName} ${r.activityTitle} ${r.deletedReason || ''}`
+        .toLowerCase()
+        .includes(query.toLowerCase())
     return matchesTab && matchesStatus && matchesQuery
   })
 
   const openNew = async () => {
-    const nextNum = items.length > 0 ? Math.max(...items.map((i) => i.number)) + 1 : 1
-
     // Look up an active project to prefill project references
     let initialProjectId = ''
     let initialProjectName = ''
@@ -325,7 +340,7 @@ export function RdosPage({ query }: { query: string }) {
 
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
-      number: nextNum,
+      number: undefined,
       projectId: initialProjectId,
       projectName: initialProjectName,
       clientName: initialClientName,
@@ -696,13 +711,57 @@ export function RdosPage({ query }: { query: string }) {
                     className="group hover:bg-slate-50 dark:hover:bg-slate-900/50 transition"
                   >
                     <td className="px-5 py-4">
-                      <p className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                        RDO #{String(report.number).padStart(3, '0')}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {typeof report.number === 'number' && report.number > 0 ? (
+                          <span className="font-mono text-sm font-bold text-emerald-700 dark:text-emerald-400">
+                            RDO Nº {report.number}
+                          </span>
+                        ) : (
+                          <span className="rounded bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                            RDO Offline
+                          </span>
+                        )}
+                      </div>
                       <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
                         <CalendarDays className="h-3 w-3" />
                         {report.reportDate} · {report.weather}
                       </p>
+                      {report.serverCreatedAt && (
+                        <p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
+                          Criado:{' '}
+                          {new Date(report.serverCreatedAt).toLocaleString('pt-BR', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
+                        </p>
+                      )}
+                      {report.submittedAt && report.status !== 'draft' && (
+                        <p className="mt-0.5 text-[10px] text-blue-600 dark:text-blue-400">
+                          Enviado:{' '}
+                          {new Date(report.submittedAt).toLocaleString('pt-BR', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
+                        </p>
+                      )}
+                      {report.approvedAt && report.status === 'approved' && (
+                        <p className="mt-0.5 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          Aprovado:{' '}
+                          {new Date(report.approvedAt).toLocaleString('pt-BR', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
+                        </p>
+                      )}
+                      {report.returnedAt && report.status === 'returned' && (
+                        <p className="mt-0.5 text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                          Devolvido:{' '}
+                          {new Date(report.returnedAt).toLocaleString('pt-BR', {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
+                        </p>
+                      )}
                     </td>
                     <td className="max-w-[220px] px-5 py-4">
                       <p className="truncate text-sm font-medium">{report.projectName}</p>
@@ -828,7 +887,10 @@ export function RdosPage({ query }: { query: string }) {
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Excluir RDO #{String(deleteModalRdo.number).padStart(3, '0')}
+                  Excluir{' '}
+                  {typeof deleteModalRdo.number === 'number' && deleteModalRdo.number > 0
+                    ? `RDO Nº ${deleteModalRdo.number}`
+                    : 'RDO Offline'}
                 </h3>
                 <p className="text-xs text-slate-500">
                   Exclusão com método de segurança e auditoria
@@ -839,7 +901,10 @@ export function RdosPage({ query }: { query: string }) {
             <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
               Você está prestes a excluir o relatório{' '}
               <b className="text-slate-900 dark:text-white">
-                RDO #{String(deleteModalRdo.number).padStart(3, '0')} — {deleteModalRdo.projectName}
+                {typeof deleteModalRdo.number === 'number' && deleteModalRdo.number > 0
+                  ? `RDO Nº ${deleteModalRdo.number}`
+                  : 'RDO Offline'}{' '}
+                — {deleteModalRdo.projectName}
               </b>
               .
             </p>
@@ -1452,9 +1517,47 @@ function RdoFullPageEditor({
           </button>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold tracking-tight">
-              RDO #{String(formData.number).padStart(3, '0')}
+              {typeof formData.number === 'number' && formData.number > 0
+                ? `RDO Nº ${formData.number}`
+                : 'RDO (Rascunho Offline)'}
             </h2>
             <StatusBadge status={formData.status} />
+            {formData.serverCreatedAt && (
+              <span className="hidden sm:inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                Criado:{' '}
+                {new Date(formData.serverCreatedAt).toLocaleString('pt-BR', {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                })}
+              </span>
+            )}
+            {formData.submittedAt && (
+              <span className="hidden md:inline-block rounded-md bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                Enviado:{' '}
+                {new Date(formData.submittedAt).toLocaleString('pt-BR', {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                })}
+              </span>
+            )}
+            {formData.approvedAt && (
+              <span className="hidden md:inline-block rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                Aprovado:{' '}
+                {new Date(formData.approvedAt).toLocaleString('pt-BR', {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                })}
+              </span>
+            )}
+            {formData.returnedAt && (
+              <span className="hidden md:inline-block rounded-md bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                Devolvido:{' '}
+                {new Date(formData.returnedAt).toLocaleString('pt-BR', {
+                  dateStyle: 'short',
+                  timeStyle: 'short',
+                })}
+              </span>
+            )}
             {isDeleted ? (
               <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold text-red-800 dark:bg-red-950 dark:text-red-300">
                 Item Excluído (Arquivado para auditoria)
@@ -1826,18 +1929,16 @@ function RdoFullPageEditor({
             </select>
           </div>
           <div>
-            <label className="epa-label">Número do RDO</label>
+            <label className="epa-label">Número do RDO (Sequencial do Servidor)</label>
             <Input
-              type="number"
-              inputMode="numeric"
-              value={formData.number ?? ''}
-              onChange={(e) => handleFieldChange('number', Number(e.target.value))}
-              disabled={isLocked || isTechnician}
-              className={cn(
-                'mt-1.5 font-mono min-h-[42px]',
-                isTechnician &&
-                  'bg-slate-100 cursor-not-allowed text-slate-600 dark:bg-slate-800 dark:text-slate-400',
-              )}
+              readOnly
+              disabled
+              value={
+                typeof formData.number === 'number' && formData.number > 0
+                  ? `RDO Nº ${formData.number}`
+                  : 'Gerado automaticamente ao enviar'
+              }
+              className="mt-1.5 font-mono min-h-[42px] bg-slate-100 cursor-not-allowed text-slate-700 font-semibold dark:bg-slate-800 dark:text-slate-300"
             />
           </div>
           <div className="sm:col-span-2">

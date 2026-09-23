@@ -474,9 +474,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
             const record = await pb.collection('reports_rdo').create(payload)
             rdo.number = record.number
-            rdo.submittedAt = record.submitted_at
-            rdo.approvedAt = record.approved_at
-            rdo.returnedAt = record.returned_at
+            rdo.submittedAt =
+              record.submitted_at || (record.status === 'submitted' ? record.updated : undefined)
+            rdo.approvedAt =
+              record.approved_at || (record.status === 'approved' ? record.updated : undefined)
+            rdo.returnedAt =
+              record.returned_at || (record.status === 'returned' ? record.updated : undefined)
+            rdo.serverCreatedAt = record.created
             // create wells
             for (const well of rdo.wells || []) {
               if (well.well_id) {
@@ -696,6 +700,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
 
             const updated = await pb.collection('reports_rdo').update(rdo.id, payload)
+            if (updated.number) rdo.number = updated.number
+            if (updated.submitted_at) rdo.submittedAt = updated.submitted_at
+            if (updated.approved_at) rdo.approvedAt = updated.approved_at
+            if (updated.returned_at) rdo.returnedAt = updated.returned_at
+            if (updated.created) rdo.serverCreatedAt = updated.created
 
             // Sync photos with dataUrl
             const photosToSync: Array<{
@@ -869,6 +878,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             const created = await pb.collection('field_spreadsheets').create(payload)
             await offlineStorage.deleteFieldSheet(sheet.id)
             sheet.id = created.id
+            sheet.number = created.number
+            sheet.submittedAt =
+              created.submitted_at || (created.status === 'submitted' ? created.updated : undefined)
+            sheet.approvedAt =
+              created.approved_at || (created.status === 'approved' ? created.updated : undefined)
+            sheet.returnedAt =
+              created.returned_at || (created.status === 'returned' ? created.updated : undefined)
+            sheet.serverCreatedAt = created.created
             sheet.syncStatus = 'synced'
             sheet.serverUpdatedAt = created.updated
             delete sheet.syncError
@@ -991,6 +1008,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
 
             const updated = await pb.collection('field_spreadsheets').update(sheet.id, payload)
+            if (updated.number) sheet.number = updated.number
+            if (updated.submitted_at) sheet.submittedAt = updated.submitted_at
+            if (updated.approved_at) sheet.approvedAt = updated.approved_at
+            if (updated.returned_at) sheet.returnedAt = updated.returned_at
+            if (updated.created) sheet.serverCreatedAt = updated.created
             sheet.syncStatus = 'synced'
             sheet.serverUpdatedAt = updated.updated
             delete sheet.syncError
@@ -1291,6 +1313,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             returned_fields: record.returned_fields || undefined,
             returnedByName: record.returned_by_name || undefined,
             returnedAt: record.returned_at || undefined,
+            submittedAt: record.submitted_at || local?.submittedAt,
+            approvedAt: record.approved_at || local?.approvedAt,
+            serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
             wells: local?.wells || [],
             photos: local?.photos || [],
@@ -1338,6 +1363,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
           const updatedSheet: OfflineFieldSheetItem = {
             id: record.id,
+            number: record.number || local?.number,
             projectId: record.project,
             projectName: local?.projectName || 'Projeto EPA',
             clientName: local?.clientName,
@@ -1369,6 +1395,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             returned_fields: record.returned_fields || undefined,
             returnedByName: record.returned_by_name || undefined,
             returnedAt: record.returned_at || undefined,
+            submittedAt: record.submitted_at || local?.submittedAt,
+            approvedAt: record.approved_at || local?.approvedAt,
+            serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
             syncStatus: 'synced',
             lastModified: new Date(record.updated || Date.now()).getTime(),
