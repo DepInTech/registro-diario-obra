@@ -1072,7 +1072,11 @@ function FieldFullEditor({
   }
 
   // Extraction wells handlers
+  const canAddExtractionWell =
+    isAdmin || !formData.extraction_data || formData.extraction_data.length === 0
+
   const handleAddExtractionWell = () => {
+    if (!canAddExtractionWell) return
     const existingCount = formData.extraction_data?.length || 0
     const nextPad = String(existingCount + 1).padStart(2, '0')
     const newRow = {
@@ -1087,7 +1091,29 @@ function FieldFullEditor({
     toast({ title: 'Poço adicionado', description: `Linha ${newRow.well} inserida na extração.` })
   }
 
+  const isExtractionRowEmpty = (row: any) => {
+    if (!row) return true
+    const wellEmpty = !row.well || !String(row.well).trim()
+    const pumpEmpty = row.pump === undefined || row.pump === null || String(row.pump).trim() === ''
+    const morningEmpty = !row.morning || !String(row.morning).trim()
+    const afternoonEmpty = !row.afternoon || !String(row.afternoon).trim()
+    const autopumpEmpty = !row.autopump || !String(row.autopump).trim()
+    const conditionEmpty = !row.autopump_condition || !String(row.autopump_condition).trim()
+    return (
+      wellEmpty && pumpEmpty && morningEmpty && afternoonEmpty && autopumpEmpty && conditionEmpty
+    )
+  }
+
   const handleRemoveExtractionWell = (index: number) => {
+    const targetRow = formData.extraction_data?.[index]
+    if (!isAdmin && !isExtractionRowEmpty(targetRow)) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Técnicos só podem remover poços vazios da planilha.',
+        variant: 'destructive',
+      })
+      return
+    }
     const updated = [...(formData.extraction_data || [])]
     updated.splice(index, 1)
     handleFieldChange('extraction_data', updated)
@@ -1095,6 +1121,18 @@ function FieldFullEditor({
   }
 
   const handleExtractionCellChange = (index: number, col: string, val: string) => {
+    const currentRow = formData.extraction_data?.[index]
+    if (!currentRow) return
+
+    if (!isAdmin && (col === 'well' || col === 'pump')) {
+      const rawCurrentVal = currentRow[col as keyof typeof currentRow]
+      const hasCurrentVal =
+        rawCurrentVal !== undefined && rawCurrentVal !== null && String(rawCurrentVal).trim() !== ''
+      if (hasCurrentVal) {
+        return
+      }
+    }
+
     const updated = [...(formData.extraction_data || [])]
     updated[index] = { ...updated[index], [col]: val }
     handleFieldChange('extraction_data', updated)
@@ -1634,7 +1672,7 @@ function FieldFullEditor({
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
-            {isTechnician && formData.operatorName?.trim() ? (
+            {isTechnician && Boolean(formData.operatorName?.trim()) ? (
               <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
                 <span>{formData.operatorName}</span>
               </div>
@@ -1697,17 +1735,18 @@ function FieldFullEditor({
               Leituras dos poços de remediação, hidrômetros (manhã/tarde), altura da bomba e saídas
             </p>
           </div>
-          {!isLocked && isAdmin && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAddExtractionWell}
-              className="w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[38px]"
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Adicionar Poço (PR)
-            </Button>
-          )}
+          {!isLocked &&
+            (isAdmin || !formData.extraction_data || formData.extraction_data.length === 0) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddExtractionWell}
+                className="w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[38px]"
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Adicionar Poço (PR)
+              </Button>
+            )}
         </div>
 
         {/* Aviso de orientação para o Técnico sobre poços definidos pelo Administrador */}
@@ -1826,7 +1865,7 @@ function FieldFullEditor({
                     )}
                   </div>
                 </th>
-                {!isLocked && isAdmin && (
+                {!isLocked && (isAdmin || isTechnician) && (
                   <th className="p-2.5 border border-emerald-800 w-12 text-center"></th>
                 )}
               </tr>
@@ -1835,9 +1874,9 @@ function FieldFullEditor({
               {formData.extraction_data?.map((row, index) => (
                 <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
                   <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    {isTechnician ? (
+                    {isTechnician && Boolean(row.well?.trim()) ? (
                       <div className="flex items-center justify-center gap-1.5 py-2 px-2 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded min-h-[40px]">
-                        <span>{row.well || '—'}</span>
+                        <span>{row.well}</span>
                       </div>
                     ) : (
                       <Input
@@ -1884,15 +1923,12 @@ function FieldFullEditor({
                     />
                   </td>
                   <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    {isTechnician ? (
+                    {isTechnician &&
+                    row.pump !== undefined &&
+                    row.pump !== null &&
+                    String(row.pump).trim() !== '' ? (
                       <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px]">
-                        <span>
-                          {row.pump !== undefined &&
-                          row.pump !== null &&
-                          String(row.pump).trim() !== ''
-                            ? `${row.pump} m`
-                            : '—'}
-                        </span>
+                        <span>{`${row.pump} m`}</span>
                       </div>
                     ) : (
                       <Input
@@ -1961,14 +1997,16 @@ function FieldFullEditor({
                       )}
                     </div>
                   </td>
-                  {!isLocked && isAdmin && (
+                  {!isLocked && (isAdmin || isExtractionRowEmpty(row)) && (
                     <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleRemoveExtractionWell(index)}
                         className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50"
-                        title="Remover linha de poço (Admin)"
+                        title={
+                          isAdmin ? 'Remover linha de poço (Admin)' : 'Remover linha de poço vazia'
+                        }
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

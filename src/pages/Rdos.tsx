@@ -1097,8 +1097,10 @@ function RdoFullPageEditor({
   }
 
   // Wells Handlers (Os poços são cadastrados diretamente na ficha pelo Administrador)
+  const canAddWell = isAdmin || !formData.wells || formData.wells.length === 0
+
   const handleAddWell = () => {
-    if (!isAdmin) return
+    if (!canAddWell) return
     const nextIndex = (formData.wells?.length || 0) + 1
     const newWell = {
       well_id: `PM-${String(nextIndex).padStart(2, '0')}`,
@@ -1114,8 +1116,26 @@ function RdoFullPageEditor({
     })
   }
 
+  const isWellRowEmpty = (well: any) => {
+    if (!well) return true
+    const idEmpty = !well.well_id || !String(well.well_id).trim()
+    const depthEmpty =
+      well.depth === undefined || well.depth === null || String(well.depth).trim() === ''
+    const dateEmpty = !well.completion_date || !String(well.completion_date).trim()
+    const diamEmpty = !well.diameter || !String(well.diameter).trim()
+    return idEmpty && depthEmpty && dateEmpty && diamEmpty
+  }
+
   const handleRemoveWell = (index: number) => {
-    if (!isAdmin) return
+    const targetWell = formData.wells?.[index]
+    if (!isAdmin && !isWellRowEmpty(targetWell)) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Técnicos só podem remover poços vazios inseridos na ficha.',
+        variant: 'destructive',
+      })
+      return
+    }
     const updated = [...(formData.wells || [])]
     updated.splice(index, 1)
     handleFieldChange('wells', updated)
@@ -1123,7 +1143,18 @@ function RdoFullPageEditor({
   }
 
   const handleWellFieldChange = (index: number, field: string, value: any) => {
-    if (!isAdmin) return
+    const currentWell = formData.wells?.[index]
+    if (!currentWell) return
+
+    if (!isAdmin) {
+      const rawCurrentVal = currentWell[field]
+      const hasCurrentVal =
+        rawCurrentVal !== undefined && rawCurrentVal !== null && String(rawCurrentVal).trim() !== ''
+      if (hasCurrentVal) {
+        return
+      }
+    }
+
     const updated = [...(formData.wells || [])]
     updated[index] = { ...updated[index], [field]: value }
     handleFieldChange('wells', updated)
@@ -1857,9 +1888,9 @@ function RdoFullPageEditor({
           </div>
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Supervisionado por (Responsável Técnico)</label>
-            {isTechnician ? (
+            {isTechnician && Boolean(formData.supervisedByName?.trim()) ? (
               <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                <span>{formData.supervisedByName?.trim() || '—'}</span>
+                <span>{formData.supervisedByName?.trim()}</span>
               </div>
             ) : (
               <Input
@@ -2153,7 +2184,7 @@ function RdoFullPageEditor({
               </span>
             )}
           </div>
-          {!isLocked && isAdmin && (
+          {!isLocked && (isAdmin || !formData.wells || formData.wells.length === 0) && (
             <Button
               variant="outline"
               size="sm"
@@ -2191,16 +2222,18 @@ function RdoFullPageEditor({
                   <th className="p-3">Profundidade (m)</th>
                   <th className="p-3">Data Conclusão</th>
                   <th className="p-3">Diâmetro</th>
-                  {!isLocked && isAdmin && <th className="p-3 w-12 text-center">Ações</th>}
+                  {!isLocked && (isAdmin || isTechnician) && (
+                    <th className="p-3 w-12 text-center">Ações</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y dark:divide-slate-800">
                 {formData.wells.map((well, index) => (
                   <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                     <td className="p-2">
-                      {isTechnician ? (
+                      {isTechnician && Boolean(well.well_id?.trim()) ? (
                         <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                          <span>{well.well_id || 'Não especificado'}</span>
+                          <span>{well.well_id}</span>
                         </div>
                       ) : (
                         <Input
@@ -2213,13 +2246,12 @@ function RdoFullPageEditor({
                       )}
                     </td>
                     <td className="p-2">
-                      {isTechnician ? (
+                      {isTechnician &&
+                      well.depth !== undefined &&
+                      well.depth !== null &&
+                      String(well.depth).trim() !== '' ? (
                         <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                          <span>
-                            {well.depth !== undefined && well.depth !== null && well.depth !== ''
-                              ? `${well.depth} m`
-                              : '—'}
-                          </span>
+                          <span>{`${well.depth} m`}</span>
                         </div>
                       ) : (
                         <Input
@@ -2235,17 +2267,15 @@ function RdoFullPageEditor({
                       )}
                     </td>
                     <td className="p-2">
-                      {isTechnician ? (
+                      {isTechnician && Boolean(well.completion_date?.trim()) ? (
                         <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
                           <span>
-                            {well.completion_date
-                              ? (() => {
-                                  const parts = String(well.completion_date).slice(0, 10).split('-')
-                                  return parts.length === 3
-                                    ? `${parts[2]}/${parts[1]}/${parts[0]}`
-                                    : well.completion_date
-                                })()
-                              : '—'}
+                            {(() => {
+                              const parts = String(well.completion_date).slice(0, 10).split('-')
+                              return parts.length === 3
+                                ? `${parts[2]}/${parts[1]}/${parts[0]}`
+                                : well.completion_date
+                            })()}
                           </span>
                         </div>
                       ) : (
@@ -2261,9 +2291,9 @@ function RdoFullPageEditor({
                       )}
                     </td>
                     <td className="p-2">
-                      {isTechnician ? (
+                      {isTechnician && Boolean(well.diameter?.trim()) ? (
                         <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                          <span>{well.diameter || '—'}</span>
+                          <span>{well.diameter}</span>
                         </div>
                       ) : (
                         <Input
@@ -2275,14 +2305,14 @@ function RdoFullPageEditor({
                         />
                       )}
                     </td>
-                    {!isLocked && isAdmin && (
+                    {!isLocked && (isAdmin || isWellRowEmpty(well)) && (
                       <td className="p-2 text-center">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleRemoveWell(index)}
                           className="h-9 w-9 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50"
-                          title="Remover poço (Admin)"
+                          title={isAdmin ? 'Remover poço (Admin)' : 'Remover poço vazio'}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
