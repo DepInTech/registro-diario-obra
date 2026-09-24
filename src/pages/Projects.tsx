@@ -41,7 +41,7 @@ import {
   REALTIME_RECORD_UPDATE,
   RealtimeRecordUpdateDetail,
 } from '@/context/SyncContext'
-import { Well } from '@/types/epa'
+
 import { Eye } from 'lucide-react'
 import type { Client, Contract, Company, Area, EpaUser } from '@/types/epa'
 
@@ -1581,145 +1581,9 @@ function ProjectDetail({
   const isTechnician = role === 'technician'
   const isAdmin = role === 'admin'
 
-  // Poços vinculados ao projeto
-  const [wells, setWells] = useState<Well[]>([])
-  const [loadingWells, setLoadingWells] = useState(true)
-  const [wellModalOpen, setWellModalOpen] = useState(false)
-  const [editingWell, setEditingWell] = useState<Well | null>(null)
-  const [wellIdentification, setWellIdentification] = useState('')
-  const [wellDefaultDiameter, setWellDefaultDiameter] = useState('')
-  const [wellActive, setWellActive] = useState(true)
-  const [wellSaving, setWellSaving] = useState(false)
-  const [deletingWellId, setDeletingWellId] = useState<string | null>(null)
-
   const [projectRdos, setProjectRdos] = useState<any[]>([])
   const [projectSheets, setProjectSheets] = useState<any[]>([])
   const [loadingHistory, setLoadingHistory] = useState(true)
-
-  const fetchWells = async () => {
-    setLoadingWells(true)
-    try {
-      if (navigator.onLine && pb.authStore.isValid) {
-        const records = await pb.collection('wells').getFullList<Well>({
-          filter: `project = "${project.id}"`,
-          sort: 'identification',
-        })
-        setWells(records)
-      } else {
-        // Fallback local caso haja dados em cache
-        setWells([])
-      }
-    } catch (err) {
-      console.warn('Erro ao carregar poços do projeto:', err)
-      setWells([])
-    } finally {
-      setLoadingWells(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchWells()
-  }, [project.id])
-
-  const openNewWellModal = () => {
-    if (!isAdmin) {
-      toast({
-        title: 'Ação não permitida',
-        description: 'Apenas Administradores podem cadastrar poços no projeto.',
-        variant: 'destructive',
-      })
-      return
-    }
-    setEditingWell(null)
-    setWellIdentification('')
-    setWellDefaultDiameter('2"')
-    setWellActive(true)
-    setWellModalOpen(true)
-  }
-
-  const openEditWellModal = (w: Well) => {
-    if (!isAdmin) {
-      toast({
-        title: 'Ação não permitida',
-        description: 'Apenas Administradores podem editar poços do projeto.',
-        variant: 'destructive',
-      })
-      return
-    }
-    setEditingWell(w)
-    setWellIdentification(w.identification)
-    setWellDefaultDiameter(w.default_diameter || '')
-    setWellActive(Boolean(w.active))
-    setWellModalOpen(true)
-  }
-
-  const handleSaveWell = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!isAdmin) return
-    if (!wellIdentification.trim()) {
-      toast({ title: 'Preencha a identificação do poço (Ex.: PM-01)', variant: 'destructive' })
-      return
-    }
-
-    setWellSaving(true)
-    try {
-      const payload: Record<string, any> = {
-        identification: wellIdentification.trim().toUpperCase(),
-        project: project.id,
-        default_diameter: wellDefaultDiameter.trim() || undefined,
-        active: wellActive,
-      }
-
-      if (editingWell) {
-        await pb.collection('wells').update(editingWell.id, payload)
-        toast({ title: 'Poço atualizado com sucesso!' })
-      } else {
-        await pb.collection('wells').create(payload)
-        toast({ title: `Poço ${wellIdentification.trim().toUpperCase()} vinculado ao projeto!` })
-      }
-
-      setWellModalOpen(false)
-      await fetchWells()
-    } catch (err: any) {
-      console.error('Erro ao salvar poço:', err)
-      toast({
-        title: 'Erro ao salvar poço',
-        description: err.message || 'Verifique a conexão ou os dados informados.',
-        variant: 'destructive',
-      })
-    } finally {
-      setWellSaving(false)
-    }
-  }
-
-  const handleDeleteWell = async (wellId: string) => {
-    if (!isAdmin) {
-      toast({
-        title: 'Ação não permitida',
-        description: 'Apenas Administradores podem excluir poços.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    const confirmDelete = window.confirm('Deseja realmente remover este poço do projeto?')
-    if (!confirmDelete) return
-
-    setDeletingWellId(wellId)
-    try {
-      await pb.collection('wells').delete(wellId)
-      toast({ title: 'Poço removido do projeto' })
-      await fetchWells()
-    } catch (err: any) {
-      toast({
-        title: 'Erro ao excluir poço',
-        description: err.message || 'Tente novamente.',
-        variant: 'destructive',
-      })
-    } finally {
-      setDeletingWellId(null)
-    }
-  }
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -1984,7 +1848,7 @@ function ProjectDetail({
         </div>
       </section>
 
-      <div className="grid gap-5 md:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2">
         {(isAdmin || isTechnician) && (
           <MiniStat
             label="RDOs emitidos"
@@ -1993,12 +1857,6 @@ function ProjectDetail({
             icon={ClipboardList}
           />
         )}
-        <MiniStat
-          label="Poços vinculados"
-          value={String(wells.length)}
-          helper={`${wells.filter((w) => w.active).length} ativos · ${wells.filter((w) => !w.active).length} inativos`}
-          icon={MapPin}
-        />
         {(isAdmin || isTechnician) && (
           <MiniStat
             label="Planilhas de campo"
@@ -2011,119 +1869,6 @@ function ProjectDetail({
 
       <div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
         <div className="space-y-6">
-          {/* Seção de Poços do Projeto (Gerenciamento exclusivo do Admin; somente leitura para Técnico) */}
-          <section className="epa-card overflow-hidden">
-            <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
-              <div>
-                <h3 className="font-semibold text-sm flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-emerald-600" />
-                  Poços do Projeto (Pontos de Monitoramento)
-                </h3>
-                <p className="text-xs text-slate-500">
-                  {isAdmin
-                    ? 'Gerenciamento exclusivo do Administrador (PM-01, PM-02...)'
-                    : 'Lista fixa definida pelo Administrador (somente leitura para Técnicos)'}
-                </p>
-              </div>
-              {isAdmin && !project.deleted && (
-                <Button
-                  size="sm"
-                  onClick={openNewWellModal}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs h-8"
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" />
-                  Novo Poço
-                </Button>
-              )}
-            </div>
-
-            <div className="p-4">
-              {loadingWells ? (
-                <div className="py-6 text-center text-xs text-slate-400">
-                  <Loader2 className="mx-auto h-5 w-5 animate-spin text-emerald-600 mb-2" />
-                  Carregando poços do projeto...
-                </div>
-              ) : wells.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-800 p-6 text-center">
-                  <p className="text-xs text-slate-500">
-                    Nenhum poço cadastrado para este projeto.
-                  </p>
-                  {isAdmin ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={openNewWellModal}
-                      className="mt-3 text-xs"
-                    >
-                      <Plus className="mr-1 h-3 w-3" />
-                      Cadastrar Primeiro Poço (Ex: PM-01)
-                    </Button>
-                  ) : (
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      O Administrador ainda não cadastrou poços para esta obra.
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {wells.map((well) => (
-                    <div
-                      key={well.id}
-                      className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 p-3 bg-slate-50/50 dark:bg-slate-900/40"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">
-                            {well.identification}
-                          </span>
-                          <span
-                            className={cn(
-                              'text-[10px] px-2 py-0.5 rounded-full font-medium',
-                              well.active
-                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
-                            )}
-                          >
-                            {well.active ? 'Ativo' : 'Inativo'}
-                          </span>
-                        </div>
-                        {well.default_diameter && (
-                          <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-500">
-                            <span>Diâmetro padrão: {well.default_diameter}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {isAdmin && (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => openEditWellModal(well)}
-                            title="Editar poço"
-                            className="p-1 rounded text-slate-400 hover:text-emerald-600 hover:bg-slate-200 dark:hover:bg-slate-800"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteWell(well.id)}
-                            disabled={deletingWellId === well.id}
-                            title="Excluir poço"
-                            className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                          >
-                            {deletingWellId === well.id ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-red-600" />
-                            ) : (
-                              <Trash2 className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-
           {/* Histórico Operacional */}
           <section className="epa-card overflow-hidden">
             <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
@@ -2198,79 +1943,6 @@ function ProjectDetail({
           </div>
         </section>
       </div>
-
-      {/* MODAL CADASTRAR / EDITAR POÇO (ADMIN EXCLUSIVO) */}
-      {wellModalOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 sm:p-6 shadow-2xl dark:border dark:border-slate-800 dark:bg-slate-900 my-auto">
-            <div className="flex items-center justify-between border-b pb-3 dark:border-slate-800">
-              <h4 className="font-bold text-base text-slate-900 dark:text-white">
-                {editingWell ? 'Editar Poço do Projeto' : 'Cadastrar Poço no Projeto'}
-              </h4>
-              <Button variant="ghost" size="icon" onClick={() => setWellModalOpen(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-
-            <form onSubmit={handleSaveWell} className="mt-4 space-y-4">
-              <div>
-                <label className="epa-label">Identificação do Poço *</label>
-                <Input
-                  value={wellIdentification}
-                  onChange={(e) => setWellIdentification(e.target.value)}
-                  placeholder="Ex.: PM-01, PM-02, PM-03..."
-                  required
-                  className="mt-1 font-mono uppercase"
-                />
-              </div>
-
-              <div>
-                <label className="epa-label">Diâmetro Padrão</label>
-                <Input
-                  value={wellDefaultDiameter}
-                  onChange={(e) => setWellDefaultDiameter(e.target.value)}
-                  placeholder='Ex.: 2" ou 4" ou 50mm'
-                  className="mt-1 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="epa-label">Status do Poço</label>
-                <select
-                  value={wellActive ? 'active' : 'inactive'}
-                  onChange={(e) => setWellActive(e.target.value === 'active')}
-                  className="epa-input mt-1"
-                >
-                  <option value="active">Ativo</option>
-                  <option value="inactive">Inativo</option>
-                </select>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-2 pt-3 border-t dark:border-slate-800">
-                <Button variant="outline" type="button" onClick={() => setWellModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={wellSaving}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white min-h-[40px]"
-                >
-                  {wellSaving ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Salvando...
-                    </span>
-                  ) : editingWell ? (
-                    'Salvar Alterações'
-                  ) : (
-                    'Adicionar Poço'
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

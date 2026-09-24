@@ -341,44 +341,47 @@ export function RdosPage({ query }: { query: string }) {
       console.warn('Could not read cached projects for new RDO:', e)
     }
 
-    // Pré-monta poços ativos cadastrados pelo Admin no projeto (híbrido: servidor se online, cache local se offline)
+    // Os poços são gerenciados diretamente na ficha (report_wells / formData.wells)
+    // Tenta herdar a lista de poços do último RDO do projeto para agilizar o preenchimento, se houver
     let preloadedWells: OfflineRdoItem['wells'] = []
-    if (initialProjectId) {
-      try {
-        let wellRecords: any[] = []
-        if (navigator.onLine && pb.authStore.isValid) {
-          try {
-            wellRecords = await pb.collection('wells').getFullList({
-              filter: `project = "${initialProjectId}" && active = true`,
-              sort: 'identification',
-            })
-            if (wellRecords.length > 0) {
-              await offlineStorage.saveProjectWells(initialProjectId, wellRecords)
-            }
-          } catch (serverErr) {
-            console.warn(
-              'Server wells fetch failed, falling back to local cache for new RDO:',
-              serverErr,
-            )
-            wellRecords = await offlineStorage.getProjectWells(initialProjectId)
-          }
-        } else {
-          // Offline: busca do cache local no IndexedDB
-          wellRecords = await offlineStorage.getProjectWells(initialProjectId)
-        }
-
-        if (wellRecords && wellRecords.length > 0) {
-          preloadedWells = wellRecords.map((w: any) => ({
-            id: undefined,
-            well_id: w.identification,
-            depth: w.depth ?? '',
+    try {
+      const existingRdos = items.filter(
+        (r) =>
+          !r.deleted && (r.projectId === initialProjectId || r.projectName === initialProjectName),
+      )
+      const lastRdo = existingRdos[0]
+      if (lastRdo && lastRdo.wells && lastRdo.wells.length > 0) {
+        preloadedWells = lastRdo.wells.map((w) => ({
+          well_id: w.well_id,
+          depth: w.depth,
+          completion_date: '',
+          diameter: w.diameter || '2"',
+        }))
+      } else {
+        preloadedWells = [
+          {
+            well_id: 'PM-01',
+            depth: 8.0,
             completion_date: '',
-            diameter: w.diameter ?? w.default_diameter ?? '',
-          }))
-        }
-      } catch (err) {
-        console.warn('Could not fetch active wells for new RDO:', err)
+            diameter: '2"',
+          },
+          {
+            well_id: 'PM-02',
+            depth: 8.0,
+            completion_date: '',
+            diameter: '2"',
+          },
+        ]
       }
+    } catch (e) {
+      preloadedWells = [
+        {
+          well_id: 'PM-01',
+          depth: 8.0,
+          completion_date: '',
+          diameter: '2"',
+        },
+      ]
     }
 
     const newReport: OfflineRdoItem = {
@@ -1088,113 +1091,31 @@ function RdoFullPageEditor({
   const isLocked =
     (!isAdmin && (formData.status === 'approved' || formData.status === 'submitted')) || isDeleted
 
-  const [availableWells, setAvailableWells] = useState<
-    Array<{ id: string; identification: string; depth?: number; diameter?: string }>
-  >([])
-  const [loadingWells, setLoadingWells] = useState(false)
-
-  // Fetch active wells for the selected project (híbrido: PocketBase ou IndexedDB)
-  useEffect(() => {
-    let isMounted = true
-    const fetchWells = async () => {
-      setLoadingWells(true)
-      try {
-        let list: Array<{ id: string; identification: string; depth?: number; diameter?: string }> =
-          []
-        if (formData.projectId) {
-          if (navigator.onLine && pb.authStore.isValid) {
-            try {
-              const records = await pb.collection('wells').getFullList({
-                filter: `project = "${formData.projectId}" && active = true`,
-                sort: 'identification',
-              })
-              list = records.map((w: any) => ({
-                id: w.id,
-                identification: w.identification,
-                depth: w.depth,
-                diameter: w.diameter,
-              }))
-              if (records.length > 0) {
-                await offlineStorage.saveProjectWells(formData.projectId, records)
-              }
-            } catch (pbErr) {
-              console.warn(
-                'Could not fetch wells with project filter, checking local cache:',
-                pbErr,
-              )
-              const cached = await offlineStorage.getProjectWells(formData.projectId)
-              if (cached && cached.length > 0) {
-                list = cached.map((w: any) => ({
-                  id: w.id || w.identification,
-                  identification: w.identification,
-                  depth: w.depth,
-                  diameter: w.diameter,
-                }))
-              }
-            }
-          } else {
-            // Offline: busca do cache local no IndexedDB
-            const cached = await offlineStorage.getProjectWells(formData.projectId)
-            if (cached && cached.length > 0) {
-              list = cached.map((w: any) => ({
-                id: w.id || w.identification,
-                identification: w.identification,
-                depth: w.depth,
-                diameter: w.diameter,
-              }))
-            }
-          }
-        }
-        if (isMounted) {
-          setAvailableWells(list)
-        }
-      } catch (e) {
-        console.error('Error fetching wells in RDO:', e)
-      } finally {
-        if (isMounted) {
-          setLoadingWells(false)
-        }
-      }
-    }
-
-    fetchWells()
-    return () => {
-      isMounted = false
-    }
-  }, [formData.projectId])
-
   const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     setHasUnsavedChanges(true)
   }
 
-  // Wells Handlers
+  // Wells Handlers (Os poços são cadastrados diretamente na ficha pelo Administrador)
   const handleAddWell = () => {
+    if (!isAdmin) return
     const nextIndex = (formData.wells?.length || 0) + 1
-    // Se for técnico, seleciona o primeiro poço do catálogo que ainda não foi adicionado ou o primeiro disponível
-    const existingWellIds = new Set((formData.wells || []).map((w) => w.well_id))
-    const firstAvailable =
-      availableWells.find((w) => !existingWellIds.has(w.identification)) || availableWells[0]
-
     const newWell = {
-      well_id: firstAvailable
-        ? firstAvailable.identification
-        : isAdmin
-          ? `PZ-${String(nextIndex).padStart(2, '0')}`
-          : '',
-      depth: firstAvailable?.depth !== undefined ? firstAvailable.depth : 8.0,
+      well_id: `PM-${String(nextIndex).padStart(2, '0')}`,
+      depth: 8.0,
       completion_date: formData.reportDate || new Date().toISOString().slice(0, 10),
-      diameter: firstAvailable?.diameter || '4 pol.',
+      diameter: '2"',
     }
     const updated = [...(formData.wells || []), newWell]
     handleFieldChange('wells', updated)
     toast({
-      title: 'Poço vinculado',
-      description: `Poço ${newWell.well_id || 'selecionável'} inserido na tabela.`,
+      title: 'Poço adicionado à ficha',
+      description: `Poço ${newWell.well_id} inserido na tabela.`,
     })
   }
 
   const handleRemoveWell = (index: number) => {
+    if (!isAdmin) return
     const updated = [...(formData.wells || [])]
     updated.splice(index, 1)
     handleFieldChange('wells', updated)
@@ -1203,21 +1124,7 @@ function RdoFullPageEditor({
 
   const handleWellFieldChange = (index: number, field: string, value: any) => {
     const updated = [...(formData.wells || [])]
-    if (field === 'well_id') {
-      const foundWell = availableWells.find((w) => w.identification === value)
-      updated[index] = {
-        ...updated[index],
-        well_id: value,
-        ...(foundWell?.depth !== undefined && !updated[index].depth
-          ? { depth: foundWell.depth }
-          : {}),
-        ...(foundWell?.diameter && !updated[index].diameter
-          ? { diameter: foundWell.diameter }
-          : {}),
-      }
-    } else {
-      updated[index] = { ...updated[index], [field]: value }
-    }
+    updated[index] = { ...updated[index], [field]: value }
     handleFieldChange('wells', updated)
   }
 
@@ -2293,22 +2200,32 @@ function RdoFullPageEditor({
                           value={well.well_id ?? ''}
                           onChange={(e) => handleWellFieldChange(index, 'well_id', e.target.value)}
                           disabled={isLocked}
-                          placeholder="PZ-01"
-                          className="h-10 text-xs sm:text-sm font-semibold"
+                          placeholder="PM-01"
+                          className="h-10 text-xs sm:text-sm font-semibold uppercase font-mono"
                         />
                       )}
                     </td>
                     <td className="p-2">
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        step="0.1"
-                        value={well.depth ?? ''}
-                        onChange={(e) => handleWellFieldChange(index, 'depth', e.target.value)}
-                        disabled={isLocked}
-                        placeholder="8.5"
-                        className="h-10 text-xs sm:text-sm font-mono"
-                      />
+                      {isTechnician ? (
+                        <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                          <span>
+                            {well.depth !== undefined && well.depth !== null && well.depth !== ''
+                              ? `${well.depth} m`
+                              : '—'}
+                          </span>
+                        </div>
+                      ) : (
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          step="0.1"
+                          value={well.depth ?? ''}
+                          onChange={(e) => handleWellFieldChange(index, 'depth', e.target.value)}
+                          disabled={isLocked}
+                          placeholder="8.5"
+                          className="h-10 text-xs sm:text-sm font-mono"
+                        />
+                      )}
                     </td>
                     <td className="p-2">
                       <Input
@@ -2322,13 +2239,19 @@ function RdoFullPageEditor({
                       />
                     </td>
                     <td className="p-2">
-                      <Input
-                        value={well.diameter ?? ''}
-                        onChange={(e) => handleWellFieldChange(index, 'diameter', e.target.value)}
-                        disabled={isLocked}
-                        placeholder="4 pol."
-                        className="h-10 text-xs sm:text-sm"
-                      />
+                      {isTechnician ? (
+                        <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                          <span>{well.diameter || '—'}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          value={well.diameter ?? ''}
+                          onChange={(e) => handleWellFieldChange(index, 'diameter', e.target.value)}
+                          disabled={isLocked}
+                          placeholder='2"'
+                          className="h-10 text-xs sm:text-sm font-mono"
+                        />
+                      )}
                     </td>
                     {!isLocked && isAdmin && (
                       <td className="p-2 text-center">

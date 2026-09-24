@@ -445,7 +445,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       console.warn('Could not read cached projects for new field spreadsheet:', e)
     }
 
-    // Carrega os poços reais cadastrados pelo Admin no projeto selecionado (híbrido: servidor se online, cache IndexedDB se offline)
+    // Inicialização da tabela de extração (poços gerenciados na própria ficha)
+    // Tenta replicar os poços da última planilha do projeto se houver, ou inicializa padrão
     let initialExtractionData: Array<{
       well: string
       morning: string
@@ -456,40 +457,31 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       autopump_condition_other?: string
     }> = []
 
-    if (initialProjectId) {
-      try {
-        let wellRecords: any[] = []
-        if (navigator.onLine && pb.authStore.isValid) {
-          try {
-            wellRecords = await pb.collection('wells').getFullList({
-              filter: `project = "${initialProjectId}" && active = true`,
-              sort: 'identification',
-            })
-            // Atualiza cache local
-            if (wellRecords.length > 0) {
-              await offlineStorage.saveProjectWells(initialProjectId, wellRecords)
-            }
-          } catch (serverErr) {
-            console.warn('Server wells fetch failed, falling back to local cache:', serverErr)
-            wellRecords = await offlineStorage.getProjectWells(initialProjectId)
-          }
-        } else {
-          // Offline: busca do cache local no IndexedDB
-          wellRecords = await offlineStorage.getProjectWells(initialProjectId)
-        }
-
-        if (wellRecords && wellRecords.length > 0) {
-          initialExtractionData = wellRecords.map((w: any) => ({
-            well: w.identification,
-            morning: '',
-            afternoon: '',
-            pump: '',
-            autopump: '',
-          }))
-        }
-      } catch (err) {
-        console.warn('Could not fetch active wells for new field sheet:', err)
+    try {
+      const existingSheets = items.filter(
+        (s) =>
+          !s.deleted && (s.projectId === initialProjectId || s.projectName === initialProjectName),
+      )
+      const lastSheet = existingSheets[0]
+      if (lastSheet && lastSheet.extraction_data && lastSheet.extraction_data.length > 0) {
+        initialExtractionData = lastSheet.extraction_data.map((row) => ({
+          well: row.well,
+          morning: '',
+          afternoon: '',
+          pump: '',
+          autopump: '',
+        }))
+      } else {
+        initialExtractionData = [
+          { well: 'PR-01', morning: '', afternoon: '', pump: '', autopump: '' },
+          { well: 'PR-02', morning: '', afternoon: '', pump: '', autopump: '' },
+        ]
       }
+    } catch (e) {
+      initialExtractionData = [
+        { well: 'PR-01', morning: '', afternoon: '', pump: '', autopump: '' },
+        { well: 'PR-02', morning: '', afternoon: '', pump: '', autopump: '' },
+      ]
     }
 
     const newSheet: OfflineFieldSheetItem = {
@@ -1013,10 +1005,6 @@ function FieldFullEditor({
   const [reviewReturnedFields, setReviewReturnedFields] = useState<string[]>(
     initialSheet.returned_fields || ['hidrometro'],
   )
-  const [availableWells, setAvailableWells] = useState<
-    Array<{ id: string; identification: string }>
-  >([])
-  const [loadingWells, setLoadingWells] = useState(false)
   const [projectList, setProjectList] = useState<OfflineProjectItem[]>([])
 
   const { user, setHasUnsavedChanges } = useAuth()
@@ -1073,63 +1061,6 @@ function FieldFullEditor({
     }
 
     loadProjectsAndDetails()
-    return () => {
-      isMounted = false
-    }
-  }, [formData.projectId])
-
-  // Load project wells from PocketBase (or fallback cache do IndexedDB)
-  useEffect(() => {
-    let isMounted = true
-    const fetchWells = async () => {
-      setLoadingWells(true)
-      try {
-        let list: Array<{ id: string; identification: string }> = []
-        if (formData.projectId) {
-          if (navigator.onLine && pb.authStore.isValid) {
-            try {
-              const records = await pb.collection('wells').getFullList({
-                filter: `project = "${formData.projectId}" && active = true`,
-                sort: 'identification',
-              })
-              list = records.map((w: any) => ({ id: w.id, identification: w.identification }))
-              if (records.length > 0) {
-                await offlineStorage.saveProjectWells(formData.projectId, records)
-              }
-            } catch (pbErr) {
-              console.warn('Could not fetch wells from server, checking local cache:', pbErr)
-              const cached = await offlineStorage.getProjectWells(formData.projectId)
-              if (cached && cached.length > 0) {
-                list = cached.map((w: any) => ({
-                  id: w.id || w.identification,
-                  identification: w.identification,
-                }))
-              }
-            }
-          } else {
-            // Offline: busca do cache local no IndexedDB
-            const cached = await offlineStorage.getProjectWells(formData.projectId)
-            if (cached && cached.length > 0) {
-              list = cached.map((w: any) => ({
-                id: w.id || w.identification,
-                identification: w.identification,
-              }))
-            }
-          }
-        }
-        if (isMounted) {
-          setAvailableWells(list)
-        }
-      } catch (e) {
-        console.error('Error fetching wells:', e)
-      } finally {
-        if (isMounted) {
-          setLoadingWells(false)
-        }
-      }
-    }
-
-    fetchWells()
     return () => {
       isMounted = false
     }
@@ -1785,13 +1716,14 @@ function FieldFullEditor({
         )}
 
         {/* Aviso destacado quando a lista de poços estiver vazia */}
-        {isAdmin && availableWells.length === 0 && !loadingWells && (
+        {isAdmin && (!formData.extraction_data || formData.extraction_data.length === 0) && (
           <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 flex items-start gap-2.5">
             <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5 dark:text-amber-400" />
             <div>
-              <p className="font-bold">Nenhum poço cadastrado para este projeto</p>
+              <p className="font-bold">Nenhum poço inserido nesta planilha</p>
               <p className="mt-0.5">
-                Utilize o botão "Adicionar Poço (PR)" ou cadastre novos poços na tela de Projetos.
+                Utilize o botão "Adicionar Poço (PR)" acima para cadastrar os poços de remediação
+                desta ficha.
               </p>
             </div>
           </div>
