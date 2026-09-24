@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import pb from '@/lib/pocketbase/client'
+import pb, { forceRealtimeTeardown } from '@/lib/pocketbase/client'
 import type { EpaUser } from '@/types/epa'
 import { offlineStorage } from '@/services/offlineStorage'
 import { hashPasswordWithSalt } from '@/services/auth'
@@ -285,9 +285,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Se estiver online, tenta autenticar com o PocketBase
     try {
+      // Teardown forçado prévio para evitar envio de clientId antigo com novas credenciais
+      await forceRealtimeTeardown()
+
       const res = await pb.collection('users').authWithPassword(trimmedIdentity, password)
       const loggedUser = res.record as unknown as EpaUser
       if (loggedUser.active === false) {
+        await forceRealtimeTeardown()
         pb.authStore.clear()
         await offlineStorage.setCache(OFFLINE_AUTH_KEY, null)
         setUser(null)
@@ -295,6 +299,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsOfflineSession(false)
         throw new Error('Usuário desativado. Entre em contato com o administrador.')
       }
+
+      // Garante teardown limpo após autenticação bem-sucedida para reabertura de canal SSE novo
+      await forceRealtimeTeardown()
 
       setUser(loggedUser)
       setIsAuthenticated(true)
@@ -339,6 +346,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = async () => {
+    await forceRealtimeTeardown()
     pb.authStore.clear()
     await offlineStorage.setCache(OFFLINE_AUTH_KEY, null)
     setUser(null)

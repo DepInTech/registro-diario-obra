@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import pb from '@/lib/pocketbase/client'
+import pb, { forceRealtimeTeardown } from '@/lib/pocketbase/client'
 import {
   offlineStorage,
   OfflineRdoItem,
@@ -636,18 +636,32 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
             // create wells - sincronizados como parte da unidade lógica
             for (const well of rdo.wells || []) {
-              if (well.well_id) {
-                try {
-                  await pb.collection('report_wells').create({
-                    report: record.id,
-                    well_id: well.well_id,
-                    depth: well.depth ? Number(well.depth) : undefined,
-                    completion_date: well.completion_date || undefined,
-                    diameter: well.diameter || undefined,
-                  })
-                } catch (wellErr) {
-                  console.warn('Failed to sync well for RDO:', wellErr)
-                }
+              const wellIdClean = String(well.well_id || '').trim()
+              if (!wellIdClean) continue
+
+              // Sanitização: completion_date vazio -> null ou ISO válido, nunca undefined
+              let sanitizedDate: string | null = null
+              if (well.completion_date && String(well.completion_date).trim() !== '') {
+                const dateStr = String(well.completion_date).trim()
+                sanitizedDate = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00.000Z`
+              }
+
+              try {
+                const createdWellRec = await pb.collection('report_wells').create({
+                  report: record.id,
+                  well_id: wellIdClean,
+                  depth:
+                    well.depth !== undefined &&
+                    well.depth !== null &&
+                    String(well.depth).trim() !== ''
+                      ? Number(well.depth)
+                      : undefined,
+                  completion_date: sanitizedDate,
+                  diameter: well.diameter ? String(well.diameter).trim() : undefined,
+                })
+                well.id = createdWellRec.id
+              } catch (wellErr) {
+                console.warn('Failed to sync well for RDO create:', wellErr)
               }
             }
 
@@ -880,19 +894,27 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               const activeServerWellIds = new Set<string>()
 
               for (const well of localWells) {
-                if (!well.well_id) continue
+                const wellIdClean = String(well.well_id || '').trim()
+                if (!wellIdClean) continue
+
+                // Sanitização: completion_date vazio -> null ou ISO válido, nunca undefined
+                let sanitizedDate: string | null = null
+                if (well.completion_date && String(well.completion_date).trim() !== '') {
+                  const dateStr = String(well.completion_date).trim()
+                  sanitizedDate = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00.000Z`
+                }
 
                 const wellPayload = {
                   report: rdo.id,
-                  well_id: well.well_id,
+                  well_id: wellIdClean,
                   depth:
                     well.depth !== undefined &&
                     well.depth !== null &&
                     String(well.depth).trim() !== ''
                       ? Number(well.depth)
                       : undefined,
-                  completion_date: well.completion_date || undefined,
-                  diameter: well.diameter || undefined,
+                  completion_date: sanitizedDate,
+                  diameter: well.diameter ? String(well.diameter).trim() : undefined,
                 }
 
                 // Se possui id persistido no servidor que bate com a lista remota
@@ -2686,7 +2708,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       broadcastUpdate({ collection: colName, id: record?.id || '', action, record })
     }
 
-    // Cancelar subscrições ativas de forma limpa e segura
+    // Cancelar subscrições ativas de forma limpa e segura com teardown forçado
     const cancelExistingSubscriptions = async () => {
       while (unsubscribes.length > 0) {
         const fn = unsubscribes.pop()
@@ -2696,11 +2718,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // ignore
         }
       }
-      try {
-        await pb.realtime.unsubscribe()
-      } catch {
-        // ignore
-      }
+      await forceRealtimeTeardown()
     }
 
     // Subscrição serializada com retry, tratamento para 403 e reconexão limpa
@@ -2775,17 +2793,33 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         // SERIALIZAÇÃO DAS SUBSCRIÇÕES (evita concorrência e erro 403 no handshake SSE)
         for (const item of collectionsToSubscribe) {
           if (cancelled || !pb.authStore.isValid) break
-          const unsub = await pb.collection(item.name).subscribe('*', item.handler)
-          if (cancelled) {
-            unsub().catch(() => {})
-          } else {
-            unsubscribes.push(unsub)
+          try {
+            const unsub = await pb.collection(item.name).subscribe('*', item.handler)
+            if (cancelled) {
+              unsub().catch(() => {})
+            } else {
+              unsubscribes.push(unsub)
+            }
+          } catch (oneSubErr: any) {
+            const errMsg = String(oneSubErr?.message || oneSubErr || '')
+            const is403 =
+              oneSubErr?.status === 403 ||
+              errMsg.includes('403') ||
+              errMsg.toLowerCase().includes('authorization')
+            if (is403) {
+              console.warn(
+                `[Realtime] 403 na subscrição de ${item.name}. Executando teardown forçado...`,
+              )
+              await forceRealtimeTeardown()
+              throw oneSubErr
+            }
+            throw oneSubErr
           }
         }
 
         if (!cancelled && unsubscribes.length > 0) {
           retryAttempt = 0 // reset backoff on success
-          console.log('[Realtime] Subscrições conectadas')
+          console.log('[Realtime] Subscrições conectadas com sucesso.')
         }
       } catch (subErr: any) {
         console.warn('[Realtime] Erro ao subscrever coleções PocketBase:', subErr)
@@ -2798,13 +2832,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
         if (is403) {
           console.warn(
-            '[Realtime] Detectado 403 no handshake realtime. Desconectando e reiniciando canal SSE limpo...',
+            '[Realtime] Detectado 403 no handshake realtime. Executando teardown forçado e reconexão limpa...',
           )
-          try {
-            await pb.realtime.unsubscribe()
-          } catch {
-            // ignore
-          }
+          await forceRealtimeTeardown()
         }
 
         // Retry com backoff exponencial: 2s, 4s, 8s, até max 30s
@@ -2853,20 +2883,20 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // 3. Observa mudanças de autenticação/token no pb.authStore com debounce
+    // 3. Observa mudanças de autenticação/token no pb.authStore com teardown imediato
     // Garante que subscrições antigas sejam desfeitas de imediato antes de restabelecer o SSE
     // para eliminar o erro 403 "The current and the previous request authorization don't match"
     let authDebounceTimer: any = null
-    const unsubAuth = pb.authStore.onChange(() => {
+    const unsubAuth = pb.authStore.onChange(async () => {
       clearTimeout(authDebounceTimer)
-      // Desfaz as subscrições antigas antes de abrir nova sessão com o novo token
-      cancelExistingSubscriptions()
+      // Teardown forçado imediato no momento da mudança do authStore
+      await cancelExistingSubscriptions()
       authDebounceTimer = setTimeout(async () => {
         if (pb.authStore.isValid && !cancelled) {
-          await cancelExistingSubscriptions()
+          await forceRealtimeTeardown()
           setupSubscriptions()
         }
-      }, 500)
+      }, 300)
     })
 
     return () => {

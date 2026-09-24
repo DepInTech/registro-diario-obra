@@ -342,44 +342,78 @@ export function RdosPage({ query }: { query: string }) {
     }
 
     // Os poços são gerenciados diretamente na ficha (report_wells / formData.wells)
-    // Tenta herdar a lista de poços do último RDO do projeto para agilizar o preenchimento, se houver
+    // Busca os poços ativos do projeto no IndexedDB ou PocketBase
     let preloadedWells: OfflineRdoItem['wells'] = []
     try {
-      const existingRdos = items.filter(
-        (r) =>
-          !r.deleted && (r.projectId === initialProjectId || r.projectName === initialProjectName),
-      )
-      const lastRdo = existingRdos[0]
-      if (lastRdo && lastRdo.wells && lastRdo.wells.length > 0) {
-        preloadedWells = lastRdo.wells.map((w) => ({
-          well_id: w.well_id,
-          depth: w.depth,
-          completion_date: '',
-          diameter: w.diameter || '2"',
-        }))
-      } else {
-        preloadedWells = [
-          {
-            well_id: 'PM-01',
-            depth: 8.0,
+      if (initialProjectId) {
+        let projectWells = await offlineStorage.getProjectWells(initialProjectId)
+        if (
+          (!projectWells || projectWells.length === 0) &&
+          navigator.onLine &&
+          pb.authStore.isValid
+        ) {
+          try {
+            projectWells = await pb.collection('wells').getFullList({
+              filter: `project = "${initialProjectId}" && active = true`,
+              sort: 'identification',
+            })
+            if (projectWells.length > 0) {
+              await offlineStorage.saveProjectWells(initialProjectId, projectWells)
+            }
+          } catch {
+            // fallback
+          }
+        }
+        if (projectWells && projectWells.length > 0) {
+          preloadedWells = projectWells
+            .filter((pw: any) => pw.active !== false)
+            .map((pw: any) => ({
+              well_id: pw.identification || pw.well_id,
+              depth: pw.depth !== undefined && pw.depth !== null ? Number(pw.depth) : undefined,
+              completion_date: '',
+              diameter: pw.default_diameter || pw.diameter || '4"',
+            }))
+        }
+      }
+
+      if (preloadedWells.length === 0) {
+        const existingRdos = items.filter(
+          (r) =>
+            !r.deleted &&
+            (r.projectId === initialProjectId || r.projectName === initialProjectName),
+        )
+        const lastRdo = existingRdos[0]
+        if (lastRdo && lastRdo.wells && lastRdo.wells.length > 0) {
+          preloadedWells = lastRdo.wells.map((w) => ({
+            well_id: w.well_id,
+            depth: w.depth,
             completion_date: '',
-            diameter: '2"',
-          },
-          {
-            well_id: 'PM-02',
-            depth: 8.0,
-            completion_date: '',
-            diameter: '2"',
-          },
-        ]
+            diameter: w.diameter || '4"',
+          }))
+        } else {
+          preloadedWells = [
+            {
+              well_id: 'PR-01',
+              depth: 8.0,
+              completion_date: '',
+              diameter: '4"',
+            },
+            {
+              well_id: 'PR-02',
+              depth: 8.0,
+              completion_date: '',
+              diameter: '4"',
+            },
+          ]
+        }
       }
     } catch (e) {
       preloadedWells = [
         {
-          well_id: 'PM-01',
+          well_id: 'PR-01',
           depth: 8.0,
           completion_date: '',
-          diameter: '2"',
+          diameter: '4"',
         },
       ]
     }
@@ -909,7 +943,49 @@ export function RdosPage({ query }: { query: string }) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
+                          onClick={async () => {
+                            // Se o RDO não possui poços carregados, busca poços ativos do projeto para herança
+                            if (!report.wells || report.wells.length === 0) {
+                              try {
+                                const targetPid = report.projectId
+                                if (targetPid) {
+                                  let projWells = await offlineStorage.getProjectWells(targetPid)
+                                  if (
+                                    (!projWells || projWells.length === 0) &&
+                                    navigator.onLine &&
+                                    pb.authStore.isValid
+                                  ) {
+                                    try {
+                                      projWells = await pb.collection('wells').getFullList({
+                                        filter: `project = "${targetPid}" && active = true`,
+                                        sort: 'identification',
+                                      })
+                                      if (projWells.length > 0) {
+                                        await offlineStorage.saveProjectWells(targetPid, projWells)
+                                      }
+                                    } catch {
+                                      // ignore
+                                    }
+                                  }
+                                  if (projWells && projWells.length > 0) {
+                                    report.wells = projWells
+                                      .filter((pw: any) => pw.active !== false)
+                                      .map((pw: any) => ({
+                                        well_id: pw.identification || pw.well_id,
+                                        depth:
+                                          pw.depth !== undefined && pw.depth !== null
+                                            ? Number(pw.depth)
+                                            : undefined,
+                                        completion_date: '',
+                                        diameter: pw.default_diameter || pw.diameter || '4"',
+                                      }))
+                                    await offlineStorage.saveRdo(report)
+                                  }
+                                }
+                              } catch (wErr) {
+                                console.warn('Erro ao herdar poços do projeto ao abrir RDO:', wErr)
+                              }
+                            }
                             setEditing(report)
                             setIsNew(false)
                           }}
