@@ -144,8 +144,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
           })
 
           for (const rec of records) {
-            const existing = localSheets.find((l) => l.id === rec.id)
-            if (!existing || existing.syncStatus === 'synced') {
+            const existingLocal = localSheets.find((l) => l.id === rec.id)
+            if (!existingLocal || existingLocal.syncStatus === 'synced') {
               const proj = rec.expand?.project as any
               const client = proj?.expand?.client as any
               const contract = proj?.expand?.contract as any
