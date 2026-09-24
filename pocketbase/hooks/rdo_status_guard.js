@@ -37,12 +37,17 @@ onRecordUpdateRequest((e) => {
   }
 
   // 3. Campos controlados pelo Administrador: número do RDO e projeto
-  if (e.record.original().getInt('number') !== e.record.getInt('number')) {
+  // Permitir resolução caso o RDO original não tivesse número atribuído (>0) ou estivesse com projeto provisório/em branco
+  const origNum = e.record.original().getInt('number')
+  const nextNum = e.record.getInt('number')
+  if (origNum > 0 && nextNum > 0 && origNum !== nextNum) {
     throw new ForbiddenError(
       'O número do RDO é controlado pelo Administrador/Servidor e não pode ser alterado por técnicos',
     )
   }
-  if (e.record.original().getString('project') !== e.record.getString('project')) {
+  const origProj = e.record.original().getString('project')
+  const nextProj = e.record.getString('project')
+  if (origProj && nextProj && origProj !== nextProj) {
     throw new ForbiddenError(
       'O projeto associado ao RDO é controlado pelo Administrador e não pode ser alterado por técnicos',
     )
@@ -103,7 +108,10 @@ onRecordUpdateRequest((e) => {
   }
 
   // 3. Campos controlados pelo Administrador: projeto associado
-  if (e.record.original().getString('project') !== e.record.getString('project')) {
+  // Permitir resolução se o original estava sem projeto
+  const origSheetProj = e.record.original().getString('project')
+  const nextSheetProj = e.record.getString('project')
+  if (origSheetProj && nextSheetProj && origSheetProj !== nextSheetProj) {
     throw new ForbiddenError(
       'O projeto associado à planilha é controlado pelo Administrador e não pode ser alterado por técnicos',
     )

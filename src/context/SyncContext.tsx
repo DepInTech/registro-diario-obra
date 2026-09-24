@@ -282,28 +282,84 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         console.warn('Erro ao verificar last_operation_wipe_at:', wipeCheckErr)
       }
 
-      // Helper to find an active server project ID fallback
-      let fallbackProjectId: string | null = null
-      const resolveFallbackProjectId = async (): Promise<string | null> => {
-        if (fallbackProjectId) return fallbackProjectId
+      // Helper to resolve project ID with multi-level lookup:
+      // 1. Match local project by name/code
+      // 2. Technician assigned project
+      // 3. Active project from PocketBase or local cache
+      // 4. Any non-deleted project
+      const resolveProjectForSync = async (
+        candidateId?: string,
+        candidateName?: string,
+      ): Promise<{ id: string; name: string } | null> => {
         try {
-          // 1. Try to get first active project from PocketBase
+          const currentUserId = pb.authStore.record?.id
+          const localProjects = await offlineStorage.getAllProjects()
+
+          // A. If candidateId is already a valid non-provisional server ID
+          if (candidateId && !isProvisionalId(candidateId)) {
+            const foundLocal = localProjects.find((p) => p.id === candidateId)
+            return {
+              id: candidateId,
+              name: foundLocal?.name || candidateName || 'Projeto EPA',
+            }
+          }
+
+          // B. Match by candidateName or provisional ID in local projects
+          if (candidateName || candidateId) {
+            const matched = localProjects.find(
+              (p) =>
+                (!p.deleted &&
+                  !p.archived &&
+                  candidateName &&
+                  p.name.trim().toLowerCase() === candidateName.trim().toLowerCase()) ||
+                (candidateId && p.id === candidateId && !isProvisionalId(p.id)),
+            )
+            if (matched && !isProvisionalId(matched.id)) {
+              return { id: matched.id, name: matched.name }
+            }
+          }
+
+          // C. If technician has assigned projects, prioritize the first active one
+          if (currentUserId) {
+            const assignedActive = localProjects.find(
+              (p) =>
+                !p.deleted &&
+                !p.archived &&
+                p.status === 'active' &&
+                !isProvisionalId(p.id) &&
+                (p.assignedUsersIds || []).includes(currentUserId),
+            )
+            if (assignedActive) {
+              return { id: assignedActive.id, name: assignedActive.name }
+            }
+          }
+
+          // D. First active project from local projects
+          const activeLocal = localProjects.find(
+            (p) => !p.deleted && !p.archived && p.status === 'active' && !isProvisionalId(p.id),
+          )
+          if (activeLocal) {
+            return { id: activeLocal.id, name: activeLocal.name }
+          }
+
+          // E. Query server for active project
           const serverProjects = await pb.collection('projects').getList(1, 1, {
             filter: 'deleted = false && archived = false && status = "active"',
             sort: '-created',
           })
           if (serverProjects.items.length > 0) {
-            fallbackProjectId = serverProjects.items[0].id
-            return fallbackProjectId
+            const p = serverProjects.items[0]
+            return { id: p.id, name: p.name }
           }
-          // 2. Any non-deleted project
+
+          // F. Any non-deleted project from server
           const anyProj = await pb.collection('projects').getList(1, 1, {
             filter: 'deleted = false',
             sort: '-created',
           })
           if (anyProj.items.length > 0) {
-            fallbackProjectId = anyProj.items[0].id
-            return fallbackProjectId
+            const p = anyProj.items[0]
+            return { id: p.id, name: p.name }
           }
         } catch (e) {
           console.warn('Could not query active project for sync fallback:', e)
@@ -436,25 +492,50 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
         if (rdo.syncStatus === 'pending_create') {
           try {
-            // Resolve project ID
-            let targetProjectId = rdo.projectId?.trim() || ''
-            if (!targetProjectId || isProvisionalId(targetProjectId)) {
-              // Try to find an active server project
-              const resolved = await resolveFallbackProjectId()
-              if (resolved) {
-                targetProjectId = resolved
-                rdo.projectId = resolved
-              } else {
-                // Se não há projeto vinculado, NÃO enviar payload inválido para o servidor.
-                // Mantém localmente com pending_create e emite aviso explicativo no painel.
-                rdo.syncStatus = 'pending_create'
-                const warnMsg =
-                  'Registro salvo localmente. Aguardando vinculação de projeto pelo Administrador para envio ao servidor.'
-                rdo.syncError = warnMsg
-                errorsList.push(warnMsg)
-                await offlineStorage.saveRdo(rdo)
-                continue
-              }
+            // Atribui token de idempotência estável para o RDO offline
+            const clientToken = rdo.client_token || `rdo_${rdo.id}`
+            rdo.client_token = clientToken
+
+            // Idempotência: verificar se já existe no servidor com esse client_token
+            let existingRecord: any = null
+            try {
+              existingRecord = await pb
+                .collection('reports_rdo')
+                .getFirstListItem(`client_token = "${clientToken}"`)
+            } catch {
+              // não encontrado no servidor, prossegue com criação
+            }
+
+            // Se já existe no servidor, vincula sem duplicar!
+            if (existingRecord) {
+              await offlineStorage.deleteRdo(rdo.id)
+              rdo.id = existingRecord.id
+              rdo.number = existingRecord.number
+              rdo.syncStatus = 'synced'
+              rdo.serverUpdatedAt = existingRecord.updated
+              delete rdo.syncError
+              rdo.syncAttempts = 0
+              await offlineStorage.saveRdo(rdo)
+              totalSynced++
+              continue
+            }
+
+            // Resolve project ID com lookup inteligente
+            const resolvedProject = await resolveProjectForSync(rdo.projectId, rdo.projectName)
+            let targetProjectId = resolvedProject?.id || ''
+            if (targetProjectId) {
+              rdo.projectId = targetProjectId
+              if (resolvedProject?.name) rdo.projectName = resolvedProject.name
+            } else {
+              // Se não há projeto vinculado, NÃO enviar payload inválido para o servidor.
+              // Mantém localmente com pending_create e emite aviso explicativo no painel.
+              rdo.syncStatus = 'pending_create'
+              const warnMsg =
+                'Registro salvo localmente. Aguardando vinculação de projeto ativo pelo Administrador para envio ao servidor.'
+              rdo.syncError = warnMsg
+              errorsList.push(warnMsg)
+              await offlineStorage.saveRdo(rdo)
+              continue
             }
 
             // Resolve performed_by and supervised_by with logged-in user fallback
@@ -493,6 +574,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_reason: rdo.deletedReason || '',
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
+              client_token: clientToken,
             }
             // Deixar o backend calcular o número sequencial atômico (1, 2, 3...)
             if (rdo.number && rdo.number > 0 && !isProvisionalId(rdo.id)) {
@@ -855,24 +937,49 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
         if (sheet.syncStatus === 'pending_create') {
           try {
-            // Resolve project ID
-            let targetProjectId = sheet.projectId?.trim() || ''
-            if (!targetProjectId || isProvisionalId(targetProjectId)) {
-              const resolved = await resolveFallbackProjectId()
-              if (resolved) {
-                targetProjectId = resolved
-                sheet.projectId = resolved
-              } else {
-                // Se não há projeto vinculado, NÃO enviar payload inválido para o servidor.
-                // Mantém localmente com pending_create e emite aviso explicativo no painel.
-                sheet.syncStatus = 'pending_create'
-                const warnMsg =
-                  'Registro salvo localmente. Aguardando vinculação de projeto pelo Administrador para envio ao servidor.'
-                sheet.syncError = warnMsg
-                errorsList.push(warnMsg)
-                await offlineStorage.saveFieldSheet(sheet)
-                continue
-              }
+            // Atribui token de idempotência estável para a Planilha offline
+            const clientToken = sheet.client_token || `sheet_${sheet.id}`
+            sheet.client_token = clientToken
+
+            // Idempotência: verificar se já existe no servidor com esse client_token
+            let existingRecord: any = null
+            try {
+              existingRecord = await pb
+                .collection('field_spreadsheets')
+                .getFirstListItem(`client_token = "${clientToken}"`)
+            } catch {
+              // não encontrado no servidor, prossegue com criação
+            }
+
+            if (existingRecord) {
+              await offlineStorage.deleteFieldSheet(sheet.id)
+              sheet.id = existingRecord.id
+              sheet.number = existingRecord.number
+              sheet.syncStatus = 'synced'
+              sheet.serverUpdatedAt = existingRecord.updated
+              delete sheet.syncError
+              sheet.syncAttempts = 0
+              await offlineStorage.saveFieldSheet(sheet)
+              totalSynced++
+              continue
+            }
+
+            // Resolve project ID com lookup inteligente
+            const resolvedProject = await resolveProjectForSync(sheet.projectId, sheet.projectName)
+            let targetProjectId = resolvedProject?.id || ''
+            if (targetProjectId) {
+              sheet.projectId = targetProjectId
+              if (resolvedProject?.name) sheet.projectName = resolvedProject.name
+            } else {
+              // Se não há projeto vinculado, NÃO enviar payload inválido para o servidor.
+              // Mantém localmente com pending_create e emite aviso explicativo no painel.
+              sheet.syncStatus = 'pending_create'
+              const warnMsg =
+                'Registro salvo localmente. Aguardando vinculação de projeto ativo pelo Administrador para envio ao servidor.'
+              sheet.syncError = warnMsg
+              errorsList.push(warnMsg)
+              await offlineStorage.saveFieldSheet(sheet)
+              continue
             }
 
             const currentUserId = pb.authStore.record?.id || ''
@@ -911,6 +1018,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_reason: sheet.deletedReason || '',
               deleted_by: sheet.deletedBy || undefined,
               deleted_at: sheet.deletedAt || undefined,
+              client_token: clientToken,
             }
 
             const created = await pb.collection('field_spreadsheets').create(payload)

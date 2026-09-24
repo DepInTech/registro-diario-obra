@@ -61,6 +61,7 @@ export interface OfflineRdoItem {
     caption?: string
     dataUrl?: string
   }
+  client_token?: string
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string
   syncAttempts?: number
@@ -123,6 +124,7 @@ export interface OfflineFieldSheetItem {
   deletedBy?: string
   deletedByName?: string
   deletedAt?: string
+  client_token?: string
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string
   syncAttempts?: number
