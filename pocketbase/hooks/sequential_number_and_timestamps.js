@@ -7,8 +7,15 @@
 onRecordCreateRequest(
   (e) => {
     try {
+      console.log(
+        '[sequential_number_and_timestamps] onRecordCreateRequest disparado. Event tag/collection:',
+        e.collection ? e.collection.name : 'sem e.collection',
+        'Record ID:',
+        e.record ? e.record.id : 'sem record',
+      )
       if (e.record) {
-        const collectionName = e.record.collection ? e.record.collection().name : ''
+        const collectionName =
+          e.collection?.name || (e.record.collection ? e.record.collection().name : '')
         const nowIso = new Date().toISOString()
 
         if (collectionName === 'reports_rdo') {
@@ -127,7 +134,9 @@ onRecordCreateRequest(
     }
 
     // Sempre prossegue a execução normal do create, garantindo retorno 200/201 mesmo sob concorrência
+    console.log('[sequential_number_and_timestamps] Chamando e.next() no createRequest')
     e.next()
+    console.log('[sequential_number_and_timestamps] Sucesso apos e.next() no createRequest')
   },
   'reports_rdo',
   'field_spreadsheets',

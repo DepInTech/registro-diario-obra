@@ -1,9 +1,15 @@
 onRecordAfterCreateSuccess(
   (e) => {
+    console.log(
+      '[audit_create] onRecordAfterCreateSuccess disparado para registro:',
+      e.record ? e.record.id : 'null',
+    )
     // 1. Sempre prossegue com a cadeia do hook primeiro
     try {
       e.next()
-    } catch (_) {}
+    } catch (nextErr) {
+      console.warn('[audit_create] e.next() erro:', nextErr)
+    }
 
     // 2. Blindagem total da auditoria assíncrona: executada fora da transação principal,
     // nenhuma falha aqui pode derrubar a criação nem gerar locks
