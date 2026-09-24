@@ -869,6 +869,75 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             if (updated.returned_at) rdo.returnedAt = updated.returned_at
             if (updated.created) rdo.serverCreatedAt = updated.created
 
+            // Sincronizar poços de report_wells no UPDATE:
+            // Busca os poços atualmente existentes no servidor para este relatório
+            try {
+              const existingServerWells = await pb
+                .collection('report_wells')
+                .getFullList({ filter: `report = "${rdo.id}"` })
+
+              const localWells = rdo.wells || []
+              const activeServerWellIds = new Set<string>()
+
+              for (const well of localWells) {
+                if (!well.well_id) continue
+
+                const wellPayload = {
+                  report: rdo.id,
+                  well_id: well.well_id,
+                  depth:
+                    well.depth !== undefined &&
+                    well.depth !== null &&
+                    String(well.depth).trim() !== ''
+                      ? Number(well.depth)
+                      : undefined,
+                  completion_date: well.completion_date || undefined,
+                  diameter: well.diameter || undefined,
+                }
+
+                // Se possui id persistido no servidor que bate com a lista remota
+                const matchedServerWell = well.id
+                  ? existingServerWells.find((sw) => sw.id === well.id)
+                  : existingServerWells.find((sw) => sw.well_id === well.well_id)
+
+                if (matchedServerWell) {
+                  try {
+                    const updatedWell = await pb
+                      .collection('report_wells')
+                      .update(matchedServerWell.id, wellPayload)
+                    well.id = updatedWell.id
+                    activeServerWellIds.add(updatedWell.id)
+                  } catch (updateErr) {
+                    console.warn('Erro ao atualizar poço do RDO no servidor:', updateErr)
+                  }
+                } else {
+                  try {
+                    const createdWell = await pb.collection('report_wells').create(wellPayload)
+                    well.id = createdWell.id
+                    activeServerWellIds.add(createdWell.id)
+                  } catch (createErr) {
+                    console.warn('Erro ao criar poço do RDO no servidor:', createErr)
+                  }
+                }
+              }
+
+              // Excluir poços que foram removidos localmente pelo Admin
+              for (const serverWell of existingServerWells) {
+                if (!activeServerWellIds.has(serverWell.id)) {
+                  try {
+                    await pb.collection('report_wells').delete(serverWell.id)
+                  } catch (delErr) {
+                    console.warn('Erro ao remover poço excluído do RDO:', delErr)
+                  }
+                }
+              }
+            } catch (wellsSyncErr) {
+              console.warn(
+                'Falha ao sincronizar poços (report_wells) na atualização do RDO:',
+                wellsSyncErr,
+              )
+            }
+
             // Sync photos with dataUrl
             const photosToSync: Array<{
               id?: string
@@ -1555,6 +1624,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           serverRdos = await pb.collection('reports_rdo').getFullList({
             filter: rdoFilter || undefined,
             sort: '-updated',
+            expand: 'supervised_by,performed_by',
           })
         } catch (rdoQueryErr) {
           console.warn(
@@ -1570,6 +1640,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           serverRdos = await pb.collection('reports_rdo').getFullList({
             filter: fallbackRdoFilter || undefined,
             sort: '-updated',
+            expand: 'supervised_by,performed_by',
           })
         }
 
@@ -1585,6 +1656,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             serverRdos = await pb.collection('reports_rdo').getFullList({
               filter: fallbackRdoFilter || undefined,
               sort: '-updated',
+              expand: 'supervised_by,performed_by',
             })
           } catch {
             // ignore
@@ -1594,13 +1666,100 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         let hasRdoChanges = false
         for (const record of serverRdos) {
           const local = await offlineStorage.getRdo(record.id)
-          if (
+          const isPending =
             local &&
             (local.syncStatus === 'pending_create' ||
               local.syncStatus === 'pending_update' ||
               local.syncStatus === 'conflict')
-          ) {
+
+          const isDispatchedToTech =
+            !isAdmin && (record.status === 'draft' || record.status === 'returned')
+
+          // Se estiver pendente e NÃO for um despacho do escritório recebido pelo Técnico, não sobrescrever
+          if (isPending && !isDispatchedToTech) {
             continue
+          }
+
+          // Resolução de nomes de usuário via expand ou fallback local
+          const expSupervisedName = record.expand?.supervised_by?.name
+          const expPerformedName = record.expand?.performed_by?.name
+          const supervisedByName = expSupervisedName || local?.supervisedByName || ''
+          const performedByName = expPerformedName || local?.performedByName || ''
+
+          // Buscar poços e fotos atualizados do servidor para este RDO
+          let wells = local?.wells || []
+          let photos = local?.photos || []
+          let fieldPhoto = local?.fieldPhoto
+
+          try {
+            const [serverWells, serverPhotos] = await Promise.all([
+              pb
+                .collection('report_wells')
+                .getFullList({
+                  filter: `report = "${record.id}"`,
+                  sort: 'created',
+                })
+                .catch(() => []),
+              pb
+                .collection('report_photos')
+                .getFullList({
+                  filter: `report = "${record.id}"`,
+                  sort: 'order',
+                })
+                .catch(() => []),
+            ])
+
+            if (serverWells && serverWells.length > 0) {
+              wells = serverWells.map((w: any) => ({
+                id: w.id,
+                well_id: w.well_id,
+                depth: w.depth,
+                completion_date: w.completion_date ? w.completion_date.slice(0, 10) : undefined,
+                diameter: w.diameter,
+              }))
+            }
+
+            if (serverPhotos && serverPhotos.length > 0) {
+              const inspection = serverPhotos.find((p: any) => p.category === 'field_inspection')
+              const generals = serverPhotos.filter((p: any) => p.category !== 'field_inspection')
+              if (inspection) {
+                fieldPhoto = {
+                  id: inspection.id,
+                  image: inspection.image,
+                  caption: inspection.caption,
+                }
+              }
+              photos = generals.map((p: any) => ({
+                id: p.id,
+                image: p.image,
+                caption: p.caption,
+                order: p.order,
+                category: 'general' as const,
+              }))
+            }
+          } catch {
+            // mantém anteriores em caso de falha de conexão com sub-coleções
+          }
+
+          let finalActivityDescription = record.activity_description || ''
+          let finalTimeDisplacement = record.time_displacement || ''
+          let finalTimeWaiting = record.time_waiting || ''
+          let finalInterferences = record.interferences || ''
+          let finalPlanChanges = record.plan_changes || ''
+          let finalAccidents = record.accidents || ''
+          let finalSyncStatus = 'synced'
+
+          // Merge offline: ao receber despacho do Admin (status draft ou returned) no Técnico,
+          // preserva anotações diárias já digitadas pelo técnico se houver alteração pendente
+          if (isPending && isDispatchedToTech && local) {
+            finalActivityDescription =
+              local.activityDescription || record.activity_description || ''
+            finalTimeDisplacement = local.timeDisplacement || record.time_displacement || ''
+            finalTimeWaiting = local.timeWaiting || record.time_waiting || ''
+            finalInterferences = local.interferences || record.interferences || ''
+            finalPlanChanges = local.planChanges || record.plan_changes || ''
+            finalAccidents = local.accidents || record.accidents || ''
+            finalSyncStatus = local.syncStatus // mantém status de edição do técnico
           }
 
           const updatedRdo: OfflineRdoItem = {
@@ -1617,16 +1776,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               : local?.reportDate || '',
             weather: record.weather || local?.weather || 'Sol',
             performedBy: record.performed_by || local?.performedBy || '',
-            performedByName: local?.performedByName,
+            performedByName,
             supervisedBy: record.supervised_by || local?.supervisedBy,
-            supervisedByName: local?.supervisedByName,
+            supervisedByName,
             activityTitle: record.activity_title || '',
-            activityDescription: record.activity_description || '',
-            timeDisplacement: record.time_displacement || '',
-            timeWaiting: record.time_waiting || '',
-            interferences: record.interferences || '',
-            planChanges: record.plan_changes || '',
-            accidents: record.accidents || '',
+            activityDescription: finalActivityDescription,
+            timeDisplacement: finalTimeDisplacement,
+            timeWaiting: finalTimeWaiting,
+            interferences: finalInterferences,
+            planChanges: finalPlanChanges,
+            accidents: finalAccidents,
             status: record.status || 'draft',
             reviewNotes: record.review_notes || '',
             returned_fields: record.returned_fields || undefined,
@@ -1636,10 +1795,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             approvedAt: record.approved_at || local?.approvedAt,
             serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
-            wells: local?.wells || [],
-            photos: local?.photos || [],
-            fieldPhoto: local?.fieldPhoto,
-            syncStatus: 'synced',
+            wells,
+            photos,
+            fieldPhoto,
+            syncStatus: finalSyncStatus as any,
             lastModified: new Date(record.updated || Date.now()).getTime(),
             serverUpdatedAt: record.updated,
             archived: Boolean(record.archived),
@@ -1682,6 +1841,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           serverSheets = await pb.collection('field_spreadsheets').getFullList({
             filter: fieldFilter || undefined,
             sort: '-updated',
+            expand: 'operator',
           })
         } catch (sheetQueryErr) {
           console.warn(
@@ -1697,6 +1857,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           serverSheets = await pb.collection('field_spreadsheets').getFullList({
             filter: fallbackFieldFilter || undefined,
             sort: '-updated',
+            expand: 'operator',
           })
         }
 
@@ -1714,6 +1875,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             serverSheets = await pb.collection('field_spreadsheets').getFullList({
               filter: fallbackFieldFilter || undefined,
               sort: '-updated',
+              expand: 'operator',
             })
           } catch {
             // ignore
@@ -1723,18 +1885,93 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         let hasFieldChanges = false
         for (const record of serverSheets) {
           const local = await offlineStorage.getFieldSheet(record.id)
-          if (
+          const isPending =
             local &&
             (local.syncStatus === 'pending_create' ||
               local.syncStatus === 'pending_update' ||
               local.syncStatus === 'conflict')
-          ) {
+
+          const isDispatchedToTech =
+            !isAdmin && (record.status === 'draft' || record.status === 'returned')
+
+          // Se estiver pendente e NÃO for um despacho do escritório recebido pelo Técnico, não sobrescrever
+          if (isPending && !isDispatchedToTech) {
             continue
           }
+
+          // Resolução do nome do operador via expand ou fallback local
+          const expOperatorName = record.expand?.operator?.name
+          const operatorName = expOperatorName || local?.operatorName || ''
 
           const rawExt = ((record.extraction_data as any) || []) as any[]
           const fallbackMorning = rawExt.find((r) => r.morning_time)?.morning_time || ''
           const fallbackAfternoon = rawExt.find((r) => r.afternoon_time)?.afternoon_time || ''
+
+          let finalMorningTime = record.morning_time || fallbackMorning
+          let finalAfternoonTime = record.afternoon_time || fallbackAfternoon
+          let finalInfiltrationMorningTime = record.infiltration_morning_time || ''
+          let finalInfiltrationAfternoonTime = record.infiltration_afternoon_time || ''
+          let finalExtractionData = record.extraction_data || []
+          let finalInfiltrationData = record.infiltration_data || {}
+          let finalNutrientDone = Boolean(record.nutrient_done)
+          let finalNutrientMapKg = record.nutrient_map_kg || 0
+          let finalNutrientUreiaKg = record.nutrient_ureia_kg || 0
+          let finalCompressorData = record.compressor_data || {}
+          let finalOilRemovalData = record.oil_removal_data || {}
+          let finalWasteLiquidQty = record.waste_liquid_qty || 0
+          let finalWasteSolidQty = record.waste_solid_qty || 0
+          let finalEnv5sCheck = Boolean(record.env_5s_check)
+          let finalEnvChecklistMonthly = Boolean(record.env_checklist_monthly)
+          let finalObservations = record.observations || ''
+          let finalSyncStatus = 'synced'
+
+          // Merge offline: ao receber despacho do Admin (status draft ou returned) no Técnico,
+          // preserva cabeçalho/lista de poços do Admin, mantendo as medições operacionais digitadas pelo técnico
+          if (isPending && isDispatchedToTech && local) {
+            finalMorningTime = local.morning_time || finalMorningTime
+            finalAfternoonTime = local.afternoon_time || finalAfternoonTime
+            finalInfiltrationMorningTime =
+              local.infiltration_morning_time || finalInfiltrationMorningTime
+            finalInfiltrationAfternoonTime =
+              local.infiltration_afternoon_time || finalInfiltrationAfternoonTime
+            finalInfiltrationData = local.infiltration_data || finalInfiltrationData
+            finalNutrientDone =
+              local.nutrient_done !== undefined ? Boolean(local.nutrient_done) : finalNutrientDone
+            finalNutrientMapKg = local.nutrient_map_kg ?? finalNutrientMapKg
+            finalNutrientUreiaKg = local.nutrient_ureia_kg ?? finalNutrientUreiaKg
+            finalCompressorData = local.compressor_data || finalCompressorData
+            finalOilRemovalData = local.oil_removal_data || finalOilRemovalData
+            finalWasteLiquidQty = local.waste_liquid_qty ?? finalWasteLiquidQty
+            finalWasteSolidQty = local.waste_solid_qty ?? finalWasteSolidQty
+            finalEnv5sCheck =
+              local.env_5s_check !== undefined ? Boolean(local.env_5s_check) : finalEnv5sCheck
+            finalEnvChecklistMonthly =
+              local.env_checklist_monthly !== undefined
+                ? Boolean(local.env_checklist_monthly)
+                : finalEnvChecklistMonthly
+            finalObservations = local.observations || finalObservations
+            finalSyncStatus = local.syncStatus
+
+            // Para extraction_data: adota a lista estrutural de poços do servidor (definida pelo Admin)
+            // mas preserva as medições diárias (morning, afternoon, autopump, autopump_condition) do técnico
+            if (Array.isArray(record.extraction_data) && record.extraction_data.length > 0) {
+              finalExtractionData = record.extraction_data.map((serverRow: any, idx: number) => {
+                const localRow =
+                  local.extraction_data?.find((lr: any) => lr.well === serverRow.well) ||
+                  local.extraction_data?.[idx]
+                return {
+                  ...serverRow,
+                  morning: localRow?.morning || '',
+                  afternoon: localRow?.afternoon || '',
+                  autopump: localRow?.autopump || '',
+                  autopump_condition: localRow?.autopump_condition || '',
+                  autopump_condition_other: localRow?.autopump_condition_other || '',
+                }
+              })
+            } else if (local.extraction_data && local.extraction_data.length > 0) {
+              finalExtractionData = local.extraction_data
+            }
+          }
 
           const updatedSheet: OfflineFieldSheetItem = {
             id: record.id,
@@ -1746,25 +1983,25 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             date: record.date ? record.date.slice(0, 10) : local?.date || '',
             area: record.area || local?.area || 'Oficina Central',
             operator: record.operator || local?.operator || '',
-            operatorName: local?.operatorName,
+            operatorName,
             weather: record.weather || local?.weather || 'Sol',
             pluviometer: record.pluviometer ?? local?.pluviometer ?? 0,
-            morning_time: record.morning_time || fallbackMorning,
-            afternoon_time: record.afternoon_time || fallbackAfternoon,
-            infiltration_morning_time: record.infiltration_morning_time || '',
-            infiltration_afternoon_time: record.infiltration_afternoon_time || '',
-            extraction_data: record.extraction_data || [],
-            infiltration_data: record.infiltration_data || {},
-            nutrient_done: Boolean(record.nutrient_done),
-            nutrient_map_kg: record.nutrient_map_kg || 0,
-            nutrient_ureia_kg: record.nutrient_ureia_kg || 0,
-            compressor_data: record.compressor_data || {},
-            oil_removal_data: record.oil_removal_data || {},
-            waste_liquid_qty: record.waste_liquid_qty || 0,
-            waste_solid_qty: record.waste_solid_qty || 0,
-            env_5s_check: Boolean(record.env_5s_check),
-            env_checklist_monthly: Boolean(record.env_checklist_monthly),
-            observations: record.observations || '',
+            morning_time: finalMorningTime,
+            afternoon_time: finalAfternoonTime,
+            infiltration_morning_time: finalInfiltrationMorningTime,
+            infiltration_afternoon_time: finalInfiltrationAfternoonTime,
+            extraction_data: finalExtractionData,
+            infiltration_data: finalInfiltrationData,
+            nutrient_done: finalNutrientDone,
+            nutrient_map_kg: finalNutrientMapKg,
+            nutrient_ureia_kg: finalNutrientUreiaKg,
+            compressor_data: finalCompressorData,
+            oil_removal_data: finalOilRemovalData,
+            waste_liquid_qty: finalWasteLiquidQty,
+            waste_solid_qty: finalWasteSolidQty,
+            env_5s_check: finalEnv5sCheck,
+            env_checklist_monthly: finalEnvChecklistMonthly,
+            observations: finalObservations,
             status: record.status || 'draft',
             reviewNotes: record.review_notes || '',
             returned_fields: record.returned_fields || undefined,
@@ -1774,7 +2011,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             approvedAt: record.approved_at || local?.approvedAt,
             serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
-            syncStatus: 'synced',
+            syncStatus: finalSyncStatus as any,
             lastModified: new Date(record.updated || Date.now()).getTime(),
             serverUpdatedAt: record.updated,
             archived: Boolean(record.archived),
@@ -1982,14 +2219,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         }
 
         const local = await offlineStorage.getRdo(record.id)
-        // MERGE OBRIGATÓRIO: se o registro local é um rascunho offline pendente ou com conflito,
-        // NUNCA sobrescrever com dados do servidor
-        if (
+        const isPending =
           local &&
           (local.syncStatus === 'pending_create' ||
             local.syncStatus === 'pending_update' ||
             local.syncStatus === 'conflict')
-        ) {
+
+        const isDispatchedToTech =
+          !isAdmin && (record.status === 'draft' || record.status === 'returned')
+
+        // Se local for pendente e NÃO for um despacho do escritório para o Técnico,
+        // não sobrescrever rascunho local
+        if (isPending && !isDispatchedToTech) {
           broadcastUpdate({ collection: 'reports_rdo', id: record.id, action, record })
           return
         }
@@ -1999,6 +2240,26 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             await offlineStorage.deleteRdo(record.id)
           }
         } else {
+          // Resolver nomes de usuário com getOne expand se record não trouxer expand
+          let expSupervisedName = record.expand?.supervised_by?.name
+          let expPerformedName = record.expand?.performed_by?.name
+          if (
+            (!expSupervisedName && record.supervised_by) ||
+            (!expPerformedName && record.performed_by)
+          ) {
+            try {
+              const fullRec = await pb
+                .collection('reports_rdo')
+                .getOne(record.id, { expand: 'supervised_by,performed_by' })
+              expSupervisedName = expSupervisedName || fullRec.expand?.supervised_by?.name
+              expPerformedName = expPerformedName || fullRec.expand?.performed_by?.name
+            } catch {
+              // fallback
+            }
+          }
+          const supervisedByName = expSupervisedName || local?.supervisedByName || ''
+          const performedByName = expPerformedName || local?.performedByName || ''
+
           // create ou update: dados do servidor sobrescrevem itens já sincronizados
           let wells = local?.wells || []
           let photos = local?.photos || []
@@ -2073,6 +2334,27 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          let finalActivityDescription = record.activity_description || ''
+          let finalTimeDisplacement = record.time_displacement || ''
+          let finalTimeWaiting = record.time_waiting || ''
+          let finalInterferences = record.interferences || ''
+          let finalPlanChanges = record.plan_changes || ''
+          let finalAccidents = record.accidents || ''
+          let finalSyncStatus = 'synced'
+
+          // Merge offline: ao receber despacho do Admin no Técnico, adota cabeçalho e poços do Admin,
+          // preservando diário do dia já digitado pelo técnico
+          if (isPending && isDispatchedToTech && local) {
+            finalActivityDescription =
+              local.activityDescription || record.activity_description || ''
+            finalTimeDisplacement = local.timeDisplacement || record.time_displacement || ''
+            finalTimeWaiting = local.timeWaiting || record.time_waiting || ''
+            finalInterferences = local.interferences || record.interferences || ''
+            finalPlanChanges = local.planChanges || record.plan_changes || ''
+            finalAccidents = local.accidents || record.accidents || ''
+            finalSyncStatus = local.syncStatus
+          }
+
           const updatedItem: OfflineRdoItem = {
             id: record.id,
             number: record.number,
@@ -2087,16 +2369,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               : local?.reportDate || '',
             weather: record.weather || local?.weather || 'Sol',
             performedBy: record.performed_by || local?.performedBy || '',
-            performedByName: local?.performedByName,
+            performedByName,
             supervisedBy: record.supervised_by || local?.supervisedBy,
-            supervisedByName: local?.supervisedByName,
+            supervisedByName,
             activityTitle: record.activity_title || '',
-            activityDescription: record.activity_description || '',
-            timeDisplacement: record.time_displacement || '',
-            timeWaiting: record.time_waiting || '',
-            interferences: record.interferences || '',
-            planChanges: record.plan_changes || '',
-            accidents: record.accidents || '',
+            activityDescription: finalActivityDescription,
+            timeDisplacement: finalTimeDisplacement,
+            timeWaiting: finalTimeWaiting,
+            interferences: finalInterferences,
+            planChanges: finalPlanChanges,
+            accidents: finalAccidents,
             status: record.status || 'draft',
             reviewNotes: record.review_notes || '',
             returned_fields: record.returned_fields || undefined,
@@ -2109,7 +2391,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             wells,
             photos,
             fieldPhoto,
-            syncStatus: 'synced',
+            syncStatus: finalSyncStatus as any,
             lastModified: new Date(record.updated || Date.now()).getTime(),
             serverUpdatedAt: record.updated,
             archived: Boolean(record.archived),
@@ -2138,13 +2420,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         }
 
         const local = await offlineStorage.getFieldSheet(record.id)
-        // MERGE OBRIGATÓRIO: rascunhos pendentes locais NUNCA são sobrescritos
-        if (
+        const isPending =
           local &&
           (local.syncStatus === 'pending_create' ||
             local.syncStatus === 'pending_update' ||
             local.syncStatus === 'conflict')
-        ) {
+
+        const isDispatchedToTech =
+          !isAdmin && (record.status === 'draft' || record.status === 'returned')
+
+        // Se local for pendente e NÃO for um despacho do escritório para o Técnico,
+        // não sobrescrever rascunho local
+        if (isPending && !isDispatchedToTech) {
           broadcastUpdate({ collection: 'field_spreadsheets', id: record.id, action, record })
           return
         }
@@ -2154,6 +2441,20 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             await offlineStorage.deleteFieldSheet(record.id)
           }
         } else {
+          // Resolver nome do operador com getOne expand se record não trouxer expand
+          let expOperatorName = record.expand?.operator?.name
+          if (!expOperatorName && record.operator) {
+            try {
+              const fullRec = await pb
+                .collection('field_spreadsheets')
+                .getOne(record.id, { expand: 'operator' })
+              expOperatorName = fullRec.expand?.operator?.name
+            } catch {
+              // fallback
+            }
+          }
+          const operatorName = expOperatorName || local?.operatorName || ''
+
           const rawExt = ((record.extraction_data as any) || []) as any[]
           const fallbackMorning = rawExt.find((r) => r.morning_time)?.morning_time || ''
           const fallbackAfternoon = rawExt.find((r) => r.afternoon_time)?.afternoon_time || ''
@@ -2175,6 +2476,70 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          let finalMorningTime = record.morning_time || fallbackMorning
+          let finalAfternoonTime = record.afternoon_time || fallbackAfternoon
+          let finalInfiltrationMorningTime = record.infiltration_morning_time || ''
+          let finalInfiltrationAfternoonTime = record.infiltration_afternoon_time || ''
+          let finalExtractionData = record.extraction_data || []
+          let finalInfiltrationData = record.infiltration_data || {}
+          let finalNutrientDone = Boolean(record.nutrient_done)
+          let finalNutrientMapKg = record.nutrient_map_kg || 0
+          let finalNutrientUreiaKg = record.nutrient_ureia_kg || 0
+          let finalCompressorData = record.compressor_data || {}
+          let finalOilRemovalData = record.oil_removal_data || {}
+          let finalWasteLiquidQty = record.waste_liquid_qty || 0
+          let finalWasteSolidQty = record.waste_solid_qty || 0
+          let finalEnv5sCheck = Boolean(record.env_5s_check)
+          let finalEnvChecklistMonthly = Boolean(record.env_checklist_monthly)
+          let finalObservations = record.observations || ''
+          let finalSyncStatus = 'synced'
+
+          // Merge offline: ao receber despacho do Admin no Técnico, adota cabeçalho e poços do Admin,
+          // preservando diário do dia já digitado pelo técnico
+          if (isPending && isDispatchedToTech && local) {
+            finalMorningTime = local.morning_time || finalMorningTime
+            finalAfternoonTime = local.afternoon_time || finalAfternoonTime
+            finalInfiltrationMorningTime =
+              local.infiltration_morning_time || finalInfiltrationMorningTime
+            finalInfiltrationAfternoonTime =
+              local.infiltration_afternoon_time || finalInfiltrationAfternoonTime
+            finalInfiltrationData = local.infiltration_data || finalInfiltrationData
+            finalNutrientDone =
+              local.nutrient_done !== undefined ? Boolean(local.nutrient_done) : finalNutrientDone
+            finalNutrientMapKg = local.nutrient_map_kg ?? finalNutrientMapKg
+            finalNutrientUreiaKg = local.nutrient_ureia_kg ?? finalNutrientUreiaKg
+            finalCompressorData = local.compressor_data || finalCompressorData
+            finalOilRemovalData = local.oil_removal_data || finalOilRemovalData
+            finalWasteLiquidQty = local.waste_liquid_qty ?? finalWasteLiquidQty
+            finalWasteSolidQty = local.waste_solid_qty ?? finalWasteSolidQty
+            finalEnv5sCheck =
+              local.env_5s_check !== undefined ? Boolean(local.env_5s_check) : finalEnv5sCheck
+            finalEnvChecklistMonthly =
+              local.env_checklist_monthly !== undefined
+                ? Boolean(local.env_checklist_monthly)
+                : finalEnvChecklistMonthly
+            finalObservations = local.observations || finalObservations
+            finalSyncStatus = local.syncStatus
+
+            if (Array.isArray(record.extraction_data) && record.extraction_data.length > 0) {
+              finalExtractionData = record.extraction_data.map((serverRow: any, idx: number) => {
+                const localRow =
+                  local.extraction_data?.find((lr: any) => lr.well === serverRow.well) ||
+                  local.extraction_data?.[idx]
+                return {
+                  ...serverRow,
+                  morning: localRow?.morning || '',
+                  afternoon: localRow?.afternoon || '',
+                  autopump: localRow?.autopump || '',
+                  autopump_condition: localRow?.autopump_condition || '',
+                  autopump_condition_other: localRow?.autopump_condition_other || '',
+                }
+              })
+            } else if (local.extraction_data && local.extraction_data.length > 0) {
+              finalExtractionData = local.extraction_data
+            }
+          }
+
           const updatedSheet: OfflineFieldSheetItem = {
             id: record.id,
             number: record.number || local?.number,
@@ -2185,25 +2550,25 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             date: record.date ? record.date.slice(0, 10) : local?.date || '',
             area: record.area || local?.area || 'Oficina Central',
             operator: record.operator || local?.operator || '',
-            operatorName: local?.operatorName,
+            operatorName,
             weather: record.weather || local?.weather || 'Sol',
             pluviometer: record.pluviometer ?? local?.pluviometer ?? 0,
-            morning_time: record.morning_time || fallbackMorning,
-            afternoon_time: record.afternoon_time || fallbackAfternoon,
-            infiltration_morning_time: record.infiltration_morning_time || '',
-            infiltration_afternoon_time: record.infiltration_afternoon_time || '',
-            extraction_data: record.extraction_data || [],
-            infiltration_data: record.infiltration_data || {},
-            nutrient_done: Boolean(record.nutrient_done),
-            nutrient_map_kg: record.nutrient_map_kg || 0,
-            nutrient_ureia_kg: record.nutrient_ureia_kg || 0,
-            compressor_data: record.compressor_data || {},
-            oil_removal_data: record.oil_removal_data || {},
-            waste_liquid_qty: record.waste_liquid_qty || 0,
-            waste_solid_qty: record.waste_solid_qty || 0,
-            env_5s_check: Boolean(record.env_5s_check),
-            env_checklist_monthly: Boolean(record.env_checklist_monthly),
-            observations: record.observations || '',
+            morning_time: finalMorningTime,
+            afternoon_time: finalAfternoonTime,
+            infiltration_morning_time: finalInfiltrationMorningTime,
+            infiltration_afternoon_time: finalInfiltrationAfternoonTime,
+            extraction_data: finalExtractionData,
+            infiltration_data: finalInfiltrationData,
+            nutrient_done: finalNutrientDone,
+            nutrient_map_kg: finalNutrientMapKg,
+            nutrient_ureia_kg: finalNutrientUreiaKg,
+            compressor_data: finalCompressorData,
+            oil_removal_data: finalOilRemovalData,
+            waste_liquid_qty: finalWasteLiquidQty,
+            waste_solid_qty: finalWasteSolidQty,
+            env_5s_check: finalEnv5sCheck,
+            env_checklist_monthly: finalEnvChecklistMonthly,
+            observations: finalObservations,
             status: record.status || 'draft',
             reviewNotes: record.review_notes || '',
             returned_fields: record.returned_fields || undefined,
@@ -2213,7 +2578,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             approvedAt: record.approved_at || local?.approvedAt,
             serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
-            syncStatus: 'synced',
+            syncStatus: finalSyncStatus as any,
             lastModified: new Date(record.updated || Date.now()).getTime(),
             serverUpdatedAt: record.updated,
             archived: Boolean(record.archived),
