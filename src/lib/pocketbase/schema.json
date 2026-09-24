@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-24T18:45:56.221Z",
+  "generatedAt": "2026-09-24T19:13:31.678Z",
   "collections": [
     {
       "name": "users",
@@ -635,6 +635,12 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "admin_snapshot",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1004,6 +1010,12 @@
         {
           "name": "client_token",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "admin_snapshot",
+          "type": "json",
           "required": false,
           "system": false
         }

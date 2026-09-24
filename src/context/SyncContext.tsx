@@ -612,6 +612,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
               client_token: clientToken,
+              ...(rdo.admin_snapshot ? { admin_snapshot: rdo.admin_snapshot } : {}),
             }
             // Deixar o backend calcular o número sequencial atômico (1, 2, 3...)
             if (rdo.number && rdo.number > 0 && !isProvisionalId(rdo.id)) {
@@ -868,6 +869,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_reason: rdo.deletedReason || '',
               deleted_by: rdo.deletedBy || undefined,
               deleted_at: rdo.deletedAt || undefined,
+              ...(rdo.admin_snapshot ? { admin_snapshot: rdo.admin_snapshot } : {}),
             }
             if (rdo.companyName !== undefined && pb.authStore.record?.role !== 'technician') {
               payload.empresa_executora = rdo.companyName
@@ -1157,6 +1159,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: sheet.deletedBy || undefined,
               deleted_at: sheet.deletedAt || undefined,
               client_token: clientToken,
+              ...(sheet.admin_snapshot ? { admin_snapshot: sheet.admin_snapshot } : {}),
             }
 
             // Submissão com adoção atômica do ID do servidor
@@ -1294,6 +1297,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_reason: sheet.deletedReason || '',
               deleted_by: sheet.deletedBy || undefined,
               deleted_at: sheet.deletedAt || undefined,
+              ...(sheet.admin_snapshot ? { admin_snapshot: sheet.admin_snapshot } : {}),
             }
             if (sheet.projectId && sheet.projectId.trim()) {
               payload.project = sheet.projectId
@@ -1784,6 +1788,32 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             finalSyncStatus = local.syncStatus // mantém status de edição do técnico
           }
 
+          // Snapshot administrativo recebido do servidor ou mantido do local
+          const rdoSnapshot =
+            record.admin_snapshot && typeof record.admin_snapshot === 'object'
+              ? record.admin_snapshot
+              : typeof record.admin_snapshot === 'string' && record.admin_snapshot.trim() !== ''
+                ? JSON.parse(record.admin_snapshot)
+                : local?.admin_snapshot
+
+          // Se wells estiver vazio e o snapshot contiver poços pré-configurados pelo Admin, usa-os
+          if (
+            (!wells || wells.length === 0) &&
+            rdoSnapshot?.wells &&
+            Array.isArray(rdoSnapshot.wells) &&
+            rdoSnapshot.wells.length > 0
+          ) {
+            wells = rdoSnapshot.wells.map((w: any) => ({
+              id: w.id,
+              well_id: w.well_id,
+              depth: w.depth,
+              completion_date: w.completion_date
+                ? String(w.completion_date).slice(0, 10)
+                : undefined,
+              diameter: w.diameter,
+            }))
+          }
+
           const updatedRdo: OfflineRdoItem = {
             id: record.id,
             number: record.number,
@@ -1800,7 +1830,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             performedBy: record.performed_by || local?.performedBy || '',
             performedByName,
             supervisedBy: record.supervised_by || local?.supervisedBy,
-            supervisedByName,
+            supervisedByName: rdoSnapshot?.supervised_by_name || supervisedByName,
             activityTitle: record.activity_title || '',
             activityDescription: finalActivityDescription,
             timeDisplacement: finalTimeDisplacement,
@@ -1817,6 +1847,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             approvedAt: record.approved_at || local?.approvedAt,
             serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
+            admin_snapshot: rdoSnapshot,
             wells,
             photos,
             fieldPhoto,
@@ -1995,6 +2026,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          // Snapshot administrativo recebido do servidor ou mantido do local
+          const sheetSnapshot =
+            record.admin_snapshot && typeof record.admin_snapshot === 'object'
+              ? record.admin_snapshot
+              : typeof record.admin_snapshot === 'string' && record.admin_snapshot.trim() !== ''
+                ? JSON.parse(record.admin_snapshot)
+                : local?.admin_snapshot
+
           const updatedSheet: OfflineFieldSheetItem = {
             id: record.id,
             number: record.number || local?.number,
@@ -2005,7 +2044,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             date: record.date ? record.date.slice(0, 10) : local?.date || '',
             area: record.area || local?.area || 'Oficina Central',
             operator: record.operator || local?.operator || '',
-            operatorName,
+            operatorName: sheetSnapshot?.technician_name || operatorName,
             weather: record.weather || local?.weather || 'Sol',
             pluviometer: record.pluviometer ?? local?.pluviometer ?? 0,
             morning_time: finalMorningTime,
@@ -2033,6 +2072,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             approvedAt: record.approved_at || local?.approvedAt,
             serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
+            admin_snapshot: sheetSnapshot,
             syncStatus: finalSyncStatus as any,
             lastModified: new Date(record.updated || Date.now()).getTime(),
             serverUpdatedAt: record.updated,
@@ -2377,6 +2417,31 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             finalSyncStatus = local.syncStatus
           }
 
+          // Snapshot administrativo recebido do servidor ou mantido do local
+          const rdoSnapshot =
+            record.admin_snapshot && typeof record.admin_snapshot === 'object'
+              ? record.admin_snapshot
+              : typeof record.admin_snapshot === 'string' && record.admin_snapshot.trim() !== ''
+                ? JSON.parse(record.admin_snapshot)
+                : local?.admin_snapshot
+
+          if (
+            (!wells || wells.length === 0) &&
+            rdoSnapshot?.wells &&
+            Array.isArray(rdoSnapshot.wells) &&
+            rdoSnapshot.wells.length > 0
+          ) {
+            wells = rdoSnapshot.wells.map((w: any) => ({
+              id: w.id,
+              well_id: w.well_id,
+              depth: w.depth,
+              completion_date: w.completion_date
+                ? String(w.completion_date).slice(0, 10)
+                : undefined,
+              diameter: w.diameter,
+            }))
+          }
+
           const updatedItem: OfflineRdoItem = {
             id: record.id,
             number: record.number,
@@ -2393,7 +2458,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             performedBy: record.performed_by || local?.performedBy || '',
             performedByName,
             supervisedBy: record.supervised_by || local?.supervisedBy,
-            supervisedByName,
+            supervisedByName: rdoSnapshot?.supervised_by_name || supervisedByName,
             activityTitle: record.activity_title || '',
             activityDescription: finalActivityDescription,
             timeDisplacement: finalTimeDisplacement,
@@ -2410,6 +2475,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             approvedAt: record.approved_at || local?.approvedAt,
             serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
+            admin_snapshot: rdoSnapshot,
             wells,
             photos,
             fieldPhoto,
@@ -2562,6 +2628,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          // Snapshot administrativo recebido do servidor ou mantido do local
+          const sheetSnapshot =
+            record.admin_snapshot && typeof record.admin_snapshot === 'object'
+              ? record.admin_snapshot
+              : typeof record.admin_snapshot === 'string' && record.admin_snapshot.trim() !== ''
+                ? JSON.parse(record.admin_snapshot)
+                : local?.admin_snapshot
+
           const updatedSheet: OfflineFieldSheetItem = {
             id: record.id,
             number: record.number || local?.number,
@@ -2572,7 +2646,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             date: record.date ? record.date.slice(0, 10) : local?.date || '',
             area: record.area || local?.area || 'Oficina Central',
             operator: record.operator || local?.operator || '',
-            operatorName,
+            operatorName: sheetSnapshot?.technician_name || operatorName,
             weather: record.weather || local?.weather || 'Sol',
             pluviometer: record.pluviometer ?? local?.pluviometer ?? 0,
             morning_time: finalMorningTime,
@@ -2600,6 +2674,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             approvedAt: record.approved_at || local?.approvedAt,
             serverCreatedAt: record.created || local?.serverCreatedAt,
             change_history: record.change_history || undefined,
+            admin_snapshot: sheetSnapshot,
             syncStatus: finalSyncStatus as any,
             lastModified: new Date(record.updated || Date.now()).getTime(),
             serverUpdatedAt: record.updated,

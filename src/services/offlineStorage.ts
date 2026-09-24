@@ -61,6 +61,20 @@ export interface OfflineRdoItem {
     caption?: string
     dataUrl?: string
   }
+  admin_snapshot?: {
+    supervised_by_name?: string
+    supervised_by?: string
+    empresa_executora?: string
+    wells?: Array<{
+      id?: string
+      well_id: string
+      depth?: number | string
+      completion_date?: string
+      diameter?: string
+    }>
+    captured_at?: string
+    [key: string]: any
+  }
   client_token?: string
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string
@@ -124,6 +138,18 @@ export interface OfflineFieldSheetItem {
   deletedBy?: string
   deletedByName?: string
   deletedAt?: string
+  admin_snapshot?: {
+    technician_name?: string
+    operator?: string
+    pump_height?: string | number
+    wells?: Array<{
+      well: string
+      pump?: string
+      [key: string]: any
+    }>
+    captured_at?: string
+    [key: string]: any
+  }
   client_token?: string
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string

@@ -89,6 +89,7 @@ export type ReportRdo = RecordModel & {
   deleted_reason?: string
   deleted_by?: string
   deleted_at?: string
+  admin_snapshot?: Record<string, any>
   expand?: {
     project?: Project
     performed_by?: EpaUser
@@ -134,6 +135,7 @@ export type FieldSheet = RecordModel & {
   deleted_reason?: string
   deleted_by?: string
   deleted_at?: string
+  admin_snapshot?: Record<string, any>
   expand?: {
     project?: Project
     operator?: EpaUser

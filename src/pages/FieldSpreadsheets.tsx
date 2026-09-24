@@ -155,6 +155,14 @@ export function FieldSpreadsheets({ query }: { query: string }) {
               const fallbackMorning = rawExt.find((r) => r.morning_time)?.morning_time || ''
               const fallbackAfternoon = rawExt.find((r) => r.afternoon_time)?.afternoon_time || ''
 
+              const rawSnapshot = (rec as any).admin_snapshot
+              const parsedSnapshot =
+                typeof rawSnapshot === 'string' && rawSnapshot.trim() !== ''
+                  ? JSON.parse(rawSnapshot)
+                  : rawSnapshot && typeof rawSnapshot === 'object'
+                    ? rawSnapshot
+                    : undefined
+
               const item: OfflineFieldSheetItem = {
                 id: rec.id,
                 number: rec.number || undefined,
@@ -165,7 +173,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 date: rec.date ? rec.date.slice(0, 10) : '2025-05-28',
                 area: rec.area || 'Oficina Central',
                 operator: rec.operator,
-                operatorName: op?.name || 'Carlos Oliveira',
+                operatorName: parsedSnapshot?.technician_name || op?.name || 'Carlos Oliveira',
                 weather: rec.weather || 'Sol',
                 pluviometer: rec.pluviometer || 0,
                 morning_time: rec.morning_time || '',
@@ -193,6 +201,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 approvedAt: (rec as any).approved_at || undefined,
                 serverCreatedAt: rec.created || undefined,
                 change_history: (rec as any).change_history || undefined,
+                admin_snapshot: parsedSnapshot || existingLocal?.admin_snapshot,
                 syncStatus: 'synced',
                 lastModified: new Date(rec.updated).getTime(),
                 serverUpdatedAt: rec.updated,
@@ -484,16 +493,31 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       ]
     }
 
+    const nowIso = new Date().toISOString()
+    const initialSheetSnapshot =
+      user?.role === 'admin'
+        ? {
+            operator: user?.id || '',
+            technician_name: (user?.name || '').trim(),
+            wells: (initialExtractionData || []).map((row) => ({
+              well: row.well || '',
+              pump: row.pump || '',
+            })),
+            captured_at: nowIso,
+          }
+        : undefined
+
     const newSheet: OfflineFieldSheetItem = {
       id: 'field_' + Date.now(),
       projectId: initialProjectId,
       projectName: initialProjectName,
       clientName: initialClientName,
       contractCode: initialContractCode,
-      date: new Date().toISOString().slice(0, 10),
+      date: nowIso.slice(0, 10),
       area: 'Oficina Central',
       operator: user?.id || 'cfpekk93zx4j1pr',
       operatorName: user?.name || 'Carlos Oliveira',
+      admin_snapshot: initialSheetSnapshot,
       weather: 'Sol',
       pluviometer: 0,
       morning_time: '',
@@ -1071,9 +1095,16 @@ function FieldFullEditor({
     setHasUnsavedChanges(true)
   }
 
+  // Snapshot administrativo gravado no registro persistido (fonte da verdade definitiva)
+  const adminSnapshot = initialSheet.admin_snapshot
+  const snapshotWells = adminSnapshot?.wells || []
+
   // Extraction wells handlers
+  // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha (snapshotWells vazio e initialSheet.extraction_data vazio)
   const canAddExtractionWell =
-    isAdmin || !initialSheet.extraction_data || initialSheet.extraction_data.length === 0
+    isAdmin ||
+    ((!snapshotWells || snapshotWells.length === 0) &&
+      (!initialSheet.extraction_data || initialSheet.extraction_data.length === 0))
 
   const handleAddExtractionWell = () => {
     if (!canAddExtractionWell) return
@@ -1106,7 +1137,9 @@ function FieldFullEditor({
 
   const handleRemoveExtractionWell = (index: number) => {
     const persistedRow = initialSheet.extraction_data?.[index]
-    if (!isAdmin && persistedRow && !isExtractionRowEmpty(persistedRow)) {
+    const snapRow = snapshotWells?.[index]
+    const lockedRow = snapRow || persistedRow
+    if (!isAdmin && lockedRow && !isExtractionRowEmpty(lockedRow)) {
       toast({
         title: 'Ação não permitida',
         description: 'Técnicos não podem remover poços configurados pelo Administrador.',
@@ -1134,13 +1167,14 @@ function FieldFullEditor({
     if (!currentRow) return
 
     if (!isAdmin && (col === 'well' || col === 'pump')) {
+      const snapRow = snapshotWells?.[index]
       const persistedRow = initialSheet.extraction_data?.[index]
+      const rawSnapVal = snapRow ? (snapRow as any)[col] : undefined
       const rawPersistedVal = persistedRow ? (persistedRow as any)[col] : undefined
-      const hasPersistedVal =
-        rawPersistedVal !== undefined &&
-        rawPersistedVal !== null &&
-        String(rawPersistedVal).trim() !== ''
-      if (hasPersistedVal) {
+      const valToCheck = rawSnapVal !== undefined ? rawSnapVal : rawPersistedVal
+      const hasLockedVal =
+        valToCheck !== undefined && valToCheck !== null && String(valToCheck).trim() !== ''
+      if (hasLockedVal) {
         return
       }
     }
@@ -1216,10 +1250,29 @@ function FieldFullEditor({
     }
 
     const isProvisional = isNew || isProvisionalId(formData.id)
+
+    // Se quem está salvando é o Admin, gera e atualiza o admin_snapshot contendo
+    // technician_name (texto puro), operator, e poços PR configurados (com well e pump)
+    let currentAdminSnapshot = formData.admin_snapshot
+    if (isAdmin) {
+      const wellsSnapshot = (formData.extraction_data || []).map((row) => ({
+        well: String(row.well || '').trim(),
+        pump: row.pump !== undefined && row.pump !== null ? String(row.pump).trim() : '',
+      }))
+
+      currentAdminSnapshot = {
+        operator: formData.operator || user?.id || '',
+        technician_name: (formData.operatorName || user?.name || '').trim(),
+        wells: wellsSnapshot,
+        captured_at: nowIso,
+      }
+    }
+
     const updatedItem: OfflineFieldSheetItem = {
       ...formData,
       status: effectiveStatus,
       change_history: updatedHistory,
+      admin_snapshot: currentAdminSnapshot,
       syncStatus: isProvisional ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1684,19 +1737,29 @@ function FieldFullEditor({
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
-            {isTechnician && Boolean((initialSheet?.operatorName ?? '').trim()) ? (
-              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                <span>{(initialSheet.operatorName ?? '').trim()}</span>
-              </div>
-            ) : (
-              <Input
-                value={formData.operatorName || ''}
-                onChange={(e) => handleFieldChange('operatorName', e.target.value)}
-                disabled={isLocked}
-                placeholder="Ex.: Julio Cesar"
-                className="mt-1"
-              />
-            )}
+            {(() => {
+              const techFixedName = (
+                adminSnapshot?.technician_name ||
+                initialSheet?.operatorName ||
+                ''
+              ).trim()
+              if (isTechnician && Boolean(techFixedName)) {
+                return (
+                  <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                    <span>{techFixedName}</span>
+                  </div>
+                )
+              }
+              return (
+                <Input
+                  value={formData.operatorName || ''}
+                  onChange={(e) => handleFieldChange('operatorName', e.target.value)}
+                  disabled={isLocked}
+                  placeholder="Ex.: Julio Cesar"
+                  className="mt-1"
+                />
+              )
+            })()}
           </div>
           <div>
             <label className="epa-label">DATA</label>
@@ -1747,20 +1810,17 @@ function FieldFullEditor({
               Leituras dos poços de remediação, hidrômetros (manhã/tarde), altura da bomba e saídas
             </p>
           </div>
-          {!isLocked &&
-            (isAdmin ||
-              !initialSheet.extraction_data ||
-              initialSheet.extraction_data.length === 0) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAddExtractionWell}
-                className="w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[38px]"
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Adicionar Poço (PR)
-              </Button>
-            )}
+          {!isLocked && canAddExtractionWell && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAddExtractionWell}
+              className="w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[38px]"
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Adicionar Poço (PR)
+            </Button>
+          )}
         </div>
 
         {/* Aviso de orientação para o Técnico sobre poços definidos pelo Administrador */}
@@ -1886,20 +1946,31 @@ function FieldFullEditor({
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {formData.extraction_data?.map((row, index) => {
+                const snapRow = snapshotWells?.[index]
                 const persistedRow = initialSheet?.extraction_data?.[index]
-                const hasPersistedWell = isTechnician && Boolean(persistedRow?.well?.trim())
-                const hasPersistedPump =
-                  isTechnician &&
-                  persistedRow?.pump !== undefined &&
-                  persistedRow?.pump !== null &&
-                  String(persistedRow?.pump).trim() !== ''
+                const lockedRow = snapRow || persistedRow
+
+                const effectiveWell = (snapRow?.well || persistedRow?.well || '').trim()
+                const hasLockedWell = isTechnician && Boolean(effectiveWell)
+
+                const effectivePump =
+                  snapRow?.pump !== undefined &&
+                  snapRow?.pump !== null &&
+                  String(snapRow.pump).trim() !== ''
+                    ? snapRow.pump
+                    : persistedRow?.pump !== undefined &&
+                        persistedRow?.pump !== null &&
+                        String(persistedRow.pump).trim() !== ''
+                      ? persistedRow.pump
+                      : undefined
+                const hasLockedPump = isTechnician && effectivePump !== undefined
 
                 return (
                   <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
                     <td className="p-2 border border-slate-200 dark:border-slate-800">
-                      {hasPersistedWell ? (
+                      {hasLockedWell ? (
                         <div className="flex items-center justify-center gap-1.5 py-2 px-2 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded min-h-[40px]">
-                          <span>{persistedRow?.well}</span>
+                          <span>{effectiveWell}</span>
                         </div>
                       ) : (
                         <Input
@@ -1948,9 +2019,9 @@ function FieldFullEditor({
                       />
                     </td>
                     <td className="p-2 border border-slate-200 dark:border-slate-800">
-                      {hasPersistedPump ? (
+                      {hasLockedPump ? (
                         <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px]">
-                          <span>{`${persistedRow?.pump} m`}</span>
+                          <span>{`${effectivePump} m`}</span>
                         </div>
                       ) : (
                         <Input
@@ -2021,7 +2092,7 @@ function FieldFullEditor({
                         )}
                       </div>
                     </td>
-                    {!isLocked && (isAdmin || isExtractionRowEmpty(persistedRow || row)) && (
+                    {!isLocked && (isAdmin || isExtractionRowEmpty(lockedRow || row)) && (
                       <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
                         <Button
                           variant="ghost"

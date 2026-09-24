@@ -169,6 +169,40 @@ export function RdosPage({ query }: { query: string }) {
               )
               const generalPhotos = photos.filter((p) => (p as any).category !== 'field_inspection')
 
+              const rawSnapshot = (rec as any).admin_snapshot
+              const parsedSnapshot =
+                typeof rawSnapshot === 'string' && rawSnapshot.trim() !== ''
+                  ? JSON.parse(rawSnapshot)
+                  : rawSnapshot && typeof rawSnapshot === 'object'
+                    ? rawSnapshot
+                    : undefined
+
+              // Poços: se vieram de report_wells, usa eles. Se não houver nenhum em report_wells,
+              // usa os poços guardados dentro do admin_snapshot do próprio registro!
+              let finalWells = wells.map((w) => ({
+                id: w.id,
+                well_id: w.well_id,
+                depth: w.depth,
+                completion_date: w.completion_date ? w.completion_date.slice(0, 10) : undefined,
+                diameter: w.diameter,
+              }))
+              if (
+                finalWells.length === 0 &&
+                parsedSnapshot?.wells &&
+                Array.isArray(parsedSnapshot.wells) &&
+                parsedSnapshot.wells.length > 0
+              ) {
+                finalWells = parsedSnapshot.wells.map((w: any) => ({
+                  id: w.id,
+                  well_id: w.well_id,
+                  depth: w.depth,
+                  completion_date: w.completion_date
+                    ? String(w.completion_date).slice(0, 10)
+                    : undefined,
+                  diameter: w.diameter,
+                }))
+              }
+
               const item: OfflineRdoItem = {
                 id: rec.id,
                 number: rec.number,
@@ -184,7 +218,8 @@ export function RdosPage({ query }: { query: string }) {
                 performedBy: rec.performed_by,
                 performedByName: performer?.name || 'Carlos Oliveira',
                 supervisedBy: rec.supervised_by,
-                supervisedByName: supervisor?.name || 'Marina Santos',
+                supervisedByName:
+                  parsedSnapshot?.supervised_by_name || supervisor?.name || 'Marina Santos',
                 activityTitle: rec.activity_title || '',
                 activityDescription: rec.activity_description || '',
                 timeDisplacement: rec.time_displacement || '',
@@ -201,13 +236,8 @@ export function RdosPage({ query }: { query: string }) {
                 approvedAt: (rec as any).approved_at || undefined,
                 serverCreatedAt: rec.created || undefined,
                 change_history: (rec as any).change_history || undefined,
-                wells: wells.map((w) => ({
-                  id: w.id,
-                  well_id: w.well_id,
-                  depth: w.depth,
-                  completion_date: w.completion_date ? w.completion_date.slice(0, 10) : undefined,
-                  diameter: w.diameter,
-                })),
+                admin_snapshot: parsedSnapshot || existingLocal?.admin_snapshot,
+                wells: finalWells,
                 photos: generalPhotos.map((p) => ({
                   id: p.id,
                   image: p.image,
@@ -418,6 +448,23 @@ export function RdosPage({ query }: { query: string }) {
       ]
     }
 
+    const nowIso = new Date().toISOString()
+    const initialSnapshot =
+      user?.role === 'admin'
+        ? {
+            supervised_by: user?.id || '',
+            supervised_by_name: (user?.name || '').trim(),
+            empresa_executora: initialCompanyName,
+            wells: (preloadedWells || []).map((w) => ({
+              well_id: w.well_id,
+              depth: w.depth,
+              completion_date: w.completion_date || '',
+              diameter: w.diameter || '',
+            })),
+            captured_at: nowIso,
+          }
+        : undefined
+
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
       number: undefined,
@@ -427,7 +474,7 @@ export function RdosPage({ query }: { query: string }) {
       contractCode: initialContractCode,
       companyName: initialCompanyName,
       location: initialLocation,
-      reportDate: new Date().toISOString().slice(0, 10),
+      reportDate: nowIso.slice(0, 10),
       weather: 'Sol',
       performedBy: user?.id || '',
       performedByName: user?.name || '',
@@ -444,6 +491,7 @@ export function RdosPage({ query }: { query: string }) {
       wells: preloadedWells,
       photos: [],
       fieldPhoto: undefined,
+      admin_snapshot: initialSnapshot,
       syncStatus: 'pending_create',
       lastModified: Date.now(),
     }
@@ -1172,8 +1220,16 @@ function RdoFullPageEditor({
     setHasUnsavedChanges(true)
   }
 
+  // Snapshot administrativo gravado no registro persistido (fonte da verdade definitiva)
+  const adminSnapshot = initialReport.admin_snapshot
+  const snapshotWells = adminSnapshot?.wells || []
+
   // Wells Handlers (Os poços são cadastrados diretamente na ficha pelo Administrador)
-  const canAddWell = isAdmin || !initialReport.wells || initialReport.wells.length === 0
+  // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha (snapshotWells vazio e initialReport.wells vazio)
+  const canAddWell =
+    isAdmin ||
+    ((!snapshotWells || snapshotWells.length === 0) &&
+      (!initialReport.wells || initialReport.wells.length === 0))
 
   const handleAddWell = () => {
     if (!canAddWell) return
@@ -1204,7 +1260,9 @@ function RdoFullPageEditor({
 
   const handleRemoveWell = (index: number) => {
     const persistedWell = initialReport.wells?.[index]
-    if (!isAdmin && persistedWell && !isWellRowEmpty(persistedWell)) {
+    const snapWell = snapshotWells?.[index]
+    const lockedWell = snapWell || persistedWell
+    if (!isAdmin && lockedWell && !isWellRowEmpty(lockedWell)) {
       toast({
         title: 'Ação não permitida',
         description: 'Técnicos não podem remover poços configurados pelo Administrador.',
@@ -1232,13 +1290,14 @@ function RdoFullPageEditor({
     if (!currentWell) return
 
     if (!isAdmin) {
+      const snapWell = snapshotWells?.[index]
       const persistedWell = initialReport.wells?.[index]
+      const rawSnapVal = snapWell ? (snapWell as any)[field] : undefined
       const rawPersistedVal = persistedWell ? (persistedWell as any)[field] : undefined
-      const hasPersistedVal =
-        rawPersistedVal !== undefined &&
-        rawPersistedVal !== null &&
-        String(rawPersistedVal).trim() !== ''
-      if (hasPersistedVal) {
+      const valToCheck = rawSnapVal !== undefined ? rawSnapVal : rawPersistedVal
+      const hasLockedVal =
+        valToCheck !== undefined && valToCheck !== null && String(valToCheck).trim() !== ''
+      if (hasLockedVal) {
         return
       }
     }
@@ -1410,10 +1469,36 @@ function RdoFullPageEditor({
       }
     }
 
+    // Se quem está salvando é o Admin, gera e atualiza o admin_snapshot contendo
+    // supervised_by_name (texto puro), empresa_executora e wells completos com valores preenchidos.
+    // Se for o Técnico salvando, preserva o admin_snapshot que já veio do Admin/servidor.
+    let currentAdminSnapshot = formData.admin_snapshot
+    if (isAdmin) {
+      const wellsSnapshot = (formData.wells || []).map((w) => ({
+        id: w.id,
+        well_id: String(w.well_id || '').trim(),
+        depth:
+          w.depth !== undefined && w.depth !== null && String(w.depth).trim() !== ''
+            ? Number(w.depth)
+            : undefined,
+        completion_date: w.completion_date ? String(w.completion_date).trim() : '',
+        diameter: w.diameter ? String(w.diameter).trim() : '',
+      }))
+
+      currentAdminSnapshot = {
+        supervised_by: formData.supervisedBy || user?.id || '',
+        supervised_by_name: (formData.supervisedByName || user?.name || '').trim(),
+        empresa_executora: (formData.companyName || '').trim(),
+        wells: wellsSnapshot,
+        captured_at: nowIso,
+      }
+    }
+
     const updatedItem: OfflineRdoItem = {
       ...formData,
       status: effectiveStatus,
       change_history: updatedHistory,
+      admin_snapshot: currentAdminSnapshot,
       syncStatus: isNew || isProvisionalId(formData.id) ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1976,19 +2061,29 @@ function RdoFullPageEditor({
           </div>
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Supervisionado por (Responsável Técnico)</label>
-            {isTechnician && Boolean((initialReport?.supervisedByName ?? '').trim()) ? (
-              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                <span>{(initialReport.supervisedByName ?? '').trim()}</span>
-              </div>
-            ) : (
-              <Input
-                placeholder="Nome do responsável técnico ou supervisor"
-                value={formData.supervisedByName ?? ''}
-                onChange={(e) => handleFieldChange('supervisedByName', e.target.value)}
-                disabled={isLocked}
-                className="mt-1.5"
-              />
-            )}
+            {(() => {
+              const supervisorFixedName = (
+                adminSnapshot?.supervised_by_name ||
+                initialReport?.supervisedByName ||
+                ''
+              ).trim()
+              if (isTechnician && Boolean(supervisorFixedName)) {
+                return (
+                  <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                    <span>{supervisorFixedName}</span>
+                  </div>
+                )
+              }
+              return (
+                <Input
+                  placeholder="Nome do responsável técnico ou supervisor"
+                  value={formData.supervisedByName ?? ''}
+                  onChange={(e) => handleFieldChange('supervisedByName', e.target.value)}
+                  disabled={isLocked}
+                  className="mt-1.5"
+                />
+              )
+            })()}
           </div>
         </div>
       </section>
@@ -2272,7 +2367,7 @@ function RdoFullPageEditor({
               </span>
             )}
           </div>
-          {!isLocked && (isAdmin || !initialReport.wells || initialReport.wells.length === 0) && (
+          {!isLocked && canAddWell && (
             <Button
               variant="outline"
               size="sm"
@@ -2317,24 +2412,45 @@ function RdoFullPageEditor({
               </thead>
               <tbody className="divide-y dark:divide-slate-800">
                 {formData.wells.map((well, index) => {
+                  const snapWell = snapshotWells?.[index]
                   const persistedWell = initialReport?.wells?.[index]
-                  const hasPersistedWellId = isTechnician && Boolean(persistedWell?.well_id?.trim())
-                  const hasPersistedDepth =
-                    isTechnician &&
-                    persistedWell?.depth !== undefined &&
-                    persistedWell?.depth !== null &&
-                    String(persistedWell?.depth).trim() !== ''
-                  const hasPersistedCompletionDate =
-                    isTechnician && Boolean(persistedWell?.completion_date?.trim())
-                  const hasPersistedDiameter =
-                    isTechnician && Boolean(persistedWell?.diameter?.trim())
+                  const lockedWell = snapWell || persistedWell
+
+                  const effectiveWellId = (snapWell?.well_id || persistedWell?.well_id || '').trim()
+                  const hasLockedWellId = isTechnician && Boolean(effectiveWellId)
+
+                  const effectiveDepth =
+                    snapWell?.depth !== undefined &&
+                    snapWell?.depth !== null &&
+                    String(snapWell.depth).trim() !== ''
+                      ? snapWell.depth
+                      : persistedWell?.depth !== undefined &&
+                          persistedWell?.depth !== null &&
+                          String(persistedWell.depth).trim() !== ''
+                        ? persistedWell.depth
+                        : undefined
+                  const hasLockedDepth = isTechnician && effectiveDepth !== undefined
+
+                  const effectiveDate = (
+                    snapWell?.completion_date ||
+                    persistedWell?.completion_date ||
+                    ''
+                  ).trim()
+                  const hasLockedCompletionDate = isTechnician && Boolean(effectiveDate)
+
+                  const effectiveDiameter = (
+                    snapWell?.diameter ||
+                    persistedWell?.diameter ||
+                    ''
+                  ).trim()
+                  const hasLockedDiameter = isTechnician && Boolean(effectiveDiameter)
 
                   return (
                     <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                       <td className="p-2">
-                        {hasPersistedWellId ? (
+                        {hasLockedWellId ? (
                           <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                            <span>{persistedWell?.well_id}</span>
+                            <span>{effectiveWellId}</span>
                           </div>
                         ) : (
                           <Input
@@ -2349,9 +2465,9 @@ function RdoFullPageEditor({
                         )}
                       </td>
                       <td className="p-2">
-                        {hasPersistedDepth ? (
+                        {hasLockedDepth ? (
                           <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                            <span>{`${persistedWell?.depth} m`}</span>
+                            <span>{`${effectiveDepth} m`}</span>
                           </div>
                         ) : (
                           <Input
@@ -2367,15 +2483,14 @@ function RdoFullPageEditor({
                         )}
                       </td>
                       <td className="p-2">
-                        {hasPersistedCompletionDate ? (
+                        {hasLockedCompletionDate ? (
                           <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
                             <span>
                               {(() => {
-                                const rawDate = persistedWell?.completion_date
-                                const parts = String(rawDate).slice(0, 10).split('-')
+                                const parts = String(effectiveDate).slice(0, 10).split('-')
                                 return parts.length === 3
                                   ? `${parts[2]}/${parts[1]}/${parts[0]}`
-                                  : rawDate
+                                  : effectiveDate
                               })()}
                             </span>
                           </div>
@@ -2392,9 +2507,9 @@ function RdoFullPageEditor({
                         )}
                       </td>
                       <td className="p-2">
-                        {hasPersistedDiameter ? (
+                        {hasLockedDiameter ? (
                           <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                            <span>{persistedWell?.diameter}</span>
+                            <span>{effectiveDiameter}</span>
                           </div>
                         ) : (
                           <Input
@@ -2408,7 +2523,7 @@ function RdoFullPageEditor({
                           />
                         )}
                       </td>
-                      {!isLocked && (isAdmin || isWellRowEmpty(persistedWell || well)) && (
+                      {!isLocked && (isAdmin || isWellRowEmpty(lockedWell || well)) && (
                         <td className="p-2 text-center">
                           <Button
                             variant="ghost"
