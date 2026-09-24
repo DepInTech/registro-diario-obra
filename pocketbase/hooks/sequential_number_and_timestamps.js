@@ -2,115 +2,131 @@
 // Assegura:
 // 1. Numeração sequencial contínua (1, 2, 3...) calculada pelo servidor na criação
 // 2. Registro de timestamps de servidor confiáveis (submitted_at, approved_at, returned_at)
+// 3. Blindagem total: em caso de lock, concorrência ou timeout, prossegue com e.next() para que a criação NUNCA retorne 500
 
 onRecordCreateRequest(
   (e) => {
     try {
-      const collectionName = e.record.collection().name
-      const nowIso = new Date().toISOString()
+      if (e.record) {
+        const collectionName = e.record.collection ? e.record.collection().name : ''
+        const nowIso = new Date().toISOString()
 
-      if (collectionName === 'reports_rdo') {
-        // Busca o maior número já existente atomicamente no banco
-        let nextNum = 1
-        let querySuccess = false
-        try {
-          const records = $app.findRecordsByFilter('reports_rdo', '', '-number', 1, 0)
-          if (records && records.length > 0) {
-            const maxNum = records[0].getInt('number')
-            nextNum = (maxNum > 0 ? maxNum : 0) + 1
-            querySuccess = true
-          }
-        } catch (findErr) {
-          console.warn('Erro ao calcular proximo numero de RDO via findRecordsByFilter:', findErr)
-        }
+        if (collectionName === 'reports_rdo') {
+          // Busca o maior número já existente no banco de forma resiliente
+          let nextNum = null
+          let querySuccess = false
 
-        if (!querySuccess) {
           try {
-            const row = $app
-              .db()
-              .newQuery('SELECT COALESCE(MAX(number), 0) + 1 AS next_val FROM reports_rdo')
-              .one()
-            if (row && row.next_val) {
-              nextNum = parseInt(row.next_val, 10) || 1
+            const records = $app.findRecordsByFilter('reports_rdo', '', '-number', 1, 0)
+            if (records && records.length > 0) {
+              const maxNum = records[0].getInt('number')
+              nextNum = (maxNum > 0 ? maxNum : 0) + 1
+              querySuccess = true
+            } else {
+              nextNum = 1
+              querySuccess = true
             }
-          } catch (sqlErr) {
-            console.warn('Erro ao calcular proximo numero de RDO via SQL:', sqlErr)
+          } catch (findErr) {
+            console.warn('Aviso: falha na busca por filtro do proximo numero de RDO:', findErr)
           }
-        }
 
-        try {
-          e.record.set('number', nextNum)
-        } catch (numSetErr) {
-          console.warn('Erro ao gravar campo number no RDO:', numSetErr)
-        }
-
-        try {
-          const st = e.record.getString('status')
-          if (st === 'submitted') {
-            e.record.set('submitted_at', nowIso)
-          } else if (st === 'approved') {
-            e.record.set('approved_at', nowIso)
-          } else if (st === 'returned') {
-            e.record.set('returned_at', nowIso)
+          if (!querySuccess) {
+            try {
+              const row = $app
+                .db()
+                .newQuery('SELECT COALESCE(MAX(number), 0) + 1 AS next_val FROM reports_rdo')
+                .one()
+              if (row && row.next_val) {
+                nextNum = parseInt(row.next_val, 10) || 1
+              }
+            } catch (sqlErr) {
+              console.warn('Aviso: falha no fallback SQL do proximo numero de RDO:', sqlErr)
+            }
           }
-        } catch (stErr) {
-          console.warn('Erro ao gravar timestamps de status no RDO:', stErr)
-        }
-      } else if (collectionName === 'field_spreadsheets') {
-        // Busca o maior número já existente atomicamente no banco
-        let nextNum = 1
-        let querySuccess = false
-        try {
-          const records = $app.findRecordsByFilter('field_spreadsheets', '', '-number', 1, 0)
-          if (records && records.length > 0) {
-            const maxNum = records[0].getInt('number')
-            nextNum = (maxNum > 0 ? maxNum : 0) + 1
-            querySuccess = true
-          }
-        } catch (findErr) {
-          console.warn(
-            'Erro ao calcular proximo numero de Planilha via findRecordsByFilter:',
-            findErr,
-          )
-        }
 
-        if (!querySuccess) {
+          if (nextNum !== null && !isNaN(nextNum) && nextNum > 0) {
+            try {
+              e.record.set('number', nextNum)
+            } catch (numSetErr) {
+              console.warn('Aviso: falha ao setar number no RDO (prosseguindo):', numSetErr)
+            }
+          }
+
           try {
-            const row = $app
-              .db()
-              .newQuery('SELECT COALESCE(MAX(number), 0) + 1 AS next_val FROM field_spreadsheets')
-              .one()
-            if (row && row.next_val) {
-              nextNum = parseInt(row.next_val, 10) || 1
+            const st = e.record.getString('status')
+            if (st === 'submitted') {
+              e.record.set('submitted_at', nowIso)
+            } else if (st === 'approved') {
+              e.record.set('approved_at', nowIso)
+            } else if (st === 'returned') {
+              e.record.set('returned_at', nowIso)
             }
-          } catch (sqlErr) {
-            console.warn('Erro ao calcular proximo numero de Planilha via SQL:', sqlErr)
+          } catch (stErr) {
+            console.warn('Aviso: falha ao gravar timestamps de status no RDO:', stErr)
           }
-        }
+        } else if (collectionName === 'field_spreadsheets') {
+          // Busca o maior número já existente no banco de forma resiliente
+          let nextNum = null
+          let querySuccess = false
 
-        try {
-          e.record.set('number', nextNum)
-        } catch (numSetErr) {
-          console.warn('Erro ao gravar campo number na Planilha:', numSetErr)
-        }
-
-        try {
-          const st = e.record.getString('status')
-          if (st === 'submitted') {
-            e.record.set('submitted_at', nowIso)
-          } else if (st === 'approved') {
-            e.record.set('approved_at', nowIso)
-          } else if (st === 'returned') {
-            e.record.set('returned_at', nowIso)
+          try {
+            const records = $app.findRecordsByFilter('field_spreadsheets', '', '-number', 1, 0)
+            if (records && records.length > 0) {
+              const maxNum = records[0].getInt('number')
+              nextNum = (maxNum > 0 ? maxNum : 0) + 1
+              querySuccess = true
+            } else {
+              nextNum = 1
+              querySuccess = true
+            }
+          } catch (findErr) {
+            console.warn('Aviso: falha na busca por filtro do proximo numero de Planilha:', findErr)
           }
-        } catch (stErr) {
-          console.warn('Erro ao gravar timestamps de status na Planilha:', stErr)
+
+          if (!querySuccess) {
+            try {
+              const row = $app
+                .db()
+                .newQuery('SELECT COALESCE(MAX(number), 0) + 1 AS next_val FROM field_spreadsheets')
+                .one()
+              if (row && row.next_val) {
+                nextNum = parseInt(row.next_val, 10) || 1
+              }
+            } catch (sqlErr) {
+              console.warn('Aviso: falha no fallback SQL do proximo numero de Planilha:', sqlErr)
+            }
+          }
+
+          if (nextNum !== null && !isNaN(nextNum) && nextNum > 0) {
+            try {
+              e.record.set('number', nextNum)
+            } catch (numSetErr) {
+              console.warn('Aviso: falha ao setar number na Planilha (prosseguindo):', numSetErr)
+            }
+          }
+
+          try {
+            const st = e.record.getString('status')
+            if (st === 'submitted') {
+              e.record.set('submitted_at', nowIso)
+            } else if (st === 'approved') {
+              e.record.set('approved_at', nowIso)
+            } else if (st === 'returned') {
+              e.record.set('returned_at', nowIso)
+            }
+          } catch (stErr) {
+            console.warn('Aviso: falha ao gravar timestamps de status na Planilha:', stErr)
+          }
         }
       }
     } catch (createHookErr) {
-      console.warn('Falha segura no hook sequential_number_and_timestamps (create):', createHookErr)
+      console.warn(
+        'Aviso: erro capturado com seguranca em sequential_number_and_timestamps (create):',
+        createHookErr,
+      )
     }
 
+    // Sempre prossegue a execução normal do create, garantindo retorno 200/201 mesmo sob concorrência
     e.next()
   },
   'reports_rdo',
@@ -120,21 +136,37 @@ onRecordCreateRequest(
 onRecordUpdateRequest(
   (e) => {
     try {
-      const nowIso = new Date().toISOString()
-      const prevStatus = e.record.original().getString('status')
-      const curStatus = e.record.getString('status')
+      if (e.record) {
+        const nowIso = new Date().toISOString()
+        let prevStatus = ''
+        let curStatus = ''
 
-      if (prevStatus !== curStatus) {
-        if (curStatus === 'submitted') {
-          e.record.set('submitted_at', nowIso)
-        } else if (curStatus === 'approved') {
-          e.record.set('approved_at', nowIso)
-        } else if (curStatus === 'returned') {
-          e.record.set('returned_at', nowIso)
+        try {
+          prevStatus = e.record.original().getString('status')
+        } catch (_) {}
+        try {
+          curStatus = e.record.getString('status')
+        } catch (_) {}
+
+        if (prevStatus !== curStatus) {
+          try {
+            if (curStatus === 'submitted') {
+              e.record.set('submitted_at', nowIso)
+            } else if (curStatus === 'approved') {
+              e.record.set('approved_at', nowIso)
+            } else if (curStatus === 'returned') {
+              e.record.set('returned_at', nowIso)
+            }
+          } catch (statusSetErr) {
+            console.warn('Aviso: falha ao gravar timestamp de status no update:', statusSetErr)
+          }
         }
       }
     } catch (updateHookErr) {
-      console.warn('Falha segura no hook sequential_number_and_timestamps (update):', updateHookErr)
+      console.warn(
+        'Aviso: erro capturado com seguranca em sequential_number_and_timestamps (update):',
+        updateHookErr,
+      )
     }
 
     e.next()

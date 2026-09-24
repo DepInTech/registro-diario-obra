@@ -10,11 +10,9 @@ import { AuditPage } from '@/pages/Audit'
 import { LoginPage } from '@/pages/Login'
 import { Toaster } from '@/components/ui/toaster'
 import { useToast } from '@/hooks/use-toast'
-import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from '@/context/AuthContext'
+import { REALTIME_RECORD_UPDATE, type RealtimeRecordUpdateDetail } from '@/context/SyncContext'
 import { Loader2 } from 'lucide-react'
-
-type RealtimeRecord = RecordModel & { status?: string }
 
 export default function Index() {
   const [page, setPage] = useState<Page>('dashboard')
@@ -53,17 +51,32 @@ export default function Index() {
     }
   }, [user, page, toast])
 
-  useRealtime<RealtimeRecord>('reports_rdo', ({ action, record }) => {
-    if (action === 'update' && (record.status === 'approved' || record.status === 'returned')) {
-      toast({
-        title: record.status === 'approved' ? 'RDO aprovado' : 'RDO devolvido',
-        description:
-          record.status === 'approved'
-            ? 'O relatório foi aprovado e bloqueado.'
-            : 'Há novas solicitações de correção.',
-      })
+  // Escuta os eventos centralizados de realtime emitidos pelo SyncContext
+  useEffect(() => {
+    const handleRealtimeUpdate = (evt: Event) => {
+      const customEvt = evt as CustomEvent<RealtimeRecordUpdateDetail>
+      const detail = customEvt.detail
+      if (!detail) return
+
+      if (detail.collection === 'reports_rdo' && detail.action === 'update' && detail.record) {
+        const status = detail.record.status
+        if (status === 'approved' || status === 'returned') {
+          toast({
+            title: status === 'approved' ? 'RDO aprovado' : 'RDO devolvido',
+            description:
+              status === 'approved'
+                ? 'O relatório foi aprovado e bloqueado.'
+                : 'Há novas solicitações de correção.',
+          })
+        }
+      }
     }
-  })
+
+    window.addEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
+    return () => {
+      window.removeEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
+    }
+  }, [toast])
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })

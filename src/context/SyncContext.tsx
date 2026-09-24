@@ -2291,14 +2291,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }
 
     // 3. Observa mudanças de autenticação/token no pb.authStore com debounce
+    // Garante que subscrições antigas sejam desfeitas de imediato antes de restabelecer o SSE
+    // para eliminar o erro 403 "The current and the previous request authorization don't match"
     let authDebounceTimer: any = null
     const unsubAuth = pb.authStore.onChange(() => {
       clearTimeout(authDebounceTimer)
-      authDebounceTimer = setTimeout(() => {
+      // Desfaz as subscrições antigas antes de abrir nova sessão com o novo token
+      cancelExistingSubscriptions()
+      authDebounceTimer = setTimeout(async () => {
         if (pb.authStore.isValid && !cancelled) {
+          await cancelExistingSubscriptions()
           setupSubscriptions()
         }
-      }, 300)
+      }, 500)
     })
 
     return () => {

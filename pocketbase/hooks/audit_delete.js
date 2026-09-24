@@ -1,40 +1,72 @@
-onRecordDeleteRequest(
+onRecordAfterDeleteSuccess(
   (e) => {
-    const entity = e.record.collection().name
-    const recordId = e.record.id
-    let label =
-      e.record.getString('name') ||
-      e.record.getString('code') ||
-      e.record.getString('activity_title') ||
-      recordId
-
-    if (entity === 'reports_rdo') {
-      const num = e.record.getInt('number')
-      const act = e.record.getString('activity_title') || 'Sem título'
-      label = `RDO Nº ${num > 0 ? num : recordId} · ${act}`
-    } else if (entity === 'field_spreadsheets') {
-      const num = e.record.getInt('number')
-      const dt = e.record.getString('date') ? e.record.getString('date').slice(0, 10) : ''
-      const area = e.record.getString('area') || ''
-      label = `Planilha Nº ${num > 0 ? num : recordId} · ${dt} (${area})`
-    }
-
-    e.next()
-    if (!e.auth) return
     try {
+      e.next()
+    } catch (_) {}
+
+    try {
+      if (!e.record) return
       const logs = $app.findCollectionByNameOrId('audit_logs')
+      if (!logs) return
+
+      let actorId = ''
+      try {
+        if (e.auth && e.auth.id) {
+          actorId = e.auth.id
+        }
+      } catch (_) {}
+
+      if (!actorId) {
+        try {
+          actorId =
+            e.record.getString('deleted_by') ||
+            e.record.getString('user') ||
+            e.record.getString('created_by') ||
+            e.record.getString('technician') ||
+            ''
+        } catch (_) {}
+      }
+
+      const entity = e.record.collection().name
+      const recordId = e.record.id
+      let label = ''
+      try {
+        label =
+          e.record.getString('name') ||
+          e.record.getString('code') ||
+          e.record.getString('activity_title') ||
+          recordId
+      } catch (_) {
+        label = recordId
+      }
+
+      try {
+        if (entity === 'reports_rdo') {
+          const num = e.record.getInt('number')
+          const act = e.record.getString('activity_title') || 'Sem título'
+          label = `RDO Nº ${num > 0 ? num : recordId} · ${act}`
+        } else if (entity === 'field_spreadsheets') {
+          const num = e.record.getInt('number')
+          const dt = e.record.getString('date') ? e.record.getString('date').slice(0, 10) : ''
+          const area = e.record.getString('area') || ''
+          label = `Planilha Nº ${num > 0 ? num : recordId} · ${dt} (${area})`
+        }
+      } catch (_) {}
+
       const log = new Record(logs)
-      log.set('actor', e.auth.id)
+      if (actorId) {
+        log.set('actor', actorId)
+      }
       log.set('action', 'delete')
       log.set('entity', entity)
       log.set('entity_record', recordId)
       log.set('details', {
         label: label,
-        server_timestamp: log.getString('created') || new Date().toISOString(),
+        server_timestamp: new Date().toISOString(),
       })
       $app.save(log)
     } catch (error) {
-      console.error('audit delete', error)
+      console.warn('audit delete (falha graciosa ignorada):', error)
     }
   },
   'clients',

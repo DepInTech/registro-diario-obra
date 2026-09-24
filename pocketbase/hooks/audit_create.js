@@ -1,15 +1,39 @@
-onRecordCreateRequest(
+onRecordAfterCreateSuccess(
   (e) => {
-    // 1. Sempre prossegue com a cadeia de requisição primeiro
-    e.next()
-
-    // 2. Blindagem total da auditoria assíncrona: nenhuma falha aqui pode derrubar a criação
-    if (!e.auth) return
+    // 1. Sempre prossegue com a cadeia do hook primeiro
     try {
+      e.next()
+    } catch (_) {}
+
+    // 2. Blindagem total da auditoria assíncrona: executada fora da transação principal,
+    // nenhuma falha aqui pode derrubar a criação nem gerar locks
+    try {
+      if (!e.record) return
       const logs = $app.findCollectionByNameOrId('audit_logs')
       if (!logs) return
+
+      // Obter ator: e.auth (se presente no contexto da requisição) ou campos do próprio registro
+      let actorId = ''
+      try {
+        if (e.auth && e.auth.id) {
+          actorId = e.auth.id
+        }
+      } catch (_) {}
+
+      if (!actorId) {
+        try {
+          actorId =
+            e.record.getString('user') ||
+            e.record.getString('created_by') ||
+            e.record.getString('technician') ||
+            ''
+        } catch (_) {}
+      }
+
       const log = new Record(logs)
-      log.set('actor', e.auth.id)
+      if (actorId) {
+        log.set('actor', actorId)
+      }
       log.set('action', 'create')
       const entity = e.record?.collection()?.name || 'unknown'
       log.set('entity', entity)
