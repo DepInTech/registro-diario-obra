@@ -1123,6 +1123,7 @@ function RdoFullPageEditor({
   }
 
   const handleWellFieldChange = (index: number, field: string, value: any) => {
+    if (!isAdmin) return
     const updated = [...(formData.wells || [])]
     updated[index] = { ...updated[index], [field]: value }
     handleFieldChange('wells', updated)
@@ -1856,13 +1857,19 @@ function RdoFullPageEditor({
           </div>
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Supervisionado por (Responsável Técnico)</label>
-            <Input
-              placeholder="Nome do responsável técnico ou supervisor"
-              value={formData.supervisedByName ?? ''}
-              onChange={(e) => handleFieldChange('supervisedByName', e.target.value)}
-              disabled={isLocked}
-              className="mt-1.5"
-            />
+            {isTechnician ? (
+              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                <span>{formData.supervisedByName?.trim() || '—'}</span>
+              </div>
+            ) : (
+              <Input
+                placeholder="Nome do responsável técnico ou supervisor"
+                value={formData.supervisedByName ?? ''}
+                onChange={(e) => handleFieldChange('supervisedByName', e.target.value)}
+                disabled={isLocked}
+                className="mt-1.5"
+              />
+            )}
           </div>
         </div>
       </section>
@@ -2228,15 +2235,30 @@ function RdoFullPageEditor({
                       )}
                     </td>
                     <td className="p-2">
-                      <Input
-                        type="date"
-                        value={well.completion_date ?? ''}
-                        onChange={(e) =>
-                          handleWellFieldChange(index, 'completion_date', e.target.value)
-                        }
-                        disabled={isLocked}
-                        className="h-10 text-xs sm:text-sm"
-                      />
+                      {isTechnician ? (
+                        <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                          <span>
+                            {well.completion_date
+                              ? (() => {
+                                  const parts = String(well.completion_date).slice(0, 10).split('-')
+                                  return parts.length === 3
+                                    ? `${parts[2]}/${parts[1]}/${parts[0]}`
+                                    : well.completion_date
+                                })()
+                              : '—'}
+                          </span>
+                        </div>
+                      ) : (
+                        <Input
+                          type="date"
+                          value={well.completion_date ?? ''}
+                          onChange={(e) =>
+                            handleWellFieldChange(index, 'completion_date', e.target.value)
+                          }
+                          disabled={isLocked}
+                          className="h-10 text-xs sm:text-sm"
+                        />
+                      )}
                     </td>
                     <td className="p-2">
                       {isTechnician ? (

@@ -1634,13 +1634,19 @@ function FieldFullEditor({
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
-            <Input
-              value={formData.operatorName || ''}
-              onChange={(e) => handleFieldChange('operatorName', e.target.value)}
-              disabled={isLocked}
-              placeholder="Ex.: Julio Cesar"
-              className="mt-1"
-            />
+            {isTechnician && formData.operatorName?.trim() ? (
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                <span>{formData.operatorName}</span>
+              </div>
+            ) : (
+              <Input
+                value={formData.operatorName || ''}
+                onChange={(e) => handleFieldChange('operatorName', e.target.value)}
+                disabled={isLocked}
+                placeholder="Ex.: Julio Cesar"
+                className="mt-1"
+              />
+            )}
           </div>
           <div>
             <label className="epa-label">DATA</label>
@@ -1878,14 +1884,26 @@ function FieldFullEditor({
                     />
                   </td>
                   <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      inputMode="decimal"
-                      value={row.pump}
-                      onChange={(e) => handleExtractionCellChange(index, 'pump', e.target.value)}
-                      disabled={isLocked}
-                      placeholder="0,00"
-                      className="h-10 font-mono text-xs sm:text-sm text-center"
-                    />
+                    {isTechnician ? (
+                      <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px]">
+                        <span>
+                          {row.pump !== undefined &&
+                          row.pump !== null &&
+                          String(row.pump).trim() !== ''
+                            ? `${row.pump} m`
+                            : '—'}
+                        </span>
+                      </div>
+                    ) : (
+                      <Input
+                        inputMode="decimal"
+                        value={row.pump}
+                        onChange={(e) => handleExtractionCellChange(index, 'pump', e.target.value)}
+                        disabled={isLocked}
+                        placeholder="0,00"
+                        className="h-10 font-mono text-xs sm:text-sm text-center"
+                      />
+                    )}
                   </td>
                   <td className="p-2 border border-slate-200 dark:border-slate-800">
                     <Input
