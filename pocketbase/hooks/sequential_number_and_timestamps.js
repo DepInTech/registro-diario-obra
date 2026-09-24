@@ -18,6 +18,38 @@ onRecordCreateRequest(
           e.collection?.name || (e.record.collection ? e.record.collection().name : '')
         const nowIso = new Date().toISOString()
 
+        // 1. Verificação de IDEMPOTÊNCIA via client_token
+        // Se já existir registro salvo com o mesmo client_token, retorna o registro existente imediatamente
+        // impedindo duplicidade e impedindo o consumo de um novo número sequencial
+        const clientToken = e.record.getString('client_token')
+        if (clientToken && clientToken.trim() !== '') {
+          try {
+            const existingRecords = $app.findRecordsByFilter(
+              collectionName,
+              'client_token = {:token}',
+              '-created',
+              1,
+              0,
+              { token: clientToken.trim() },
+            )
+            if (existingRecords && existingRecords.length > 0) {
+              const existingRec = existingRecords[0]
+              console.log(
+                '[sequential_number_and_timestamps] Idempotencia detectada: registro existente encontrado com client_token:',
+                clientToken,
+                'ID existente:',
+                existingRec.id,
+                'Numero:',
+                existingRec.getInt('number'),
+              )
+              // Retorna HTTP 200 com o registro já existente (idempotência perfeita, sem criar duplicado)
+              return e.json(200, existingRec)
+            }
+          } catch (idempErr) {
+            console.warn('Aviso: falha na verificacao de client_token (prosseguindo):', idempErr)
+          }
+        }
+
         if (collectionName === 'reports_rdo') {
           // Busca o maior número já existente no banco de forma resiliente
           let nextNum = null

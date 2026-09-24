@@ -35,6 +35,7 @@ import {
   ArchiveRestore,
 } from 'lucide-react'
 import { StatusBadge } from '@/components/StatusBadge'
+import { SheetSyncBadge } from '@/components/SheetSyncBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -86,6 +87,7 @@ export function RdosPage({ query }: { query: string }) {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const { user } = useAuth()
   const { toast } = useToast()
+  const { isSyncing: isGlobalSyncing, retrySyncItem } = useSync()
 
   const loadRdos = async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -833,24 +835,30 @@ export function RdosPage({ query }: { query: string }) {
                       </p>
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={report.status} />
-                        {report.syncStatus === 'pending_create' && (
-                          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                            Offline (Novo)
-                          </span>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <StatusBadge status={report.status} />
+                          <SheetSyncBadge
+                            syncStatus={report.syncStatus}
+                            isGlobalSyncing={isGlobalSyncing}
+                            syncError={report.syncError}
+                            onRetry={() => retrySyncItem?.(report.id, 'rdo')}
+                          />
+                        </div>
+                        {report.syncError && report.syncStatus === 'failed' && (
+                          <p
+                            className="max-w-[200px] truncate text-[10px] text-red-600 dark:text-red-400 font-medium"
+                            title={report.syncError}
+                          >
+                            Motivo: {report.syncError}
+                          </p>
                         )}
-                        {report.syncStatus === 'pending_update' && (
-                          <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[9px] font-medium text-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                            Offline (Editado)
-                          </span>
+                        {report.reviewNotes && (
+                          <p className="max-w-40 truncate text-[10px] text-amber-700 dark:text-amber-400">
+                            {report.reviewNotes}
+                          </p>
                         )}
                       </div>
-                      {report.reviewNotes && (
-                        <p className="mt-1 max-w-40 truncate text-[10px] text-amber-700 dark:text-amber-400">
-                          {report.reviewNotes}
-                        </p>
-                      )}
                     </td>
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -1586,6 +1594,11 @@ function RdoFullPageEditor({
                 : 'RDO (Rascunho Offline)'}
             </h2>
             <StatusBadge status={formData.status} />
+            <SheetSyncBadge
+              syncStatus={formData.syncStatus}
+              isGlobalSyncing={isOnline && formData.syncStatus === 'pending_update'}
+              syncError={formData.syncError}
+            />
             {formData.serverCreatedAt && (
               <span className="hidden sm:inline-block rounded-md bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 Criado:{' '}

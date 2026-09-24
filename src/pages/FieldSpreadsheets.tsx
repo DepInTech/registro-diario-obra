@@ -33,6 +33,7 @@ import {
 } from 'lucide-react'
 import { logoEpa } from '@/components/EpaLogo'
 import { StatusBadge } from '@/components/StatusBadge'
+import { SheetSyncBadge } from '@/components/SheetSyncBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -88,6 +89,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
   const { user } = useAuth()
   const { toast } = useToast()
+  const { isSyncing: isGlobalSyncing, retrySyncItem } = useSync()
 
   const loadSheets = async (options?: { silent?: boolean }) => {
     if (!options?.silent) {
@@ -749,13 +751,14 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                     <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
                       <FileSpreadsheet className="h-5 w-5" />
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
                       <StatusBadge status={sheet.status} />
-                      {sheet.syncStatus === 'pending_create' && (
-                        <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                          Offline
-                        </span>
-                      )}
+                      <SheetSyncBadge
+                        syncStatus={sheet.syncStatus}
+                        isGlobalSyncing={isGlobalSyncing}
+                        syncError={sheet.syncError}
+                        onRetry={() => retrySyncItem?.(sheet.id, 'field')}
+                      />
                       {!sheet.deleted && (
                         <>
                           {user?.role !== 'technician' && (
@@ -1451,6 +1454,11 @@ function FieldFullEditor({
               Planilha de Campo · {formData.date}
             </h2>
             <StatusBadge status={formData.status} />
+            <SheetSyncBadge
+              syncStatus={formData.syncStatus}
+              isGlobalSyncing={isOnline && formData.syncStatus === 'pending_update'}
+              syncError={formData.syncError}
+            />
             {isDeleted ? (
               <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-[10px] font-semibold text-red-800 dark:bg-red-950 dark:text-red-300">
                 Item Excluído (Arquivado para auditoria)

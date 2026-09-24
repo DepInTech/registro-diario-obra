@@ -45,6 +45,7 @@ interface SyncContextType {
   conflicts: ConflictItem[]
   syncNow: () => Promise<void>
   retryFailed: () => Promise<void>
+  retrySyncItem?: (id: string, type: 'rdo' | 'field' | 'project') => Promise<void>
   resolveConflict: (
     conflict: ConflictItem,
     resolution: 'keep_local' | 'keep_server',
@@ -62,6 +63,7 @@ const SyncContext = createContext<SyncContextType>({
   conflicts: [],
   syncNow: async () => {},
   retryFailed: async () => {},
+  retrySyncItem: async () => {},
   resolveConflict: async () => {},
 })
 
@@ -295,12 +297,26 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           const currentUserId = pb.authStore.record?.id
           const localProjects = await offlineStorage.getAllProjects()
 
-          // A. If candidateId is already a valid non-provisional server ID
+          // A. If candidateId is already a valid non-provisional server ID, verify it exists and is not deleted
           if (candidateId && !isProvisionalId(candidateId)) {
             const foundLocal = localProjects.find((p) => p.id === candidateId)
-            return {
-              id: candidateId,
-              name: foundLocal?.name || candidateName || 'Projeto EPA',
+            // If found locally and deleted or archived, don't blindly bind to it; allow fallbacks below
+            if (foundLocal && !foundLocal.deleted && !foundLocal.archived) {
+              return {
+                id: candidateId,
+                name: foundLocal.name,
+              }
+            }
+            if (!foundLocal) {
+              // Check if project exists on server and is active
+              try {
+                const sProj = await pb.collection('projects').getOne(candidateId)
+                if (sProj && !sProj.deleted && !sProj.archived) {
+                  return { id: sProj.id, name: sProj.name }
+                }
+              } catch {
+                /* intentionally ignored */
+              }
             }
           }
 
@@ -342,7 +358,28 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             return { id: activeLocal.id, name: activeLocal.name }
           }
 
-          // E. Query server for active project
+          // E. Any non-deleted local project
+          const anyLocal = localProjects.find((p) => !p.deleted && !isProvisionalId(p.id))
+          if (anyLocal) {
+            return { id: anyLocal.id, name: anyLocal.name }
+          }
+
+          // F. Query server for active project assigned to technician or general active
+          if (currentUserId) {
+            try {
+              const assignedServer = await pb.collection('projects').getList(1, 1, {
+                filter: `deleted = false && archived = false && status = "active" && assigned_users ~ "${currentUserId}"`,
+                sort: '-created',
+              })
+              if (assignedServer.items.length > 0) {
+                const p = assignedServer.items[0]
+                return { id: p.id, name: p.name }
+              }
+            } catch {
+              /* intentionally ignored */
+            }
+          }
+
           const serverProjects = await pb.collection('projects').getList(1, 1, {
             filter: 'deleted = false && archived = false && status = "active"',
             sort: '-created',
@@ -352,7 +389,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             return { id: p.id, name: p.name }
           }
 
-          // F. Any non-deleted project from server
+          // G. Any non-deleted project from server
           const anyProj = await pb.collection('projects').getList(1, 1, {
             filter: 'deleted = false',
             sort: '-created',
@@ -580,7 +617,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             if (rdo.number && rdo.number > 0 && !isProvisionalId(rdo.id)) {
               payload.number = rdo.number
             }
+            // Submissão com adoção atômica do ID do servidor
+            const oldRdoId = rdo.id
             const record = await pb.collection('reports_rdo').create(payload)
+
+            // Imediatamente adota o ID oficial do servidor na ficha local, eliminando o ID provisório
+            await offlineStorage.deleteRdo(oldRdoId)
+            rdo.id = record.id
             rdo.number = record.number
             rdo.submittedAt =
               record.submitted_at || (record.status === 'submitted' ? record.updated : undefined)
@@ -589,7 +632,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             rdo.returnedAt =
               record.returned_at || (record.status === 'returned' ? record.updated : undefined)
             rdo.serverCreatedAt = record.created
-            // create wells
+            rdo.serverUpdatedAt = record.updated
+
+            // create wells - sincronizados como parte da unidade lógica
             for (const well of rdo.wells || []) {
               if (well.well_id) {
                 try {
@@ -656,7 +701,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                   const createdPhoto = await pb.collection('report_photos').create(photoFd)
 
                   // Atualiza localmente a referência da foto com o arquivo persistido no servidor
-                  // mantendo fallback sem perder imagem se o offline for reaberto
                   if (p.category === 'field_inspection' && rdo.fieldPhoto) {
                     rdo.fieldPhoto.image = createdPhoto.image
                     delete rdo.fieldPhoto.dataUrl
@@ -674,9 +718,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
-            // Update local offline item to synced
-            await offlineStorage.deleteRdo(rdo.id)
-            rdo.id = record.id
             if (photoErrorsCount > 0) {
               // Se o upload de fotos falhar, o RDO permanece pendente com aviso claro
               rdo.syncStatus = 'failed'
@@ -757,11 +798,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
-            if (
-              rdo.serverUpdatedAt &&
-              serverRecord.updated !== rdo.serverUpdatedAt &&
-              new Date(serverRecord.updated).getTime() > rdo.lastModified
-            ) {
+            // Regra do merge seguro / integridade contra sobrescrita:
+            // 1. Se o escritório já alterou no servidor (serverRecord.updated > lastModified ou diferente de serverUpdatedAt)
+            // 2. Se o status no servidor foi avançado para 'approved' ou 'submitted' por outro usuário
+            const serverUpdatedTime = new Date(serverRecord.updated).getTime()
+            const hasServerChange =
+              (rdo.serverUpdatedAt &&
+                serverRecord.updated !== rdo.serverUpdatedAt &&
+                serverUpdatedTime > rdo.lastModified) ||
+              (serverRecord.status === 'approved' && rdo.status !== 'approved')
+
+            if (hasServerChange) {
               rdo.syncStatus = 'conflict'
               await offlineStorage.saveRdo(rdo)
               setConflicts((prev) => [
@@ -779,7 +826,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                   : 'RDO Offline'
               toast({
                 title: 'Conflito detectado',
-                description: `O ${conflictRdoLabel} foi alterado em outro dispositivo.`,
+                description: `O ${conflictRdoLabel} foi alterado ou aprovado pelo escritório. A versão do servidor foi preservada para revisão.`,
                 variant: 'destructive',
               })
               continue
@@ -1021,8 +1068,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               client_token: clientToken,
             }
 
+            // Submissão com adoção atômica do ID do servidor
+            const oldSheetId = sheet.id
             const created = await pb.collection('field_spreadsheets').create(payload)
-            await offlineStorage.deleteFieldSheet(sheet.id)
+
+            // Imediatamente adota o ID oficial do servidor na ficha local, eliminando o ID provisório
+            await offlineStorage.deleteFieldSheet(oldSheetId)
             sheet.id = created.id
             sheet.number = created.number
             sheet.submittedAt =
@@ -1032,8 +1083,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             sheet.returnedAt =
               created.returned_at || (created.status === 'returned' ? created.updated : undefined)
             sheet.serverCreatedAt = created.created
-            sheet.syncStatus = 'synced'
             sheet.serverUpdatedAt = created.updated
+            sheet.syncStatus = 'synced'
             delete sheet.syncError
             sheet.syncAttempts = 0
             await offlineStorage.saveFieldSheet(sheet)
@@ -1093,11 +1144,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
-            if (
-              sheet.serverUpdatedAt &&
-              serverRecord.updated !== sheet.serverUpdatedAt &&
-              new Date(serverRecord.updated).getTime() > sheet.lastModified
-            ) {
+            // Regra do merge seguro / integridade contra sobrescrita:
+            const sheetServerUpdatedTime = new Date(serverRecord.updated).getTime()
+            const hasSheetServerChange =
+              (sheet.serverUpdatedAt &&
+                serverRecord.updated !== sheet.serverUpdatedAt &&
+                sheetServerUpdatedTime > sheet.lastModified) ||
+              (serverRecord.status === 'approved' && sheet.status !== 'approved')
+
+            if (hasSheetServerChange) {
               sheet.syncStatus = 'conflict'
               await offlineStorage.saveFieldSheet(sheet)
               setConflicts((prev) => [
@@ -1111,7 +1166,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               ])
               toast({
                 title: 'Conflito detectado',
-                description: `A Planilha de Campo (${sheet.date}) foi alterada em outro dispositivo.`,
+                description: `A Planilha de Campo (${sheet.date}) foi alterada ou aprovada pelo escritório. A versão do servidor foi preservada para revisão.`,
                 variant: 'destructive',
               })
               continue
@@ -1218,7 +1273,42 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     }
   }, [checkPending, toast])
 
-  // Explicit retry for failed items
+  // Explicit retry for a single item
+  const retrySyncItem = useCallback(
+    async (id: string, type: 'rdo' | 'field' | 'project') => {
+      try {
+        if (type === 'rdo') {
+          const rdo = await offlineStorage.getRdo(id)
+          if (rdo) {
+            rdo.syncStatus = isProvisionalId(rdo.id) ? 'pending_create' : 'pending_update'
+            delete rdo.syncError
+            await offlineStorage.saveRdo(rdo)
+          }
+        } else if (type === 'field') {
+          const sheet = await offlineStorage.getFieldSheet(id)
+          if (sheet) {
+            sheet.syncStatus = isProvisionalId(sheet.id) ? 'pending_create' : 'pending_update'
+            delete sheet.syncError
+            await offlineStorage.saveFieldSheet(sheet)
+          }
+        } else if (type === 'project') {
+          const proj = await offlineStorage.getProject(id)
+          if (proj) {
+            proj.syncStatus = isProvisionalId(proj.id) ? 'pending_create' : 'pending_update'
+            delete proj.syncError
+            await offlineStorage.saveProject(proj)
+          }
+        }
+        await checkPending()
+        await syncNow()
+      } catch (err) {
+        console.error('Error retrying sync for item', id, err)
+      }
+    },
+    [checkPending, syncNow],
+  )
+
+  // Explicit retry for all failed items
   const retryFailed = useCallback(async () => {
     try {
       const [rdos, fields, projects] = await Promise.all([
@@ -2437,6 +2527,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         conflicts,
         syncNow,
         retryFailed,
+        retrySyncItem,
         resolveConflict,
       }}
     >
