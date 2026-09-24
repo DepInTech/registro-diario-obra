@@ -1073,7 +1073,7 @@ function FieldFullEditor({
 
   // Extraction wells handlers
   const canAddExtractionWell =
-    isAdmin || !formData.extraction_data || formData.extraction_data.length === 0
+    isAdmin || !initialSheet.extraction_data || initialSheet.extraction_data.length === 0
 
   const handleAddExtractionWell = () => {
     if (!canAddExtractionWell) return
@@ -1105,6 +1105,15 @@ function FieldFullEditor({
   }
 
   const handleRemoveExtractionWell = (index: number) => {
+    const persistedRow = initialSheet.extraction_data?.[index]
+    if (!isAdmin && persistedRow && !isExtractionRowEmpty(persistedRow)) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Técnicos não podem remover poços configurados pelo Administrador.',
+        variant: 'destructive',
+      })
+      return
+    }
     const targetRow = formData.extraction_data?.[index]
     if (!isAdmin && !isExtractionRowEmpty(targetRow)) {
       toast({
@@ -1125,10 +1134,13 @@ function FieldFullEditor({
     if (!currentRow) return
 
     if (!isAdmin && (col === 'well' || col === 'pump')) {
-      const rawCurrentVal = currentRow[col as keyof typeof currentRow]
-      const hasCurrentVal =
-        rawCurrentVal !== undefined && rawCurrentVal !== null && String(rawCurrentVal).trim() !== ''
-      if (hasCurrentVal) {
+      const persistedRow = initialSheet.extraction_data?.[index]
+      const rawPersistedVal = persistedRow ? (persistedRow as any)[col] : undefined
+      const hasPersistedVal =
+        rawPersistedVal !== undefined &&
+        rawPersistedVal !== null &&
+        String(rawPersistedVal).trim() !== ''
+      if (hasPersistedVal) {
         return
       }
     }
@@ -1672,9 +1684,9 @@ function FieldFullEditor({
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
-            {isTechnician && Boolean(formData.operatorName?.trim()) ? (
+            {isTechnician && Boolean((initialSheet?.operatorName ?? '').trim()) ? (
               <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                <span>{formData.operatorName}</span>
+                <span>{(initialSheet.operatorName ?? '').trim()}</span>
               </div>
             ) : (
               <Input
@@ -1736,7 +1748,9 @@ function FieldFullEditor({
             </p>
           </div>
           {!isLocked &&
-            (isAdmin || !formData.extraction_data || formData.extraction_data.length === 0) && (
+            (isAdmin ||
+              !initialSheet.extraction_data ||
+              initialSheet.extraction_data.length === 0) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1871,149 +1885,162 @@ function FieldFullEditor({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-              {formData.extraction_data?.map((row, index) => (
-                <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    {isTechnician && Boolean(row.well?.trim()) ? (
-                      <div className="flex items-center justify-center gap-1.5 py-2 px-2 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded min-h-[40px]">
-                        <span>{row.well}</span>
-                      </div>
-                    ) : (
-                      <Input
-                        value={row.well}
-                        onChange={(e) => handleExtractionCellChange(index, 'well', e.target.value)}
-                        disabled={isLocked}
-                        placeholder="Ex.: PR-01"
-                        className="h-10 font-semibold text-xs sm:text-sm text-center"
-                      />
-                    )}
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      inputMode="decimal"
-                      value={row.morning}
-                      onChange={(e) => {
-                        handleExtractionCellChange(index, 'morning', e.target.value)
-                        clearReturnedField('hidrometro')
-                      }}
-                      disabled={isLocked}
-                      placeholder="0,00"
-                      className={cn(
-                        'h-10 font-mono text-xs sm:text-sm text-right',
-                        isReturnedField('hidrometro') &&
-                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+              {formData.extraction_data?.map((row, index) => {
+                const persistedRow = initialSheet?.extraction_data?.[index]
+                const hasPersistedWell = isTechnician && Boolean(persistedRow?.well?.trim())
+                const hasPersistedPump =
+                  isTechnician &&
+                  persistedRow?.pump !== undefined &&
+                  persistedRow?.pump !== null &&
+                  String(persistedRow?.pump).trim() !== ''
+
+                return (
+                  <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      {hasPersistedWell ? (
+                        <div className="flex items-center justify-center gap-1.5 py-2 px-2 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded min-h-[40px]">
+                          <span>{persistedRow?.well}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          value={row.well}
+                          onChange={(e) =>
+                            handleExtractionCellChange(index, 'well', e.target.value)
+                          }
+                          disabled={isLocked}
+                          placeholder="Ex.: PR-01"
+                          className="h-10 font-semibold text-xs sm:text-sm text-center"
+                        />
                       )}
-                    />
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      inputMode="decimal"
-                      value={row.afternoon}
-                      onChange={(e) => {
-                        handleExtractionCellChange(index, 'afternoon', e.target.value)
-                        clearReturnedField('hidrometro')
-                      }}
-                      disabled={isLocked}
-                      placeholder="0,00"
-                      className={cn(
-                        'h-10 font-mono text-xs sm:text-sm text-right',
-                        isReturnedField('hidrometro') &&
-                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
-                      )}
-                    />
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    {isTechnician &&
-                    row.pump !== undefined &&
-                    row.pump !== null &&
-                    String(row.pump).trim() !== '' ? (
-                      <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px]">
-                        <span>{`${row.pump} m`}</span>
-                      </div>
-                    ) : (
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
                       <Input
                         inputMode="decimal"
-                        value={row.pump}
-                        onChange={(e) => handleExtractionCellChange(index, 'pump', e.target.value)}
+                        value={row.morning}
+                        onChange={(e) => {
+                          handleExtractionCellChange(index, 'morning', e.target.value)
+                          clearReturnedField('hidrometro')
+                        }}
                         disabled={isLocked}
                         placeholder="0,00"
-                        className="h-10 font-mono text-xs sm:text-sm text-center"
+                        className={cn(
+                          'h-10 font-mono text-xs sm:text-sm text-right',
+                          isReturnedField('hidrometro') &&
+                            'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                        )}
                       />
-                    )}
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      inputMode="decimal"
-                      value={row.autopump}
-                      onChange={(e) => {
-                        handleExtractionCellChange(index, 'autopump', e.target.value)
-                        clearReturnedField('autopump')
-                      }}
-                      disabled={isLocked}
-                      placeholder="0,00"
-                      className={cn(
-                        'h-10 font-mono text-xs sm:text-sm text-center',
-                        isReturnedField('autopump') &&
-                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
-                      )}
-                    />
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <div className="space-y-1.5">
-                      <select
-                        value={row.autopump_condition || ''}
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      <Input
+                        inputMode="decimal"
+                        value={row.afternoon}
                         onChange={(e) => {
-                          handleExtractionCellChange(index, 'autopump_condition', e.target.value)
+                          handleExtractionCellChange(index, 'afternoon', e.target.value)
+                          clearReturnedField('hidrometro')
+                        }}
+                        disabled={isLocked}
+                        placeholder="0,00"
+                        className={cn(
+                          'h-10 font-mono text-xs sm:text-sm text-right',
+                          isReturnedField('hidrometro') &&
+                            'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                        )}
+                      />
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      {hasPersistedPump ? (
+                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px]">
+                          <span>{`${persistedRow?.pump} m`}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={row.pump}
+                          onChange={(e) =>
+                            handleExtractionCellChange(index, 'pump', e.target.value)
+                          }
+                          disabled={isLocked}
+                          placeholder="0,00"
+                          className="h-10 font-mono text-xs sm:text-sm text-center"
+                        />
+                      )}
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      <Input
+                        inputMode="decimal"
+                        value={row.autopump}
+                        onChange={(e) => {
+                          handleExtractionCellChange(index, 'autopump', e.target.value)
                           clearReturnedField('autopump')
                         }}
                         disabled={isLocked}
+                        placeholder="0,00"
                         className={cn(
-                          'epa-input h-10 w-full text-xs sm:text-sm',
+                          'h-10 font-mono text-xs sm:text-sm text-center',
                           isReturnedField('autopump') &&
-                            'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
+                            'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                         )}
-                      >
-                        <option value="">Selecione...</option>
-                        <option value="Limpa">Limpa</option>
-                        <option value="Turva">Turva</option>
-                        <option value="Oleosa">Oleosa</option>
-                        <option value="Outros">Outros</option>
-                      </select>
-                      {row.autopump_condition === 'Outros' && (
-                        <Input
-                          value={row.autopump_condition_other || ''}
+                      />
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      <div className="space-y-1.5">
+                        <select
+                          value={row.autopump_condition || ''}
                           onChange={(e) => {
-                            handleExtractionCellChange(
-                              index,
-                              'autopump_condition_other',
-                              e.target.value,
-                            )
+                            handleExtractionCellChange(index, 'autopump_condition', e.target.value)
                             clearReturnedField('autopump')
                           }}
                           disabled={isLocked}
-                          placeholder="Descreva: (ex. presença de sedimentos)"
-                          className="h-9 text-xs sm:text-sm border-amber-300 bg-amber-50/50 text-slate-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-slate-200"
-                        />
-                      )}
-                    </div>
-                  </td>
-                  {!isLocked && (isAdmin || isExtractionRowEmpty(row)) && (
-                    <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleRemoveExtractionWell(index)}
-                        className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50"
-                        title={
-                          isAdmin ? 'Remover linha de poço (Admin)' : 'Remover linha de poço vazia'
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                          className={cn(
+                            'epa-input h-10 w-full text-xs sm:text-sm',
+                            isReturnedField('autopump') &&
+                              'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
+                          )}
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="Limpa">Limpa</option>
+                          <option value="Turva">Turva</option>
+                          <option value="Oleosa">Oleosa</option>
+                          <option value="Outros">Outros</option>
+                        </select>
+                        {row.autopump_condition === 'Outros' && (
+                          <Input
+                            value={row.autopump_condition_other || ''}
+                            onChange={(e) => {
+                              handleExtractionCellChange(
+                                index,
+                                'autopump_condition_other',
+                                e.target.value,
+                              )
+                              clearReturnedField('autopump')
+                            }}
+                            disabled={isLocked}
+                            placeholder="Descreva: (ex. presença de sedimentos)"
+                            className="h-9 text-xs sm:text-sm border-amber-300 bg-amber-50/50 text-slate-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-slate-200"
+                          />
+                        )}
+                      </div>
                     </td>
-                  )}
-                </tr>
-              ))}
+                    {!isLocked && (isAdmin || isExtractionRowEmpty(persistedRow || row)) && (
+                      <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleRemoveExtractionWell(index)}
+                          className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          title={
+                            isAdmin
+                              ? 'Remover linha de poço (Admin)'
+                              : 'Remover linha de poço vazia'
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

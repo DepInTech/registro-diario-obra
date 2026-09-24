@@ -1097,7 +1097,7 @@ function RdoFullPageEditor({
   }
 
   // Wells Handlers (Os poços são cadastrados diretamente na ficha pelo Administrador)
-  const canAddWell = isAdmin || !formData.wells || formData.wells.length === 0
+  const canAddWell = isAdmin || !initialReport.wells || initialReport.wells.length === 0
 
   const handleAddWell = () => {
     if (!canAddWell) return
@@ -1127,6 +1127,15 @@ function RdoFullPageEditor({
   }
 
   const handleRemoveWell = (index: number) => {
+    const persistedWell = initialReport.wells?.[index]
+    if (!isAdmin && persistedWell && !isWellRowEmpty(persistedWell)) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Técnicos não podem remover poços configurados pelo Administrador.',
+        variant: 'destructive',
+      })
+      return
+    }
     const targetWell = formData.wells?.[index]
     if (!isAdmin && !isWellRowEmpty(targetWell)) {
       toast({
@@ -1147,10 +1156,13 @@ function RdoFullPageEditor({
     if (!currentWell) return
 
     if (!isAdmin) {
-      const rawCurrentVal = currentWell[field]
-      const hasCurrentVal =
-        rawCurrentVal !== undefined && rawCurrentVal !== null && String(rawCurrentVal).trim() !== ''
-      if (hasCurrentVal) {
+      const persistedWell = initialReport.wells?.[index]
+      const rawPersistedVal = persistedWell ? (persistedWell as any)[field] : undefined
+      const hasPersistedVal =
+        rawPersistedVal !== undefined &&
+        rawPersistedVal !== null &&
+        String(rawPersistedVal).trim() !== ''
+      if (hasPersistedVal) {
         return
       }
     }
@@ -1888,9 +1900,9 @@ function RdoFullPageEditor({
           </div>
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Supervisionado por (Responsável Técnico)</label>
-            {isTechnician && Boolean(formData.supervisedByName?.trim()) ? (
+            {isTechnician && Boolean((initialReport?.supervisedByName ?? '').trim()) ? (
               <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                <span>{formData.supervisedByName?.trim()}</span>
+                <span>{(initialReport.supervisedByName ?? '').trim()}</span>
               </div>
             ) : (
               <Input
@@ -2184,7 +2196,7 @@ function RdoFullPageEditor({
               </span>
             )}
           </div>
-          {!isLocked && (isAdmin || !formData.wells || formData.wells.length === 0) && (
+          {!isLocked && (isAdmin || !initialReport.wells || initialReport.wells.length === 0) && (
             <Button
               variant="outline"
               size="sm"
@@ -2228,98 +2240,114 @@ function RdoFullPageEditor({
                 </tr>
               </thead>
               <tbody className="divide-y dark:divide-slate-800">
-                {formData.wells.map((well, index) => (
-                  <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
-                    <td className="p-2">
-                      {isTechnician && Boolean(well.well_id?.trim()) ? (
-                        <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                          <span>{well.well_id}</span>
-                        </div>
-                      ) : (
-                        <Input
-                          value={well.well_id ?? ''}
-                          onChange={(e) => handleWellFieldChange(index, 'well_id', e.target.value)}
-                          disabled={isLocked}
-                          placeholder="PM-01"
-                          className="h-10 text-xs sm:text-sm font-semibold uppercase font-mono"
-                        />
-                      )}
-                    </td>
-                    <td className="p-2">
-                      {isTechnician &&
-                      well.depth !== undefined &&
-                      well.depth !== null &&
-                      String(well.depth).trim() !== '' ? (
-                        <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                          <span>{`${well.depth} m`}</span>
-                        </div>
-                      ) : (
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          step="0.1"
-                          value={well.depth ?? ''}
-                          onChange={(e) => handleWellFieldChange(index, 'depth', e.target.value)}
-                          disabled={isLocked}
-                          placeholder="8.5"
-                          className="h-10 text-xs sm:text-sm font-mono"
-                        />
-                      )}
-                    </td>
-                    <td className="p-2">
-                      {isTechnician && Boolean(well.completion_date?.trim()) ? (
-                        <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                          <span>
-                            {(() => {
-                              const parts = String(well.completion_date).slice(0, 10).split('-')
-                              return parts.length === 3
-                                ? `${parts[2]}/${parts[1]}/${parts[0]}`
-                                : well.completion_date
-                            })()}
-                          </span>
-                        </div>
-                      ) : (
-                        <Input
-                          type="date"
-                          value={well.completion_date ?? ''}
-                          onChange={(e) =>
-                            handleWellFieldChange(index, 'completion_date', e.target.value)
-                          }
-                          disabled={isLocked}
-                          className="h-10 text-xs sm:text-sm"
-                        />
-                      )}
-                    </td>
-                    <td className="p-2">
-                      {isTechnician && Boolean(well.diameter?.trim()) ? (
-                        <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                          <span>{well.diameter}</span>
-                        </div>
-                      ) : (
-                        <Input
-                          value={well.diameter ?? ''}
-                          onChange={(e) => handleWellFieldChange(index, 'diameter', e.target.value)}
-                          disabled={isLocked}
-                          placeholder='2"'
-                          className="h-10 text-xs sm:text-sm font-mono"
-                        />
-                      )}
-                    </td>
-                    {!isLocked && (isAdmin || isWellRowEmpty(well)) && (
-                      <td className="p-2 text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveWell(index)}
-                          className="h-9 w-9 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50"
-                          title={isAdmin ? 'Remover poço (Admin)' : 'Remover poço vazio'}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                {formData.wells.map((well, index) => {
+                  const persistedWell = initialReport?.wells?.[index]
+                  const hasPersistedWellId = isTechnician && Boolean(persistedWell?.well_id?.trim())
+                  const hasPersistedDepth =
+                    isTechnician &&
+                    persistedWell?.depth !== undefined &&
+                    persistedWell?.depth !== null &&
+                    String(persistedWell?.depth).trim() !== ''
+                  const hasPersistedCompletionDate =
+                    isTechnician && Boolean(persistedWell?.completion_date?.trim())
+                  const hasPersistedDiameter =
+                    isTechnician && Boolean(persistedWell?.diameter?.trim())
+
+                  return (
+                    <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
+                      <td className="p-2">
+                        {hasPersistedWellId ? (
+                          <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                            <span>{persistedWell?.well_id}</span>
+                          </div>
+                        ) : (
+                          <Input
+                            value={well.well_id ?? ''}
+                            onChange={(e) =>
+                              handleWellFieldChange(index, 'well_id', e.target.value)
+                            }
+                            disabled={isLocked}
+                            placeholder="PM-01"
+                            className="h-10 text-xs sm:text-sm font-semibold uppercase font-mono"
+                          />
+                        )}
                       </td>
-                    )}
-                  </tr>
-                ))}
+                      <td className="p-2">
+                        {hasPersistedDepth ? (
+                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                            <span>{`${persistedWell?.depth} m`}</span>
+                          </div>
+                        ) : (
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            value={well.depth ?? ''}
+                            onChange={(e) => handleWellFieldChange(index, 'depth', e.target.value)}
+                            disabled={isLocked}
+                            placeholder="8.5"
+                            className="h-10 text-xs sm:text-sm font-mono"
+                          />
+                        )}
+                      </td>
+                      <td className="p-2">
+                        {hasPersistedCompletionDate ? (
+                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                            <span>
+                              {(() => {
+                                const rawDate = persistedWell?.completion_date
+                                const parts = String(rawDate).slice(0, 10).split('-')
+                                return parts.length === 3
+                                  ? `${parts[2]}/${parts[1]}/${parts[0]}`
+                                  : rawDate
+                              })()}
+                            </span>
+                          </div>
+                        ) : (
+                          <Input
+                            type="date"
+                            value={well.completion_date ?? ''}
+                            onChange={(e) =>
+                              handleWellFieldChange(index, 'completion_date', e.target.value)
+                            }
+                            disabled={isLocked}
+                            className="h-10 text-xs sm:text-sm"
+                          />
+                        )}
+                      </td>
+                      <td className="p-2">
+                        {hasPersistedDiameter ? (
+                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                            <span>{persistedWell?.diameter}</span>
+                          </div>
+                        ) : (
+                          <Input
+                            value={well.diameter ?? ''}
+                            onChange={(e) =>
+                              handleWellFieldChange(index, 'diameter', e.target.value)
+                            }
+                            disabled={isLocked}
+                            placeholder='2"'
+                            className="h-10 text-xs sm:text-sm font-mono"
+                          />
+                        )}
+                      </td>
+                      {!isLocked && (isAdmin || isWellRowEmpty(persistedWell || well)) && (
+                        <td className="p-2 text-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveWell(index)}
+                            className="h-9 w-9 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50"
+                            title={isAdmin ? 'Remover poço (Admin)' : 'Remover poço vazio'}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
