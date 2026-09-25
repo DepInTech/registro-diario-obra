@@ -1628,6 +1628,70 @@ function FieldFullEditor({
       setFormData(updatedItem)
       setHasUnsavedChanges(false)
 
+      if (isAdmin && formData.projectId) {
+        const structuralWells = (formData.extraction_data || []).map((row: any) => ({
+          well: String(row.well || '').trim(),
+          pump: row.pump !== undefined && row.pump !== null ? String(row.pump).trim() : '',
+          autopump:
+            row.autopump !== undefined && row.autopump !== null ? String(row.autopump).trim() : '',
+        }))
+
+        const filledFieldsRecord: Record<string, boolean> = {}
+        if (formData.projectName?.trim()) filledFieldsRecord.projectName = true
+        if (formData.clientName?.trim()) filledFieldsRecord.clientName = true
+        if (formData.contractCode?.trim()) filledFieldsRecord.contractCode = true
+        if (formData.area?.trim()) filledFieldsRecord.area = true
+        if (formData.operator?.trim()) filledFieldsRecord.operator = true
+        if (formData.operatorName?.trim()) filledFieldsRecord.operatorName = true
+
+        structuralWells.forEach((w) => {
+          if (w.well) {
+            filledFieldsRecord[`well_${w.well}`] = true
+            if (w.pump) filledFieldsRecord[`pump_${w.well}`] = true
+          }
+        })
+
+        const baseSheetFieldPayload = {
+          projectId: formData.projectId,
+          projectName: formData.projectName || '',
+          clientName: formData.clientName || '',
+          contractCode: formData.contractCode || '',
+          area: formData.area || '',
+          operator: formData.operator || '',
+          operatorName: formData.operatorName || '',
+          technician_name: formData.operatorName || '',
+          technicianName: formData.operatorName || '',
+          wells: structuralWells,
+          extraction_data: structuralWells,
+          filled_fields: filledFieldsRecord,
+          published: true,
+          published_at: new Date().toISOString(),
+        }
+
+        try {
+          const proj = await offlineStorage.getProject(formData.projectId)
+          if (proj) {
+            await offlineStorage.saveProject({
+              ...proj,
+              base_sheet_field: baseSheetFieldPayload,
+              base_sheet_published: true,
+              base_sheet_updated_at: new Date().toISOString(),
+              lastModified: Date.now(),
+              syncStatus: 'pending_update',
+            })
+          }
+          if (navigator.onLine && pb.authStore.isValid) {
+            await pb.collection('projects').update(formData.projectId, {
+              base_sheet_field: baseSheetFieldPayload,
+              base_sheet_published: true,
+              base_sheet_updated_at: new Date().toISOString(),
+            })
+          }
+        } catch (e) {
+          console.warn('Falha ao publicar ficha base (Planilha de Campo):', e)
+        }
+      }
+
       if (isOnline) {
         await syncNow()
       }

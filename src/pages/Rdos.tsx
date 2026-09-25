@@ -1650,6 +1650,81 @@ function RdoFullPageEditor({
       setFormData(updatedItem)
       setHasUnsavedChanges(false)
 
+      if (isAdmin && formData.projectId) {
+        const structuralWells = (formData.wells || []).map((w: any) => ({
+          wellId: w.well_id || w.wellId || w.id || '',
+          identification: w.well_id || w.identification || '',
+          depth: w.depth !== undefined && w.depth !== null ? String(w.depth) : '',
+          diameter: w.diameter || '',
+          completionDate: w.completion_date || w.completionDate || '',
+        }))
+
+        const filledFieldsRecord: Record<string, boolean> = {}
+        if (formData.projectName?.trim()) filledFieldsRecord.projectName = true
+        if (formData.clientName?.trim()) filledFieldsRecord.clientName = true
+        if (formData.contractCode?.trim()) filledFieldsRecord.contractCode = true
+        if (formData.location?.trim()) filledFieldsRecord.location = true
+        if (formData.companyName?.trim()) filledFieldsRecord.companyName = true
+        if (formData.supervisedBy?.trim()) filledFieldsRecord.supervisedBy = true
+        if (formData.supervisedByName?.trim()) filledFieldsRecord.supervisedByName = true
+        if (formData.performedBy?.trim()) filledFieldsRecord.performedBy = true
+        if (formData.performedByName?.trim()) filledFieldsRecord.performedByName = true
+        if (formData.activityTitle?.trim()) filledFieldsRecord.activityTitle = true
+        if (formData.activityDescription?.trim()) filledFieldsRecord.activityDescription = true
+
+        structuralWells.forEach((w) => {
+          if (w.wellId || w.identification) {
+            filledFieldsRecord[`well_${w.wellId || w.identification}`] = true
+          }
+        })
+
+        const baseSheetRdoPayload = {
+          projectId: formData.projectId,
+          projectName: formData.projectName || '',
+          clientName: formData.clientName || '',
+          contractCode: formData.contractCode || '',
+          location: formData.location || '',
+          companyName: formData.companyName || '',
+          supervisedBy: formData.supervisedBy || '',
+          supervised_by: formData.supervisedBy || '',
+          supervised_by_name: formData.supervisedByName || '',
+          performedBy: formData.performedBy || '',
+          performed_by: formData.performedBy || '',
+          performed_by_name: formData.performedByName || '',
+          technicianName: formData.performedByName || '',
+          empresa_executora: formData.companyName || '',
+          activity_title: formData.activityTitle || '',
+          activity_description_base: formData.activityDescription || '',
+          area: formData.location || '',
+          wells: structuralWells,
+          filled_fields: filledFieldsRecord,
+          published: true,
+          published_at: new Date().toISOString(),
+        }
+        try {
+          const proj = await offlineStorage.getProject(formData.projectId)
+          if (proj) {
+            await offlineStorage.saveProject({
+              ...proj,
+              base_sheet_rdo: baseSheetRdoPayload,
+              base_sheet_published: true,
+              base_sheet_updated_at: new Date().toISOString(),
+              lastModified: Date.now(),
+              syncStatus: 'pending_update',
+            })
+          }
+          if (navigator.onLine && pb.authStore.isValid) {
+            await pb.collection('projects').update(formData.projectId, {
+              base_sheet_rdo: baseSheetRdoPayload,
+              base_sheet_published: true,
+              base_sheet_updated_at: new Date().toISOString(),
+            })
+          }
+        } catch (e) {
+          console.warn('Falha ao publicar ficha base (RDO):', e)
+        }
+      }
+
       if (isOnline) {
         await syncNow()
       }
