@@ -503,6 +503,11 @@ export function FieldSpreadsheets({ query }: { query: string }) {
               well: row.well || '',
               pump: row.pump || '',
             })),
+            filled_fields: {
+              operator: user?.id || '',
+              operatorName: (user?.name || '').trim(),
+              area: 'Oficina Central',
+            },
             captured_at: nowIso,
           }
         : undefined
@@ -1090,14 +1095,30 @@ function FieldFullEditor({
     }
   }, [formData.projectId])
 
+  // Snapshot administrativo gravado no registro persistido (fonte da verdade definitiva)
+  // Prioriza initialSheet.admin_snapshot ou formData.admin_snapshot
+  const adminSnapshot = initialSheet.admin_snapshot || formData.admin_snapshot
+  const snapshotWells = adminSnapshot?.wells || []
+  const snapshotFilledFields = (adminSnapshot?.filled_fields || {}) as Record<string, any>
+
   const handleFieldChange = (field: keyof OfflineFieldSheetItem, value: any) => {
+    if (!isAdmin) {
+      if (field === 'operatorName' || field === 'operator') {
+        const fixed = (
+          adminSnapshot?.technician_name ||
+          snapshotFilledFields.operatorName ||
+          ''
+        ).trim()
+        if (fixed) return
+      }
+      if (field === 'area') {
+        const fixed = (snapshotFilledFields.area || '').trim()
+        if (fixed) return
+      }
+    }
     setFormData((prev) => ({ ...prev, [field]: value }))
     setHasUnsavedChanges(true)
   }
-
-  // Snapshot administrativo gravado no registro persistido (fonte da verdade definitiva)
-  const adminSnapshot = initialSheet.admin_snapshot
-  const snapshotWells = adminSnapshot?.wells || []
 
   // Extraction wells handlers
   // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha (snapshotWells vazio e initialSheet.extraction_data vazio)
@@ -1252,18 +1273,32 @@ function FieldFullEditor({
     const isProvisional = isNew || isProvisionalId(formData.id)
 
     // Se quem está salvando é o Admin, gera e atualiza o admin_snapshot contendo
-    // technician_name (texto puro), operator, e poços PR configurados (com well e pump)
-    let currentAdminSnapshot = formData.admin_snapshot
+    // technician_name (texto puro), operator, poços PR configurados (com well e pump)
+    // e o dicionário filled_fields com todos os campos estruturais preenchidos pelo Admin.
+    let currentAdminSnapshot = formData.admin_snapshot || initialSheet.admin_snapshot
     if (isAdmin) {
       const wellsSnapshot = (formData.extraction_data || []).map((row) => ({
         well: String(row.well || '').trim(),
         pump: row.pump !== undefined && row.pump !== null ? String(row.pump).trim() : '',
       }))
 
+      const effectiveOpName = (formData.operatorName || user?.name || '').trim()
+      const filledFieldsMap: Record<string, any> = {}
+      if (formData.operator && String(formData.operator).trim()) {
+        filledFieldsMap.operator = formData.operator
+      }
+      if (effectiveOpName) {
+        filledFieldsMap.operatorName = effectiveOpName
+      }
+      if (formData.area && String(formData.area).trim()) {
+        filledFieldsMap.area = String(formData.area).trim()
+      }
+
       currentAdminSnapshot = {
         operator: formData.operator || user?.id || '',
-        technician_name: (formData.operatorName || user?.name || '').trim(),
+        technician_name: effectiveOpName,
         wells: wellsSnapshot,
+        filled_fields: filledFieldsMap,
         captured_at: nowIso,
       }
     }
@@ -1738,15 +1773,17 @@ function FieldFullEditor({
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
             {(() => {
-              const techFixedName = (
+              const operatorFixedName = (
                 adminSnapshot?.technician_name ||
+                snapshotFilledFields.operatorName ||
                 initialSheet?.operatorName ||
                 ''
               ).trim()
-              if (isTechnician && Boolean(techFixedName)) {
+              const isOperatorLocked = isTechnician && Boolean(operatorFixedName)
+              if (isOperatorLocked) {
                 return (
                   <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
-                    <span>{techFixedName}</span>
+                    <span>{operatorFixedName}</span>
                   </div>
                 )
               }
@@ -1759,7 +1796,7 @@ function FieldFullEditor({
                   className="mt-1"
                 />
               )
-            })()}
+            })()}{' '}
           </div>
           <div>
             <label className="epa-label">DATA</label>

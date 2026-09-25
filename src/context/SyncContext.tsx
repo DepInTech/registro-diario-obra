@@ -1789,12 +1789,20 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           }
 
           // Snapshot administrativo recebido do servidor ou mantido do local
-          const rdoSnapshot =
+          let rdoSnapshot =
             record.admin_snapshot && typeof record.admin_snapshot === 'object'
               ? record.admin_snapshot
               : typeof record.admin_snapshot === 'string' && record.admin_snapshot.trim() !== ''
                 ? JSON.parse(record.admin_snapshot)
                 : local?.admin_snapshot
+
+          // Se o servidor tem admin_snapshot, ele é a autoridade sobre o local
+          if (record.admin_snapshot) {
+            rdoSnapshot =
+              typeof record.admin_snapshot === 'string' && record.admin_snapshot.trim() !== ''
+                ? JSON.parse(record.admin_snapshot)
+                : record.admin_snapshot
+          }
 
           // Se wells estiver vazio e o snapshot contiver poços pré-configurados pelo Admin, usa-os
           if (
@@ -2027,12 +2035,20 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           }
 
           // Snapshot administrativo recebido do servidor ou mantido do local
-          const sheetSnapshot =
+          let sheetSnapshot =
             record.admin_snapshot && typeof record.admin_snapshot === 'object'
               ? record.admin_snapshot
               : typeof record.admin_snapshot === 'string' && record.admin_snapshot.trim() !== ''
                 ? JSON.parse(record.admin_snapshot)
                 : local?.admin_snapshot
+
+          // Se o servidor tem admin_snapshot, ele é a autoridade sobre o local
+          if (record.admin_snapshot) {
+            sheetSnapshot =
+              typeof record.admin_snapshot === 'string' && record.admin_snapshot.trim() !== ''
+                ? JSON.parse(record.admin_snapshot)
+                : record.admin_snapshot
+          }
 
           const updatedSheet: OfflineFieldSheetItem = {
             id: record.id,

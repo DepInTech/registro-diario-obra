@@ -454,6 +454,8 @@ export function RdosPage({ query }: { query: string }) {
         ? {
             supervised_by: user?.id || '',
             supervised_by_name: (user?.name || '').trim(),
+            performed_by: '',
+            performed_by_name: '',
             empresa_executora: initialCompanyName,
             wells: (preloadedWells || []).map((w) => ({
               well_id: w.well_id,
@@ -461,6 +463,11 @@ export function RdosPage({ query }: { query: string }) {
               completion_date: w.completion_date || '',
               diameter: w.diameter || '',
             })),
+            filled_fields: {
+              supervisedBy: user?.id || '',
+              supervisedByName: (user?.name || '').trim(),
+              companyName: initialCompanyName,
+            },
             captured_at: nowIso,
           }
         : undefined
@@ -1216,13 +1223,34 @@ function RdoFullPageEditor({
     (!isAdmin && (formData.status === 'approved' || formData.status === 'submitted')) || isDeleted
 
   const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
+    if (!isAdmin) {
+      if (field === 'performedByName' || field === 'performedBy') {
+        const fixed = (
+          adminSnapshot?.performed_by_name ||
+          snapshotFilledFields.performedByName ||
+          ''
+        ).trim()
+        if (fixed) return
+      }
+      if (field === 'supervisedByName' || field === 'supervisedBy') {
+        const fixed = (
+          adminSnapshot?.supervised_by_name ||
+          snapshotFilledFields.supervisedByName ||
+          initialReport?.supervisedByName ||
+          ''
+        ).trim()
+        if (fixed) return
+      }
+    }
     setFormData((prev) => ({ ...prev, [field]: value }))
     setHasUnsavedChanges(true)
   }
 
   // Snapshot administrativo gravado no registro persistido (fonte da verdade definitiva)
-  const adminSnapshot = initialReport.admin_snapshot
+  // Prioriza o admin_snapshot vindo do servidor / initialReport ou do próprio formData
+  const adminSnapshot = initialReport.admin_snapshot || formData.admin_snapshot
   const snapshotWells = adminSnapshot?.wells || []
+  const snapshotFilledFields = (adminSnapshot?.filled_fields || {}) as Record<string, any>
 
   // Wells Handlers (Os poços são cadastrados diretamente na ficha pelo Administrador)
   // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha (snapshotWells vazio e initialReport.wells vazio)
@@ -1230,7 +1258,6 @@ function RdoFullPageEditor({
     isAdmin ||
     ((!snapshotWells || snapshotWells.length === 0) &&
       (!initialReport.wells || initialReport.wells.length === 0))
-
   const handleAddWell = () => {
     if (!canAddWell) return
     const nextIndex = (formData.wells?.length || 0) + 1
@@ -1470,9 +1497,10 @@ function RdoFullPageEditor({
     }
 
     // Se quem está salvando é o Admin, gera e atualiza o admin_snapshot contendo
-    // supervised_by_name (texto puro), empresa_executora e wells completos com valores preenchidos.
+    // supervised_by_name (texto puro), performed_by/performed_by_name, empresa_executora,
+    // wells completos com valores preenchidos e o dicionário completo filled_fields.
     // Se for o Técnico salvando, preserva o admin_snapshot que já veio do Admin/servidor.
-    let currentAdminSnapshot = formData.admin_snapshot
+    let currentAdminSnapshot = formData.admin_snapshot || initialReport.admin_snapshot
     if (isAdmin) {
       const wellsSnapshot = (formData.wells || []).map((w) => ({
         id: w.id,
@@ -1485,11 +1513,34 @@ function RdoFullPageEditor({
         diameter: w.diameter ? String(w.diameter).trim() : '',
       }))
 
+      // Mapeia todos os campos de formulário preenchidos pelo Administrador neste momento
+      const filledFieldsMap: Record<string, any> = {}
+      if (formData.supervisedBy && String(formData.supervisedBy).trim()) {
+        filledFieldsMap.supervisedBy = formData.supervisedBy
+      }
+      const effectiveSupName = (formData.supervisedByName || user?.name || '').trim()
+      if (effectiveSupName) {
+        filledFieldsMap.supervisedByName = effectiveSupName
+      }
+      if (formData.performedBy && String(formData.performedBy).trim()) {
+        filledFieldsMap.performedBy = formData.performedBy
+      }
+      if (formData.performedByName && String(formData.performedByName).trim()) {
+        filledFieldsMap.performedByName = String(formData.performedByName).trim()
+      }
+      if (formData.companyName && String(formData.companyName).trim()) {
+        filledFieldsMap.companyName = String(formData.companyName).trim()
+        filledFieldsMap.empresa_executora = String(formData.companyName).trim()
+      }
+
       currentAdminSnapshot = {
         supervised_by: formData.supervisedBy || user?.id || '',
-        supervised_by_name: (formData.supervisedByName || user?.name || '').trim(),
+        supervised_by_name: effectiveSupName,
+        performed_by: formData.performedBy || '',
+        performed_by_name: (formData.performedByName || '').trim(),
         empresa_executora: (formData.companyName || '').trim(),
         wells: wellsSnapshot,
+        filled_fields: filledFieldsMap,
         captured_at: nowIso,
       }
     }
@@ -2051,23 +2102,42 @@ function RdoFullPageEditor({
           </div>
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Realizado por (Técnico Executor)</label>
-            <Input
-              placeholder="Nome do técnico executor"
-              value={formData.performedByName ?? ''}
-              onChange={(e) => handleFieldChange('performedByName', e.target.value)}
-              disabled={isLocked}
-              className="mt-1.5"
-            />
+            {(() => {
+              const performedFixedName = (
+                adminSnapshot?.performed_by_name ||
+                snapshotFilledFields.performedByName ||
+                ''
+              ).trim()
+              const isPerformedLocked = isTechnician && Boolean(performedFixedName)
+              if (isPerformedLocked) {
+                return (
+                  <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                    <span>{performedFixedName}</span>
+                  </div>
+                )
+              }
+              return (
+                <Input
+                  placeholder="Nome do técnico executor"
+                  value={formData.performedByName ?? ''}
+                  onChange={(e) => handleFieldChange('performedByName', e.target.value)}
+                  disabled={isLocked}
+                  className="mt-1.5"
+                />
+              )
+            })()}
           </div>
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Supervisionado por (Responsável Técnico)</label>
             {(() => {
               const supervisorFixedName = (
                 adminSnapshot?.supervised_by_name ||
+                snapshotFilledFields.supervisedByName ||
                 initialReport?.supervisedByName ||
                 ''
               ).trim()
-              if (isTechnician && Boolean(supervisorFixedName)) {
+              const isSupervisorLocked = isTechnician && Boolean(supervisorFixedName)
+              if (isSupervisorLocked) {
                 return (
                   <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
                     <span>{supervisorFixedName}</span>
