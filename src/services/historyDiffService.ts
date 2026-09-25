@@ -56,16 +56,29 @@ export function createFieldSheetSnapshot(sheet: OfflineFieldSheetItem): Record<s
   return {
     area: sheet.area || '',
     weather: sheet.weather || '',
-    pluviometer: sheet.pluviometer ?? 0,
+    pluviometer:
+      sheet.pluviometer === 0 || sheet.pluviometer === '0' ? '' : (sheet.pluviometer ?? ''),
     morning_time: sheet.morning_time || '',
     afternoon_time: sheet.afternoon_time || '',
     infiltration_morning_time: sheet.infiltration_morning_time || '',
     infiltration_afternoon_time: sheet.infiltration_afternoon_time || '',
     nutrient_done: Boolean(sheet.nutrient_done),
-    nutrient_map_kg: sheet.nutrient_map_kg ?? 0,
-    nutrient_ureia_kg: sheet.nutrient_ureia_kg ?? 0,
-    waste_liquid_qty: sheet.waste_liquid_qty ?? '',
-    waste_solid_qty: sheet.waste_solid_qty ?? '',
+    nutrient_map_kg:
+      sheet.nutrient_map_kg === 0 || sheet.nutrient_map_kg === '0'
+        ? ''
+        : (sheet.nutrient_map_kg ?? ''),
+    nutrient_ureia_kg:
+      sheet.nutrient_ureia_kg === 0 || sheet.nutrient_ureia_kg === '0'
+        ? ''
+        : (sheet.nutrient_ureia_kg ?? ''),
+    waste_liquid_qty:
+      sheet.waste_liquid_qty === 0 || sheet.waste_liquid_qty === '0'
+        ? ''
+        : (sheet.waste_liquid_qty ?? ''),
+    waste_solid_qty:
+      sheet.waste_solid_qty === 0 || sheet.waste_solid_qty === '0'
+        ? ''
+        : (sheet.waste_solid_qty ?? ''),
     env_5s_check: Boolean(sheet.env_5s_check),
     env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
     observations: sheet.observations || '',

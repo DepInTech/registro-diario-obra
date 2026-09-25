@@ -149,7 +149,7 @@ export type FieldSheet = RecordModel & {
   date: string
   area: string
   weather?: string
-  pluviometer?: number
+  pluviometer?: number | string
   morning_time?: string
   afternoon_time?: string
   infiltration_morning_time?: string
@@ -157,8 +157,8 @@ export type FieldSheet = RecordModel & {
   extraction_data?: ExtractionRow[]
   infiltration_data?: Record<string, string>
   nutrient_done?: boolean
-  nutrient_map_kg?: number
-  nutrient_ureia_kg?: number
+  nutrient_map_kg?: number | string
+  nutrient_ureia_kg?: number | string
   compressor_data?: Record<string, string>
   oil_removal_data?: Record<string, string>
   waste_liquid_qty?: string | number

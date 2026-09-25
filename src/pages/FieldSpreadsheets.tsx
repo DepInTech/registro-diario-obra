@@ -176,7 +176,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 operator: rec.operator,
                 operatorName: parsedSnapshot?.technician_name || op?.name || 'Carlos Oliveira',
                 weather: rec.weather || 'Sol',
-                pluviometer: rec.pluviometer || 0,
+                pluviometer:
+                  rec.pluviometer === 0 || rec.pluviometer === '0' ? '' : (rec.pluviometer ?? ''),
                 morning_time: rec.morning_time || '',
                 afternoon_time: rec.afternoon_time || '',
                 infiltration_morning_time: rec.infiltration_morning_time || '',
@@ -184,12 +185,24 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 extraction_data: rec.extraction_data || [],
                 infiltration_data: rec.infiltration_data || {},
                 nutrient_done: Boolean(rec.nutrient_done),
-                nutrient_map_kg: rec.nutrient_map_kg || 0,
-                nutrient_ureia_kg: rec.nutrient_ureia_kg || 0,
+                nutrient_map_kg:
+                  rec.nutrient_map_kg === 0 || rec.nutrient_map_kg === '0'
+                    ? ''
+                    : (rec.nutrient_map_kg ?? ''),
+                nutrient_ureia_kg:
+                  rec.nutrient_ureia_kg === 0 || rec.nutrient_ureia_kg === '0'
+                    ? ''
+                    : (rec.nutrient_ureia_kg ?? ''),
                 compressor_data: rec.compressor_data || {},
                 oil_removal_data: rec.oil_removal_data || {},
-                waste_liquid_qty: rec.waste_liquid_qty ?? '',
-                waste_solid_qty: rec.waste_solid_qty ?? '',
+                waste_liquid_qty:
+                  rec.waste_liquid_qty === 0 || rec.waste_liquid_qty === '0'
+                    ? ''
+                    : (rec.waste_liquid_qty ?? ''),
+                waste_solid_qty:
+                  rec.waste_solid_qty === 0 || rec.waste_solid_qty === '0'
+                    ? ''
+                    : (rec.waste_solid_qty ?? ''),
                 env_5s_check: Boolean(rec.env_5s_check),
                 env_checklist_monthly: Boolean(rec.env_checklist_monthly),
                 observations: rec.observations || '',
@@ -834,7 +847,37 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         ) : (
           <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((sheet) => {
-              const totalNutrients = (sheet.nutrient_map_kg || 0) + (sheet.nutrient_ureia_kg || 0)
+              const parseNutrientVal = (val: unknown): number | null => {
+                if (val === null || val === undefined || val === '') return null
+                let s = String(val).trim()
+                if (s === '' || s === '0') return null
+                if (s.includes(',') && s.includes('.')) {
+                  if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+                    s = s.replace(/\./g, '').replace(',', '.')
+                  } else {
+                    s = s.replace(/,/g, '')
+                  }
+                } else if (s.includes(',')) {
+                  s = s.replace(',', '.')
+                }
+                const n = parseFloat(s)
+                return isNaN(n) ? null : n
+              }
+              const mapVal = parseNutrientVal(sheet.nutrient_map_kg)
+              const ureiaVal = parseNutrientVal(sheet.nutrient_ureia_kg)
+              const totalNutrientNum = (mapVal ?? 0) + (ureiaVal ?? 0)
+              const totalNutrientsDisplay =
+                mapVal === null && ureiaVal === null
+                  ? '—'
+                  : totalNutrientNum === 0
+                    ? '—'
+                    : `${Number(totalNutrientNum.toFixed(2))} kg`
+
+              const wasteDisplay = (() => {
+                const w = sheet.waste_liquid_qty
+                if (w === undefined || w === null || w === '' || w === 0 || w === '0') return '—'
+                return String(w)
+              })()
               return (
                 <div
                   key={sheet.id}
@@ -960,13 +1003,11 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                       <p className="text-[9px] text-slate-400">Poços</p>
                     </div>
                     <div>
-                      <p className="font-mono text-sm font-semibold">{totalNutrients} kg</p>
+                      <p className="font-mono text-sm font-semibold">{totalNutrientsDisplay}</p>
                       <p className="text-[9px] text-slate-400">Nutrientes</p>
                     </div>
                     <div>
-                      <p className="font-mono text-sm font-semibold">
-                        {sheet.waste_liquid_qty ? `${sheet.waste_liquid_qty}` : '—'}
-                      </p>
+                      <p className="font-mono text-sm font-semibold">{wasteDisplay}</p>
                       <p className="text-[9px] text-slate-400">Resíduos</p>
                     </div>
                   </div>
@@ -1771,10 +1812,28 @@ function FieldFullEditor({
     }
   }
 
-  const nutrientTotal = useMemo(
-    () => Number(formData.nutrient_map_kg || 0) + Number(formData.nutrient_ureia_kg || 0),
-    [formData.nutrient_map_kg, formData.nutrient_ureia_kg],
-  )
+  const parseNutrientValue = (val: unknown): number | null => {
+    if (val === null || val === undefined || val === '') return null
+    let s = String(val).trim()
+    if (s === '' || s === '0') return null
+    if (s.includes(',') && s.includes('.')) {
+      if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+        s = s.replace(/\./g, '').replace(',', '.')
+      } else {
+        s = s.replace(/,/g, '')
+      }
+    } else if (s.includes(',')) {
+      s = s.replace(',', '.')
+    }
+    const n = parseFloat(s)
+    return isNaN(n) ? null : n
+  }
+
+  const nutrientTotal = useMemo(() => {
+    const mapVal = parseNutrientValue(formData.nutrient_map_kg)
+    const ureiaVal = parseNutrientValue(formData.nutrient_ureia_kg)
+    return (mapVal ?? 0) + (ureiaVal ?? 0)
+  }, [formData.nutrient_map_kg, formData.nutrient_ureia_kg])
 
   return (
     <div className="space-y-6 pb-16">
@@ -2105,19 +2164,20 @@ function FieldFullEditor({
             <label className="epa-label">PLUVIÔMETRO (mm)</label>
             {isFieldLockedByAdmin('pluviometer') ? (
               <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                <span>{`${formData.pluviometer ?? 0} mm`}</span>
+                <span>{`${formData.pluviometer === 0 || formData.pluviometer === '0' || formData.pluviometer === '' ? '—' : `${formData.pluviometer} mm`}`}</span>
               </div>
             ) : (
               <Input
-                type="number"
-                inputMode="decimal"
-                value={formData.pluviometer ?? ''}
-                onChange={(e) => {
-                  const val = e.target.value
-                  handleFieldChange('pluviometer', val === '' ? '' : Number(val))
-                }}
+                type="text"
+                value={
+                  formData.pluviometer === 0 || formData.pluviometer === '0'
+                    ? ''
+                    : (formData.pluviometer ?? '')
+                }
+                onChange={(e) => handleFieldChange('pluviometer', e.target.value)}
                 disabled={isLocked}
-                className="mt-1 font-mono min-h-[42px]"
+                placeholder="Ex.: 0 ou 12.5"
+                className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
               />
             )}
           </div>
@@ -2620,28 +2680,30 @@ function FieldFullEditor({
           <div>
             <label className="epa-label">Quantidade MAP (Kg)</label>
             <Input
-              type="number"
-              inputMode="decimal"
-              value={formData.nutrient_map_kg ?? ''}
-              onChange={(e) => {
-                const val = e.target.value
-                handleFieldChange('nutrient_map_kg', val === '' ? '' : Number(val))
-              }}
+              type="text"
+              value={
+                formData.nutrient_map_kg === 0 || formData.nutrient_map_kg === '0'
+                  ? ''
+                  : (formData.nutrient_map_kg ?? '')
+              }
+              onChange={(e) => handleFieldChange('nutrient_map_kg', e.target.value)}
               disabled={isLocked}
+              placeholder="Ex.: 10 ou 1.250,5"
               className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
           </div>
           <div>
             <label className="epa-label">Quantidade Ureia (Kg)</label>
             <Input
-              type="number"
-              inputMode="decimal"
-              value={formData.nutrient_ureia_kg ?? ''}
-              onChange={(e) => {
-                const val = e.target.value
-                handleFieldChange('nutrient_ureia_kg', val === '' ? '' : Number(val))
-              }}
+              type="text"
+              value={
+                formData.nutrient_ureia_kg === 0 || formData.nutrient_ureia_kg === '0'
+                  ? ''
+                  : (formData.nutrient_ureia_kg ?? '')
+              }
+              onChange={(e) => handleFieldChange('nutrient_ureia_kg', e.target.value)}
               disabled={isLocked}
+              placeholder="Ex.: 10 ou 1.250,5"
               className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
           </div>
@@ -2909,7 +2971,11 @@ function FieldFullEditor({
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Líquido</label>
             <Input
               type="text"
-              value={formData.waste_liquid_qty ?? ''}
+              value={
+                formData.waste_liquid_qty === 0 || formData.waste_liquid_qty === '0'
+                  ? ''
+                  : (formData.waste_liquid_qty ?? '')
+              }
               onChange={(e) => handleFieldChange('waste_liquid_qty', e.target.value)}
               disabled={isLocked}
               placeholder="Ex.: 02 ou 2 tambores"
@@ -2920,7 +2986,11 @@ function FieldFullEditor({
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Sólido</label>
             <Input
               type="text"
-              value={formData.waste_solid_qty ?? ''}
+              value={
+                formData.waste_solid_qty === 0 || formData.waste_solid_qty === '0'
+                  ? ''
+                  : (formData.waste_solid_qty ?? '')
+              }
               onChange={(e) => handleFieldChange('waste_solid_qty', e.target.value)}
               disabled={isLocked}
               placeholder="Ex.: 01 ou 1 bombona"

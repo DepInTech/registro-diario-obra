@@ -1139,7 +1139,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               date: sheet.date || new Date().toISOString().slice(0, 10),
               area: sheet.area || 'Geral',
               weather: sheet.weather || 'Sol',
-              pluviometer: sheet.pluviometer || 0,
+              pluviometer:
+                sheet.pluviometer === 0 || sheet.pluviometer === '0'
+                  ? ''
+                  : (sheet.pluviometer ?? ''),
               morning_time: sheet.morning_time || '',
               afternoon_time: sheet.afternoon_time || '',
               infiltration_morning_time: sheet.infiltration_morning_time || '',
@@ -1147,12 +1150,24 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               extraction_data: sheet.extraction_data || [],
               infiltration_data: sheet.infiltration_data || {},
               nutrient_done: Boolean(sheet.nutrient_done),
-              nutrient_map_kg: sheet.nutrient_map_kg || 0,
-              nutrient_ureia_kg: sheet.nutrient_ureia_kg || 0,
+              nutrient_map_kg:
+                sheet.nutrient_map_kg === 0 || sheet.nutrient_map_kg === '0'
+                  ? ''
+                  : (sheet.nutrient_map_kg ?? ''),
+              nutrient_ureia_kg:
+                sheet.nutrient_ureia_kg === 0 || sheet.nutrient_ureia_kg === '0'
+                  ? ''
+                  : (sheet.nutrient_ureia_kg ?? ''),
               compressor_data: sheet.compressor_data || {},
               oil_removal_data: sheet.oil_removal_data || {},
-              waste_liquid_qty: sheet.waste_liquid_qty ?? '',
-              waste_solid_qty: sheet.waste_solid_qty ?? '',
+              waste_liquid_qty:
+                sheet.waste_liquid_qty === 0 || sheet.waste_liquid_qty === '0'
+                  ? ''
+                  : (sheet.waste_liquid_qty ?? ''),
+              waste_solid_qty:
+                sheet.waste_solid_qty === 0 || sheet.waste_solid_qty === '0'
+                  ? ''
+                  : (sheet.waste_solid_qty ?? ''),
               env_5s_check: Boolean(sheet.env_5s_check),
               env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
               observations: sheet.observations || '',
@@ -1278,7 +1293,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               date: sheet.date,
               area: sheet.area || 'Geral',
               weather: sheet.weather || 'Sol',
-              pluviometer: sheet.pluviometer || 0,
+              pluviometer:
+                sheet.pluviometer === 0 || sheet.pluviometer === '0'
+                  ? ''
+                  : (sheet.pluviometer ?? ''),
               morning_time: sheet.morning_time || '',
               afternoon_time: sheet.afternoon_time || '',
               infiltration_morning_time: sheet.infiltration_morning_time || '',
@@ -1286,12 +1304,24 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               extraction_data: sheet.extraction_data || [],
               infiltration_data: sheet.infiltration_data || {},
               nutrient_done: Boolean(sheet.nutrient_done),
-              nutrient_map_kg: sheet.nutrient_map_kg || 0,
-              nutrient_ureia_kg: sheet.nutrient_ureia_kg || 0,
+              nutrient_map_kg:
+                sheet.nutrient_map_kg === 0 || sheet.nutrient_map_kg === '0'
+                  ? ''
+                  : (sheet.nutrient_map_kg ?? ''),
+              nutrient_ureia_kg:
+                sheet.nutrient_ureia_kg === 0 || sheet.nutrient_ureia_kg === '0'
+                  ? ''
+                  : (sheet.nutrient_ureia_kg ?? ''),
               compressor_data: sheet.compressor_data || {},
               oil_removal_data: sheet.oil_removal_data || {},
-              waste_liquid_qty: sheet.waste_liquid_qty ?? '',
-              waste_solid_qty: sheet.waste_solid_qty ?? '',
+              waste_liquid_qty:
+                sheet.waste_liquid_qty === 0 || sheet.waste_liquid_qty === '0'
+                  ? ''
+                  : (sheet.waste_liquid_qty ?? ''),
+              waste_solid_qty:
+                sheet.waste_solid_qty === 0 || sheet.waste_solid_qty === '0'
+                  ? ''
+                  : (sheet.waste_solid_qty ?? ''),
               env_5s_check: Boolean(sheet.env_5s_check),
               env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
               observations: sheet.observations || '',
@@ -1989,12 +2019,24 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           let finalExtractionData = record.extraction_data || []
           let finalInfiltrationData = record.infiltration_data || {}
           let finalNutrientDone = Boolean(record.nutrient_done)
-          let finalNutrientMapKg = record.nutrient_map_kg || 0
-          let finalNutrientUreiaKg = record.nutrient_ureia_kg || 0
+          let finalNutrientMapKg =
+            record.nutrient_map_kg === 0 || record.nutrient_map_kg === '0'
+              ? ''
+              : (record.nutrient_map_kg ?? '')
+          let finalNutrientUreiaKg =
+            record.nutrient_ureia_kg === 0 || record.nutrient_ureia_kg === '0'
+              ? ''
+              : (record.nutrient_ureia_kg ?? '')
           let finalCompressorData = record.compressor_data || {}
           let finalOilRemovalData = record.oil_removal_data || {}
-          let finalWasteLiquidQty = record.waste_liquid_qty ?? ''
-          let finalWasteSolidQty = record.waste_solid_qty ?? ''
+          let finalWasteLiquidQty =
+            record.waste_liquid_qty === 0 || record.waste_liquid_qty === '0'
+              ? ''
+              : (record.waste_liquid_qty ?? '')
+          let finalWasteSolidQty =
+            record.waste_solid_qty === 0 || record.waste_solid_qty === '0'
+              ? ''
+              : (record.waste_solid_qty ?? '')
           let finalEnv5sCheck = Boolean(record.env_5s_check)
           let finalEnvChecklistMonthly = Boolean(record.env_checklist_monthly)
           let finalObservations = record.observations || ''
@@ -2076,7 +2118,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             operator: record.operator || local?.operator || '',
             operatorName: sheetSnapshot?.technician_name || operatorName,
             weather: record.weather || local?.weather || 'Sol',
-            pluviometer: record.pluviometer ?? local?.pluviometer ?? 0,
+            pluviometer:
+              record.pluviometer === 0 || record.pluviometer === '0'
+                ? ''
+                : (record.pluviometer ?? local?.pluviometer ?? ''),
             morning_time: finalMorningTime,
             afternoon_time: finalAfternoonTime,
             infiltration_morning_time: finalInfiltrationMorningTime,
@@ -2601,12 +2646,24 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           let finalExtractionData = record.extraction_data || []
           let finalInfiltrationData = record.infiltration_data || {}
           let finalNutrientDone = Boolean(record.nutrient_done)
-          let finalNutrientMapKg = record.nutrient_map_kg || 0
-          let finalNutrientUreiaKg = record.nutrient_ureia_kg || 0
+          let finalNutrientMapKg =
+            record.nutrient_map_kg === 0 || record.nutrient_map_kg === '0'
+              ? ''
+              : (record.nutrient_map_kg ?? '')
+          let finalNutrientUreiaKg =
+            record.nutrient_ureia_kg === 0 || record.nutrient_ureia_kg === '0'
+              ? ''
+              : (record.nutrient_ureia_kg ?? '')
           let finalCompressorData = record.compressor_data || {}
           let finalOilRemovalData = record.oil_removal_data || {}
-          let finalWasteLiquidQty = record.waste_liquid_qty ?? ''
-          let finalWasteSolidQty = record.waste_solid_qty ?? ''
+          let finalWasteLiquidQty =
+            record.waste_liquid_qty === 0 || record.waste_liquid_qty === '0'
+              ? ''
+              : (record.waste_liquid_qty ?? '')
+          let finalWasteSolidQty =
+            record.waste_solid_qty === 0 || record.waste_solid_qty === '0'
+              ? ''
+              : (record.waste_solid_qty ?? '')
           let finalEnv5sCheck = Boolean(record.env_5s_check)
           let finalEnvChecklistMonthly = Boolean(record.env_checklist_monthly)
           let finalObservations = record.observations || ''
@@ -2678,7 +2735,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             operator: record.operator || local?.operator || '',
             operatorName: sheetSnapshot?.technician_name || operatorName,
             weather: record.weather || local?.weather || 'Sol',
-            pluviometer: record.pluviometer ?? local?.pluviometer ?? 0,
+            pluviometer:
+              record.pluviometer === 0 || record.pluviometer === '0'
+                ? ''
+                : (record.pluviometer ?? local?.pluviometer ?? ''),
             morning_time: finalMorningTime,
             afternoon_time: finalAfternoonTime,
             infiltration_morning_time: finalInfiltrationMorningTime,
