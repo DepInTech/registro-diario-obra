@@ -1290,35 +1290,25 @@ function RdoFullPageEditor({
   const isLocked =
     (!isAdmin && (formData.status === 'approved' || formData.status === 'submitted')) || isDeleted
 
-  const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
-    if (!isAdmin) {
-      if (field === 'performedByName' || field === 'performedBy') {
-        const fixed = (
-          adminSnapshot?.performed_by_name ||
-          snapshotFilledFields.performedByName ||
-          ''
-        ).trim()
-        if (fixed) return
-      }
-      if (field === 'supervisedByName' || field === 'supervisedBy') {
-        const fixed = (
-          adminSnapshot?.supervised_by_name ||
-          snapshotFilledFields.supervisedByName ||
-          initialReport?.supervisedByName ||
-          ''
-        ).trim()
-        if (fixed) return
-      }
-    }
-    setFormData((prev) => ({ ...prev, [field]: value }))
-    setHasUnsavedChanges(true)
-  }
-
   // Snapshot administrativo gravado no registro persistido (fonte da verdade definitiva)
   // Prioriza o admin_snapshot vindo do servidor / initialReport ou do próprio formData
   const adminSnapshot = initialReport.admin_snapshot || formData.admin_snapshot
   const snapshotWells = adminSnapshot?.wells || []
   const snapshotFilledFields = (adminSnapshot?.filled_fields || {}) as Record<string, any>
+
+  const isFieldLockedByAdmin = (field: string) =>
+    !isAdmin &&
+    snapshotFilledFields[field] !== undefined &&
+    snapshotFilledFields[field] !== null &&
+    String(snapshotFilledFields[field]).trim() !== ''
+
+  const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
+    if (isFieldLockedByAdmin(field as string)) {
+      return
+    }
+    setFormData((prev) => ({ ...prev, [field]: value }))
+    setHasUnsavedChanges(true)
+  }
 
   // Wells Handlers (Os poços são cadastrados diretamente na ficha pelo Administrador)
   // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha (snapshotWells vazio e initialReport.wells vazio)
@@ -1581,25 +1571,34 @@ function RdoFullPageEditor({
         diameter: w.diameter ? String(w.diameter).trim() : '',
       }))
 
-      // Mapeia todos os campos de formulário preenchidos pelo Administrador neste momento
+      // Mapeia genericamente todos os campos do formulário preenchidos pelo Administrador
+      const excludedKeys = new Set([
+        'id',
+        'status',
+        'syncStatus',
+        'lastModified',
+        'photos',
+        'fieldPhoto',
+        'wells',
+        'change_history',
+        'admin_snapshot',
+        'created',
+        'updated',
+        'projectId',
+        'projectName',
+      ])
       const filledFieldsMap: Record<string, any> = {}
-      if (formData.supervisedBy && String(formData.supervisedBy).trim()) {
-        filledFieldsMap.supervisedBy = formData.supervisedBy
-      }
-      const effectiveSupName = (formData.supervisedByName || user?.name || '').trim()
-      if (effectiveSupName) {
-        filledFieldsMap.supervisedByName = effectiveSupName
-      }
-      if (formData.performedBy && String(formData.performedBy).trim()) {
-        filledFieldsMap.performedBy = formData.performedBy
-      }
-      if (formData.performedByName && String(formData.performedByName).trim()) {
-        filledFieldsMap.performedByName = String(formData.performedByName).trim()
-      }
+      Object.entries(formData).forEach(([key, value]) => {
+        if (excludedKeys.has(key)) return
+        if (value === undefined || value === null) return
+        if (typeof value === 'string' && value.trim() === '') return
+        filledFieldsMap[key] = value
+      })
       if (formData.companyName && String(formData.companyName).trim()) {
-        filledFieldsMap.companyName = String(formData.companyName).trim()
         filledFieldsMap.empresa_executora = String(formData.companyName).trim()
       }
+
+      const effectiveSupName = (formData.supervisedByName || user?.name || '').trim()
 
       currentAdminSnapshot = {
         supervised_by: formData.supervisedBy || user?.id || '',
@@ -2119,9 +2118,12 @@ function RdoFullPageEditor({
                 handleFieldChange('reportDate', e.target.value)
                 clearReturnedField('reportDate')
               }}
-              disabled={isLocked}
+              disabled={isLocked || isFieldLockedByAdmin('reportDate')}
+              readOnly={isFieldLockedByAdmin('reportDate')}
               className={cn(
                 'mt-1.5',
+                isFieldLockedByAdmin('reportDate') &&
+                  'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 cursor-not-allowed select-none',
                 isReturnedField('reportDate') &&
                   'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
               )}
@@ -2136,24 +2138,30 @@ function RdoFullPageEditor({
                 </span>
               )}
             </div>
-            <select
-              value={formData.weather ?? 'Sol'}
-              onChange={(e) => {
-                handleFieldChange('weather', e.target.value)
-                clearReturnedField('weather')
-              }}
-              disabled={isLocked}
-              className={cn(
-                'epa-input mt-1.5',
-                isReturnedField('weather') &&
-                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
-              )}
-            >
-              <option value="Sol">Sol</option>
-              <option value="Nublado">Nublado</option>
-              <option value="Chuva">Chuva</option>
-              <option value="Instável">Instável</option>
-            </select>
+            {isFieldLockedByAdmin('weather') ? (
+              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.weather || 'Sol'}</span>
+              </div>
+            ) : (
+              <select
+                value={formData.weather ?? 'Sol'}
+                onChange={(e) => {
+                  handleFieldChange('weather', e.target.value)
+                  clearReturnedField('weather')
+                }}
+                disabled={isLocked}
+                className={cn(
+                  'epa-input mt-1.5',
+                  isReturnedField('weather') &&
+                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+                )}
+              >
+                <option value="Sol">Sol</option>
+                <option value="Nublado">Nublado</option>
+                <option value="Chuva">Chuva</option>
+                <option value="Instável">Instável</option>
+              </select>
+            )}
           </div>
           <div>
             <label className="epa-label">Número do RDO (Sequencial do Servidor)</label>
@@ -2171,16 +2179,16 @@ function RdoFullPageEditor({
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Realizado por (Técnico Executor)</label>
             {(() => {
-              const performedFixedName = (
-                adminSnapshot?.performed_by_name ||
-                snapshotFilledFields.performedByName ||
-                ''
-              ).trim()
-              const isPerformedLocked = isTechnician && Boolean(performedFixedName)
+              const isPerformedLocked =
+                isFieldLockedByAdmin('performedByName') ||
+                isFieldLockedByAdmin('performedBy') ||
+                (!isAdmin && Boolean((adminSnapshot?.performed_by_name || '').trim()))
+              const performedDisplay =
+                formData.performedByName || adminSnapshot?.performed_by_name || ''
               if (isPerformedLocked) {
                 return (
                   <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                    <span>{performedFixedName}</span>
+                    <span>{performedDisplay}</span>
                   </div>
                 )
               }
@@ -2198,17 +2206,16 @@ function RdoFullPageEditor({
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Supervisionado por (Responsável Técnico)</label>
             {(() => {
-              const supervisorFixedName = (
-                adminSnapshot?.supervised_by_name ||
-                snapshotFilledFields.supervisedByName ||
-                initialReport?.supervisedByName ||
-                ''
-              ).trim()
-              const isSupervisorLocked = isTechnician && Boolean(supervisorFixedName)
+              const isSupervisorLocked =
+                isFieldLockedByAdmin('supervisedByName') ||
+                isFieldLockedByAdmin('supervisedBy') ||
+                (!isAdmin && Boolean((adminSnapshot?.supervised_by_name || '').trim()))
+              const supervisorDisplay =
+                formData.supervisedByName || adminSnapshot?.supervised_by_name || ''
               if (isSupervisorLocked) {
                 return (
                   <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                    <span>{supervisorFixedName}</span>
+                    <span>{supervisorDisplay}</span>
                   </div>
                 )
               }

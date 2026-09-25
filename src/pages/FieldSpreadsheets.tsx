@@ -1176,20 +1176,15 @@ function FieldFullEditor({
   const snapshotWells = adminSnapshot?.wells || []
   const snapshotFilledFields = (adminSnapshot?.filled_fields || {}) as Record<string, any>
 
+  const isFieldLockedByAdmin = (field: string) =>
+    !isAdmin &&
+    snapshotFilledFields[field] !== undefined &&
+    snapshotFilledFields[field] !== null &&
+    String(snapshotFilledFields[field]).trim() !== ''
+
   const handleFieldChange = (field: keyof OfflineFieldSheetItem, value: any) => {
-    if (!isAdmin) {
-      if (field === 'operatorName' || field === 'operator') {
-        const fixed = (
-          adminSnapshot?.technician_name ||
-          snapshotFilledFields.operatorName ||
-          ''
-        ).trim()
-        if (fixed) return
-      }
-      if (field === 'area') {
-        const fixed = (snapshotFilledFields.area || '').trim()
-        if (fixed) return
-      }
+    if (isFieldLockedByAdmin(field as string)) {
+      return
     }
     setFormData((prev) => ({ ...prev, [field]: value }))
     setHasUnsavedChanges(true)
@@ -1357,17 +1352,28 @@ function FieldFullEditor({
         pump: row.pump !== undefined && row.pump !== null ? String(row.pump).trim() : '',
       }))
 
-      const effectiveOpName = (formData.operatorName || user?.name || '').trim()
+      const excludedKeys = new Set([
+        'id',
+        'status',
+        'syncStatus',
+        'lastModified',
+        'extraction_data',
+        'change_history',
+        'admin_snapshot',
+        'created',
+        'updated',
+        'projectId',
+        'projectName',
+      ])
       const filledFieldsMap: Record<string, any> = {}
-      if (formData.operator && String(formData.operator).trim()) {
-        filledFieldsMap.operator = formData.operator
-      }
-      if (effectiveOpName) {
-        filledFieldsMap.operatorName = effectiveOpName
-      }
-      if (formData.area && String(formData.area).trim()) {
-        filledFieldsMap.area = String(formData.area).trim()
-      }
+      Object.entries(formData).forEach(([key, value]) => {
+        if (excludedKeys.has(key)) return
+        if (value === undefined || value === null) return
+        if (typeof value === 'string' && value.trim() === '') return
+        filledFieldsMap[key] = value
+      })
+
+      const effectiveOpName = (formData.operatorName || user?.name || '').trim()
 
       currentAdminSnapshot = {
         operator: formData.operator || user?.id || '',
@@ -1848,17 +1854,15 @@ function FieldFullEditor({
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
             {(() => {
-              const operatorFixedName = (
-                adminSnapshot?.technician_name ||
-                snapshotFilledFields.operatorName ||
-                initialSheet?.operatorName ||
-                ''
-              ).trim()
-              const isOperatorLocked = isTechnician && Boolean(operatorFixedName)
+              const isOperatorLocked =
+                isFieldLockedByAdmin('operatorName') ||
+                isFieldLockedByAdmin('operator') ||
+                (!isAdmin && Boolean((adminSnapshot?.technician_name || '').trim()))
+              const operatorDisplay = formData.operatorName || adminSnapshot?.technician_name || ''
               if (isOperatorLocked) {
                 return (
                   <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                    <span>{operatorFixedName}</span>
+                    <span>{operatorDisplay}</span>
                   </div>
                 )
               }
@@ -1879,34 +1883,51 @@ function FieldFullEditor({
               type="date"
               value={formData.date}
               onChange={(e) => handleFieldChange('date', e.target.value)}
-              disabled={isLocked}
-              className="mt-1"
+              disabled={isLocked || isFieldLockedByAdmin('date')}
+              readOnly={isFieldLockedByAdmin('date')}
+              className={cn(
+                'mt-1',
+                isFieldLockedByAdmin('date') &&
+                  'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 cursor-not-allowed select-none',
+              )}
             />
           </div>
           <div>
             <label className="epa-label">CLIMA</label>
-            <select
-              value={formData.weather || 'Sol'}
-              onChange={(e) => handleFieldChange('weather', e.target.value)}
-              disabled={isLocked}
-              className="epa-input mt-1"
-            >
-              <option value="Sol">Sol</option>
-              <option value="Nublado">Nublado</option>
-              <option value="Chuva">Chuva</option>
-              <option value="Instável">Instável</option>
-            </select>
+            {isFieldLockedByAdmin('weather') ? (
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.weather || 'Sol'}</span>
+              </div>
+            ) : (
+              <select
+                value={formData.weather || 'Sol'}
+                onChange={(e) => handleFieldChange('weather', e.target.value)}
+                disabled={isLocked}
+                className="epa-input mt-1"
+              >
+                <option value="Sol">Sol</option>
+                <option value="Nublado">Nublado</option>
+                <option value="Chuva">Chuva</option>
+                <option value="Instável">Instável</option>
+              </select>
+            )}
           </div>
           <div>
             <label className="epa-label">PLUVIÔMETRO (mm)</label>
-            <Input
-              type="number"
-              inputMode="decimal"
-              value={formData.pluviometer || 0}
-              onChange={(e) => handleFieldChange('pluviometer', Number(e.target.value))}
-              disabled={isLocked}
-              className="mt-1 font-mono min-h-[42px]"
-            />
+            {isFieldLockedByAdmin('pluviometer') ? (
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{`${formData.pluviometer ?? 0} mm`}</span>
+              </div>
+            ) : (
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={formData.pluviometer || 0}
+                onChange={(e) => handleFieldChange('pluviometer', Number(e.target.value))}
+                disabled={isLocked}
+                className="mt-1 font-mono min-h-[42px]"
+              />
+            )}
           </div>
         </div>
       </section>
