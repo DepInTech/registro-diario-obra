@@ -181,6 +181,10 @@ export interface OfflineProjectItem {
   deletedBy?: string
   deletedByName?: string
   deletedAt?: string
+  base_sheet_rdo?: any
+  base_sheet_field?: any
+  base_sheet_published?: boolean
+  base_sheet_updated_at?: string
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string
   syncAttempts?: number

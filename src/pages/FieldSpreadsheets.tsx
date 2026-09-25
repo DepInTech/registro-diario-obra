@@ -438,24 +438,42 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     let initialProjectName = 'Recuperação Ambiental Lote A'
     let initialClientName = 'Petrobras — Refinaria Sul'
     let initialContractCode = 'CT-EPA-2025-017'
+    let baseSheetField: any = undefined
 
     try {
       const localProjects = await offlineStorage.getAllProjects()
-      const activeProj =
-        localProjects.find((p) => !p.deleted && !p.archived && p.status === 'active') ||
-        localProjects[0]
+      let activeProj: any = undefined
+
+      if (user?.role === 'technician') {
+        activeProj = localProjects.find(
+          (p) =>
+            !p.deleted &&
+            !p.archived &&
+            p.status === 'active' &&
+            Array.isArray(p.assignedUsersIds) &&
+            p.assignedUsersIds.includes(user.id),
+        )
+      }
+      if (!activeProj) {
+        activeProj =
+          localProjects.find((p) => !p.deleted && !p.archived && p.status === 'active') ||
+          localProjects[0]
+      }
+
       if (activeProj) {
         initialProjectId = activeProj.id
         initialProjectName = activeProj.name
         initialClientName = activeProj.client || ''
         initialContractCode = activeProj.contract || activeProj.code || ''
+        if (activeProj.base_sheet_published && activeProj.base_sheet_field) {
+          baseSheetField = activeProj.base_sheet_field
+        }
       }
     } catch (e) {
       console.warn('Could not read cached projects for new field spreadsheet:', e)
     }
 
     // Inicialização da tabela de extração (poços gerenciados na própria ficha)
-    // Tenta replicar os poços da última planilha do projeto se houver, ou inicializa padrão
     let initialExtractionData: Array<{
       well: string
       morning: string
@@ -466,51 +484,108 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       autopump_condition_other?: string
     }> = []
 
-    try {
-      const existingSheets = items.filter(
-        (s) =>
-          !s.deleted && (s.projectId === initialProjectId || s.projectName === initialProjectName),
-      )
-      const lastSheet = existingSheets[0]
-      if (lastSheet && lastSheet.extraction_data && lastSheet.extraction_data.length > 0) {
-        initialExtractionData = lastSheet.extraction_data.map((row) => ({
-          well: row.well,
-          morning: '',
-          afternoon: '',
-          pump: '',
-          autopump: '',
-        }))
-      } else {
+    if (
+      baseSheetField?.wells &&
+      Array.isArray(baseSheetField.wells) &&
+      baseSheetField.wells.length > 0
+    ) {
+      initialExtractionData = baseSheetField.wells.map((w: any) => ({
+        well: w.well || '',
+        morning: '',
+        afternoon: '',
+        pump: w.pump || '',
+        autopump: w.autopump || '',
+      }))
+    } else if (
+      baseSheetField?.extraction_data &&
+      Array.isArray(baseSheetField.extraction_data) &&
+      baseSheetField.extraction_data.length > 0
+    ) {
+      initialExtractionData = baseSheetField.extraction_data.map((w: any) => ({
+        well: w.well || '',
+        morning: '',
+        afternoon: '',
+        pump: w.pump || '',
+        autopump: w.autopump || '',
+      }))
+    } else {
+      try {
+        const existingSheets = items.filter(
+          (s) =>
+            !s.deleted &&
+            (s.projectId === initialProjectId || s.projectName === initialProjectName),
+        )
+        const lastSheet = existingSheets[0]
+        if (lastSheet && lastSheet.extraction_data && lastSheet.extraction_data.length > 0) {
+          initialExtractionData = lastSheet.extraction_data.map((row) => ({
+            well: row.well,
+            morning: '',
+            afternoon: '',
+            pump: '',
+            autopump: '',
+          }))
+        } else {
+          initialExtractionData = [
+            { well: 'PR-01', morning: '', afternoon: '', pump: '', autopump: '' },
+            { well: 'PR-02', morning: '', afternoon: '', pump: '', autopump: '' },
+          ]
+        }
+      } catch (e) {
         initialExtractionData = [
           { well: 'PR-01', morning: '', afternoon: '', pump: '', autopump: '' },
           { well: 'PR-02', morning: '', afternoon: '', pump: '', autopump: '' },
         ]
       }
-    } catch (e) {
-      initialExtractionData = [
-        { well: 'PR-01', morning: '', afternoon: '', pump: '', autopump: '' },
-        { well: 'PR-02', morning: '', afternoon: '', pump: '', autopump: '' },
-      ]
     }
 
     const nowIso = new Date().toISOString()
-    const initialSheetSnapshot =
-      user?.role === 'admin'
-        ? {
-            operator: user?.id || '',
-            technician_name: (user?.name || '').trim(),
-            wells: (initialExtractionData || []).map((row) => ({
-              well: row.well || '',
-              pump: row.pump || '',
-            })),
-            filled_fields: {
-              operator: user?.id || '',
-              operatorName: (user?.name || '').trim(),
-              area: 'Oficina Central',
-            },
-            captured_at: nowIso,
-          }
-        : undefined
+    const finalArea = (baseSheetField?.area || 'Oficina Central').trim()
+    const finalOperator = (
+      baseSheetField?.operator ||
+      (user?.role === 'technician' ? user?.id : '') ||
+      'cfpekk93zx4j1pr'
+    ).trim()
+    const finalOperatorName = (
+      baseSheetField?.technician_name ||
+      (user?.role === 'technician' ? user?.name : '') ||
+      'Carlos Oliveira'
+    ).trim()
+
+    let initialSheetSnapshot: any = undefined
+
+    if (baseSheetField) {
+      // Ficha base ativa do projeto: gera o snapshot que trava os campos no Técnico
+      initialSheetSnapshot = {
+        operator: finalOperator,
+        technician_name: finalOperatorName,
+        wells: (initialExtractionData || []).map((row) => ({
+          well: row.well || '',
+          pump: row.pump || '',
+        })),
+        filled_fields: {
+          operator: finalOperator,
+          operatorName: finalOperatorName,
+          area: finalArea,
+          ...(baseSheetField.filled_fields || {}),
+        },
+        captured_at: nowIso,
+      }
+    } else if (user?.role === 'admin') {
+      initialSheetSnapshot = {
+        operator: user?.id || '',
+        technician_name: (user?.name || '').trim(),
+        wells: (initialExtractionData || []).map((row) => ({
+          well: row.well || '',
+          pump: row.pump || '',
+        })),
+        filled_fields: {
+          operator: user?.id || '',
+          operatorName: (user?.name || '').trim(),
+          area: finalArea,
+        },
+        captured_at: nowIso,
+      }
+    }
 
     const newSheet: OfflineFieldSheetItem = {
       id: 'field_' + Date.now(),
@@ -519,9 +594,9 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       clientName: initialClientName,
       contractCode: initialContractCode,
       date: nowIso.slice(0, 10),
-      area: 'Oficina Central',
-      operator: user?.id || 'cfpekk93zx4j1pr',
-      operatorName: user?.name || 'Carlos Oliveira',
+      area: finalArea,
+      operator: finalOperator,
+      operatorName: finalOperatorName,
       admin_snapshot: initialSheetSnapshot,
       weather: 'Sol',
       pluviometer: 0,
@@ -1782,7 +1857,7 @@ function FieldFullEditor({
               const isOperatorLocked = isTechnician && Boolean(operatorFixedName)
               if (isOperatorLocked) {
                 return (
-                  <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                  <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
                     <span>{operatorFixedName}</span>
                   </div>
                 )
@@ -2006,7 +2081,7 @@ function FieldFullEditor({
                   <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
                     <td className="p-2 border border-slate-200 dark:border-slate-800">
                       {hasLockedWell ? (
-                        <div className="flex items-center justify-center gap-1.5 py-2 px-2 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/60 rounded min-h-[40px]">
+                        <div className="flex items-center justify-center gap-1.5 py-2 px-2 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 rounded min-h-[40px] cursor-not-allowed select-none">
                           <span>{effectiveWell}</span>
                         </div>
                       ) : (
@@ -2057,7 +2132,7 @@ function FieldFullEditor({
                     </td>
                     <td className="p-2 border border-slate-200 dark:border-slate-800">
                       {hasLockedPump ? (
-                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px]">
+                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
                           <span>{`${effectivePump} m`}</span>
                         </div>
                       ) : (

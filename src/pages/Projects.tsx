@@ -59,6 +59,10 @@ interface ProjectItem extends EpaProject {
   deletedAt?: string
   company?: string
   area?: string
+  base_sheet_rdo?: any
+  base_sheet_field?: any
+  base_sheet_published?: boolean
+  base_sheet_updated_at?: string
 }
 
 export function Projects({
@@ -187,6 +191,10 @@ export function Projects({
               deletedBy: rec.deleted_by || undefined,
               deletedByName: expDeletedBy?.name || undefined,
               deletedAt: rec.deleted_at || undefined,
+              base_sheet_rdo: rec.base_sheet_rdo || undefined,
+              base_sheet_field: rec.base_sheet_field || undefined,
+              base_sheet_published: Boolean(rec.base_sheet_published),
+              base_sheet_updated_at: rec.base_sheet_updated_at || undefined,
             }
           })
 
@@ -228,6 +236,10 @@ export function Projects({
               deletedBy: l.deletedBy,
               deletedByName: l.deletedByName,
               deletedAt: l.deletedAt,
+              base_sheet_rdo: l.base_sheet_rdo,
+              base_sheet_field: l.base_sheet_field,
+              base_sheet_published: l.base_sheet_published,
+              base_sheet_updated_at: l.base_sheet_updated_at,
             }))
 
           const combined = [...pendingCreates, ...mapped]
@@ -263,6 +275,10 @@ export function Projects({
             deletedBy: l.deletedBy,
             deletedByName: l.deletedByName,
             deletedAt: l.deletedAt,
+            base_sheet_rdo: l.base_sheet_rdo,
+            base_sheet_field: l.base_sheet_field,
+            base_sheet_published: l.base_sheet_published,
+            base_sheet_updated_at: l.base_sheet_updated_at,
           })),
         )
         setLoading(false)

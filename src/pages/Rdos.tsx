@@ -354,123 +354,190 @@ export function RdosPage({ query }: { query: string }) {
     let initialContractCode = 'CT-EPA-2025-017'
     let initialCompanyName = 'EPA Engenharia de Proteção Ambiental'
     let initialLocation = 'Refinaria Sul — Área Operacional'
+    let baseSheetRdo: any = undefined
 
     try {
       const localProjects = await offlineStorage.getAllProjects()
-      const activeProj =
-        localProjects.find((p) => !p.deleted && !p.archived && p.status === 'active') ||
-        localProjects[0]
+      let activeProj: any = undefined
+
+      if (user?.role === 'technician') {
+        activeProj = localProjects.find(
+          (p) =>
+            !p.deleted &&
+            !p.archived &&
+            p.status === 'active' &&
+            Array.isArray(p.assignedUsersIds) &&
+            p.assignedUsersIds.includes(user.id),
+        )
+      }
+      if (!activeProj) {
+        activeProj =
+          localProjects.find((p) => !p.deleted && !p.archived && p.status === 'active') ||
+          localProjects[0]
+      }
+
       if (activeProj) {
         initialProjectId = activeProj.id
         initialProjectName = activeProj.name
         initialClientName = activeProj.client || initialClientName
         initialContractCode = activeProj.contract || initialContractCode
         initialLocation = activeProj.location || initialLocation
+        if (activeProj.base_sheet_published && activeProj.base_sheet_rdo) {
+          baseSheetRdo = activeProj.base_sheet_rdo
+        }
       }
     } catch (e) {
       console.warn('Could not read cached projects for new RDO:', e)
     }
 
     // Os poços são gerenciados diretamente na ficha (report_wells / formData.wells)
-    // Busca os poços ativos do projeto no IndexedDB ou PocketBase
     let preloadedWells: OfflineRdoItem['wells'] = []
-    try {
-      if (initialProjectId) {
-        let projectWells = await offlineStorage.getProjectWells(initialProjectId)
-        if (
-          (!projectWells || projectWells.length === 0) &&
-          navigator.onLine &&
-          pb.authStore.isValid
-        ) {
-          try {
-            projectWells = await pb.collection('wells').getFullList({
-              filter: `project = "${initialProjectId}" && active = true`,
-              sort: 'identification',
-            })
-            if (projectWells.length > 0) {
-              await offlineStorage.saveProjectWells(initialProjectId, projectWells)
+
+    if (baseSheetRdo?.wells && Array.isArray(baseSheetRdo.wells) && baseSheetRdo.wells.length > 0) {
+      preloadedWells = baseSheetRdo.wells.map((w: any) => ({
+        well_id: w.well_id,
+        depth: w.depth !== undefined && w.depth !== null ? Number(w.depth) : undefined,
+        completion_date: w.completion_date || '',
+        diameter: w.diameter || '4"',
+      }))
+    } else {
+      try {
+        if (initialProjectId) {
+          let projectWells = await offlineStorage.getProjectWells(initialProjectId)
+          if (
+            (!projectWells || projectWells.length === 0) &&
+            navigator.onLine &&
+            pb.authStore.isValid
+          ) {
+            try {
+              projectWells = await pb.collection('wells').getFullList({
+                filter: `project = "${initialProjectId}" && active = true`,
+                sort: 'identification',
+              })
+              if (projectWells.length > 0) {
+                await offlineStorage.saveProjectWells(initialProjectId, projectWells)
+              }
+            } catch {
+              // fallback
             }
-          } catch {
-            // fallback
+          }
+          if (projectWells && projectWells.length > 0) {
+            preloadedWells = projectWells
+              .filter((pw: any) => pw.active !== false)
+              .map((pw: any) => ({
+                well_id: pw.identification || pw.well_id,
+                depth: pw.depth !== undefined && pw.depth !== null ? Number(pw.depth) : undefined,
+                completion_date: '',
+                diameter: pw.default_diameter || pw.diameter || '4"',
+              }))
           }
         }
-        if (projectWells && projectWells.length > 0) {
-          preloadedWells = projectWells
-            .filter((pw: any) => pw.active !== false)
-            .map((pw: any) => ({
-              well_id: pw.identification || pw.well_id,
-              depth: pw.depth !== undefined && pw.depth !== null ? Number(pw.depth) : undefined,
-              completion_date: '',
-              diameter: pw.default_diameter || pw.diameter || '4"',
-            }))
-        }
-      }
 
-      if (preloadedWells.length === 0) {
-        const existingRdos = items.filter(
-          (r) =>
-            !r.deleted &&
-            (r.projectId === initialProjectId || r.projectName === initialProjectName),
-        )
-        const lastRdo = existingRdos[0]
-        if (lastRdo && lastRdo.wells && lastRdo.wells.length > 0) {
-          preloadedWells = lastRdo.wells.map((w) => ({
-            well_id: w.well_id,
-            depth: w.depth,
-            completion_date: '',
-            diameter: w.diameter || '4"',
-          }))
-        } else {
-          preloadedWells = [
-            {
-              well_id: 'PR-01',
-              depth: 8.0,
+        if (preloadedWells.length === 0) {
+          const existingRdos = items.filter(
+            (r) =>
+              !r.deleted &&
+              (r.projectId === initialProjectId || r.projectName === initialProjectName),
+          )
+          const lastRdo = existingRdos[0]
+          if (lastRdo && lastRdo.wells && lastRdo.wells.length > 0) {
+            preloadedWells = lastRdo.wells.map((w) => ({
+              well_id: w.well_id,
+              depth: w.depth,
               completion_date: '',
-              diameter: '4"',
-            },
-            {
-              well_id: 'PR-02',
-              depth: 8.0,
-              completion_date: '',
-              diameter: '4"',
-            },
-          ]
+              diameter: w.diameter || '4"',
+            }))
+          } else {
+            preloadedWells = [
+              {
+                well_id: 'PR-01',
+                depth: 8.0,
+                completion_date: '',
+                diameter: '4"',
+              },
+              {
+                well_id: 'PR-02',
+                depth: 8.0,
+                completion_date: '',
+                diameter: '4"',
+              },
+            ]
+          }
         }
+      } catch (e) {
+        preloadedWells = [
+          {
+            well_id: 'PR-01',
+            depth: 8.0,
+            completion_date: '',
+            diameter: '4"',
+          },
+        ]
       }
-    } catch (e) {
-      preloadedWells = [
-        {
-          well_id: 'PR-01',
-          depth: 8.0,
-          completion_date: '',
-          diameter: '4"',
-        },
-      ]
     }
 
     const nowIso = new Date().toISOString()
-    const initialSnapshot =
-      user?.role === 'admin'
-        ? {
-            supervised_by: user?.id || '',
-            supervised_by_name: (user?.name || '').trim(),
-            performed_by: '',
-            performed_by_name: '',
-            empresa_executora: initialCompanyName,
-            wells: (preloadedWells || []).map((w) => ({
-              well_id: w.well_id,
-              depth: w.depth,
-              completion_date: w.completion_date || '',
-              diameter: w.diameter || '',
-            })),
-            filled_fields: {
-              supervisedBy: user?.id || '',
-              supervisedByName: (user?.name || '').trim(),
-              companyName: initialCompanyName,
-            },
-            captured_at: nowIso,
-          }
-        : undefined
+    const finalCompanyName = (baseSheetRdo?.empresa_executora || initialCompanyName).trim()
+    const finalSupervisedBy = (
+      baseSheetRdo?.supervised_by ||
+      (user?.role === 'admin' ? user?.id : '') ||
+      ''
+    ).trim()
+    const finalSupervisedByName = (
+      baseSheetRdo?.supervised_by_name ||
+      (user?.role === 'admin' ? user?.name : '') ||
+      ''
+    ).trim()
+    const finalActivityTitle = (baseSheetRdo?.activity_title || '').trim()
+    const finalActivityDescription = (baseSheetRdo?.activity_description_base || '').trim()
+
+    let initialSnapshot: any = undefined
+
+    if (baseSheetRdo) {
+      // Ficha base ativa do projeto: gera o snapshot que trava os campos no Técnico
+      initialSnapshot = {
+        supervised_by: finalSupervisedBy,
+        supervised_by_name: finalSupervisedByName,
+        performed_by: (baseSheetRdo.performed_by || '').trim(),
+        performed_by_name: (baseSheetRdo.performed_by_name || '').trim(),
+        empresa_executora: finalCompanyName,
+        wells: (preloadedWells || []).map((w) => ({
+          well_id: w.well_id,
+          depth: w.depth,
+          completion_date: w.completion_date || '',
+          diameter: w.diameter || '',
+        })),
+        filled_fields: {
+          supervisedBy: finalSupervisedBy,
+          supervisedByName: finalSupervisedByName,
+          companyName: finalCompanyName,
+          ...(finalActivityTitle ? { activityTitle: finalActivityTitle } : {}),
+          ...(finalActivityDescription ? { activityDescription: finalActivityDescription } : {}),
+          ...(baseSheetRdo.filled_fields || {}),
+        },
+        captured_at: nowIso,
+      }
+    } else if (user?.role === 'admin') {
+      initialSnapshot = {
+        supervised_by: user?.id || '',
+        supervised_by_name: (user?.name || '').trim(),
+        performed_by: '',
+        performed_by_name: '',
+        empresa_executora: initialCompanyName,
+        wells: (preloadedWells || []).map((w) => ({
+          well_id: w.well_id,
+          depth: w.depth,
+          completion_date: w.completion_date || '',
+          diameter: w.diameter || '',
+        })),
+        filled_fields: {
+          supervisedBy: user?.id || '',
+          supervisedByName: (user?.name || '').trim(),
+          companyName: initialCompanyName,
+        },
+        captured_at: nowIso,
+      }
+    }
 
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
@@ -479,16 +546,17 @@ export function RdosPage({ query }: { query: string }) {
       projectName: initialProjectName,
       clientName: initialClientName,
       contractCode: initialContractCode,
-      companyName: initialCompanyName,
+      companyName: finalCompanyName,
       location: initialLocation,
       reportDate: nowIso.slice(0, 10),
       weather: 'Sol',
-      performedBy: user?.id || '',
-      performedByName: user?.name || '',
-      supervisedBy: user?.id || '',
-      supervisedByName: user?.name || '',
-      activityTitle: '',
-      activityDescription: '',
+      performedBy: user?.role === 'technician' ? user?.id || '' : baseSheetRdo?.performed_by || '',
+      performedByName:
+        user?.role === 'technician' ? user?.name || '' : baseSheetRdo?.performed_by_name || '',
+      supervisedBy: finalSupervisedBy,
+      supervisedByName: finalSupervisedByName,
+      activityTitle: finalActivityTitle,
+      activityDescription: finalActivityDescription,
       timeDisplacement: '',
       timeWaiting: '',
       interferences: '',
@@ -2111,7 +2179,7 @@ function RdoFullPageEditor({
               const isPerformedLocked = isTechnician && Boolean(performedFixedName)
               if (isPerformedLocked) {
                 return (
-                  <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                  <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
                     <span>{performedFixedName}</span>
                   </div>
                 )
@@ -2139,7 +2207,7 @@ function RdoFullPageEditor({
               const isSupervisorLocked = isTechnician && Boolean(supervisorFixedName)
               if (isSupervisorLocked) {
                 return (
-                  <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                  <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
                     <span>{supervisorFixedName}</span>
                   </div>
                 )
@@ -2519,7 +2587,7 @@ function RdoFullPageEditor({
                     <tr key={index} className="hover:bg-slate-50 dark:hover:bg-slate-900/40">
                       <td className="p-2">
                         {hasLockedWellId ? (
-                          <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                          <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
                             <span>{effectiveWellId}</span>
                           </div>
                         ) : (
@@ -2536,7 +2604,7 @@ function RdoFullPageEditor({
                       </td>
                       <td className="p-2">
                         {hasLockedDepth ? (
-                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
                             <span>{`${effectiveDepth} m`}</span>
                           </div>
                         ) : (
@@ -2554,7 +2622,7 @@ function RdoFullPageEditor({
                       </td>
                       <td className="p-2">
                         {hasLockedCompletionDate ? (
-                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
                             <span>
                               {(() => {
                                 const parts = String(effectiveDate).slice(0, 10).split('-')
@@ -2578,7 +2646,7 @@ function RdoFullPageEditor({
                       </td>
                       <td className="p-2">
                         {hasLockedDiameter ? (
-                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                          <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
                             <span>{effectiveDiameter}</span>
                           </div>
                         ) : (

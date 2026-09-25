@@ -20,6 +20,39 @@ export type Contract = RecordModel & {
   status: 'active' | 'paused' | 'closed'
   expand?: { client?: Client; company?: Company }
 }
+export interface BaseSheetRdo {
+  supervised_by?: string
+  supervised_by_name?: string
+  performed_by?: string
+  performed_by_name?: string
+  empresa_executora?: string
+  activity_title?: string
+  activity_description_base?: string
+  wells?: Array<{
+    well_id: string
+    depth?: number
+    diameter?: string
+    completion_date?: string
+  }>
+  filled_fields?: Record<string, any>
+}
+
+export interface BaseSheetField {
+  operator?: string
+  technician_name?: string
+  area?: string
+  wells?: Array<{
+    well: string
+    pump?: string
+  }>
+  extraction_data?: Array<{
+    well: string
+    pump: string
+    autopump?: string
+  }>
+  filled_fields?: Record<string, any>
+}
+
 export type Project = RecordModel & {
   name: string
   client: string
@@ -36,6 +69,10 @@ export type Project = RecordModel & {
   deleted_reason?: string
   deleted_by?: string
   deleted_at?: string
+  base_sheet_rdo?: BaseSheetRdo
+  base_sheet_field?: BaseSheetField
+  base_sheet_published?: boolean
+  base_sheet_updated_at?: string
   expand?: {
     client?: Client
     contract?: Contract

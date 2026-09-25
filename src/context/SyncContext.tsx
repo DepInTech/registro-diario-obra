@@ -470,6 +470,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             if (proj.rawContract) payload.contract = proj.rawContract
             if (proj.rawCompany) payload.company = proj.rawCompany
             if (proj.rawArea) payload.area = proj.rawArea
+            if (proj.base_sheet_rdo !== undefined) payload.base_sheet_rdo = proj.base_sheet_rdo
+            if (proj.base_sheet_field !== undefined)
+              payload.base_sheet_field = proj.base_sheet_field
+            if (proj.base_sheet_published !== undefined)
+              payload.base_sheet_published = proj.base_sheet_published
+            if (proj.base_sheet_updated_at !== undefined)
+              payload.base_sheet_updated_at = proj.base_sheet_updated_at
 
             const updated = await pb.collection('projects').update(proj.id, payload)
             proj.syncStatus = 'synced'
@@ -1599,6 +1606,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             deletedReason: record.deleted_reason || undefined,
             deletedBy: record.deleted_by || undefined,
             deletedAt: record.deleted_at || undefined,
+            base_sheet_rdo: record.base_sheet_rdo || local?.base_sheet_rdo || undefined,
+            base_sheet_field: record.base_sheet_field || local?.base_sheet_field || undefined,
+            base_sheet_published:
+              record.base_sheet_published !== undefined
+                ? Boolean(record.base_sheet_published)
+                : local?.base_sheet_published,
+            base_sheet_updated_at: record.base_sheet_updated_at || local?.base_sheet_updated_at,
             syncStatus: 'synced',
             lastModified: new Date(record.updated || Date.now()).getTime(),
             serverUpdatedAt: record.updated,
@@ -2764,6 +2778,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             deletedReason: record.deleted_reason || undefined,
             deletedBy: record.deleted_by || undefined,
             deletedAt: record.deleted_at || undefined,
+            base_sheet_rdo: record.base_sheet_rdo || local?.base_sheet_rdo || undefined,
+            base_sheet_field: record.base_sheet_field || local?.base_sheet_field || undefined,
+            base_sheet_published:
+              record.base_sheet_published !== undefined
+                ? Boolean(record.base_sheet_published)
+                : local?.base_sheet_published,
+            base_sheet_updated_at: record.base_sheet_updated_at || local?.base_sheet_updated_at,
             syncStatus: 'synced',
             lastModified: new Date(record.updated || Date.now()).getTime(),
             serverUpdatedAt: record.updated,
