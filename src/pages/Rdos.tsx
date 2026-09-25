@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { applyDateMask, isValidBrDate, INVALID_BR_DATE_MESSAGE } from '@/lib/dateMask'
 import {
   isValidDeletionJustification,
   INVALID_JUSTIFICATION_MESSAGE,
@@ -1497,6 +1498,29 @@ function RdoFullPageEditor({
       return
     }
 
+    // Validação de datas preenchidas com isValidBrDate
+    if (formData.reportDate && !isValidBrDate(formData.reportDate)) {
+      toast({
+        title: 'Data inválida',
+        description: INVALID_BR_DATE_MESSAGE,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (formData.wells && formData.wells.length > 0) {
+      for (const w of formData.wells) {
+        if (w.completion_date && !isValidBrDate(w.completion_date)) {
+          toast({
+            title: 'Data inválida',
+            description: INVALID_BR_DATE_MESSAGE,
+            variant: 'destructive',
+          })
+          return
+        }
+      }
+    }
+
     // Check project association
     if (!formData.projectId || isProvisionalId(formData.projectId)) {
       try {
@@ -2112,12 +2136,12 @@ function RdoFullPageEditor({
               )}
             </div>
             <Input
-              type="date"
               value={formData.reportDate ?? ''}
               onChange={(e) => {
-                handleFieldChange('reportDate', e.target.value)
+                handleFieldChange('reportDate', applyDateMask(e.target.value))
                 clearReturnedField('reportDate')
               }}
+              placeholder="DD/MM/AAAA"
               disabled={isLocked || isFieldLockedByAdmin('reportDate')}
               readOnly={isFieldLockedByAdmin('reportDate')}
               className={cn(
@@ -2641,11 +2665,15 @@ function RdoFullPageEditor({
                           </div>
                         ) : (
                           <Input
-                            type="date"
                             value={well.completion_date ?? ''}
                             onChange={(e) =>
-                              handleWellFieldChange(index, 'completion_date', e.target.value)
+                              handleWellFieldChange(
+                                index,
+                                'completion_date',
+                                applyDateMask(e.target.value),
+                              )
                             }
+                            placeholder="DD/MM/AAAA"
                             disabled={isLocked}
                             className="h-10 text-xs sm:text-sm"
                           />

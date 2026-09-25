@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
+import { applyDateMask, isValidBrDate, INVALID_BR_DATE_MESSAGE } from '@/lib/dateMask'
 import {
   isValidDeletionJustification,
   INVALID_JUSTIFICATION_MESSAGE,
@@ -599,7 +600,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       operatorName: finalOperatorName,
       admin_snapshot: initialSheetSnapshot,
       weather: 'Sol',
-      pluviometer: 0,
+      pluviometer: '' as any,
       morning_time: '',
       afternoon_time: '',
       infiltration_morning_time: '',
@@ -618,8 +619,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         bombaGeral: '',
       },
       nutrient_done: false,
-      nutrient_map_kg: 0,
-      nutrient_ureia_kg: 0,
+      nutrient_map_kg: '' as any,
+      nutrient_ureia_kg: '' as any,
       compressor_data: {
         horimetro1: '',
         horimetro2: '',
@@ -644,8 +645,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         sao2Volume: '',
         sao2DataLimpeza: '',
       },
-      waste_liquid_qty: 0,
-      waste_solid_qty: 0,
+      waste_liquid_qty: '' as any,
+      waste_solid_qty: '' as any,
       env_5s_check: false,
       env_checklist_monthly: false,
       observations: '',
@@ -1287,6 +1288,194 @@ function FieldFullEditor({
       return
     }
 
+    // 1. Validação de formato das datas preenchidas com isValidBrDate
+    const dateFieldsToCheck: Array<{ label: string; val: unknown }> = [
+      { label: 'Data da Planilha', val: formData.date },
+      {
+        label: 'Data da limpeza SAO 01',
+        val: formData.oil_removal_data?.sao1DataLimpeza,
+      },
+      {
+        label: 'Data da limpeza SAO 02',
+        val: formData.oil_removal_data?.sao2DataLimpeza,
+      },
+    ]
+
+    for (const df of dateFieldsToCheck) {
+      if (df.val && !isValidBrDate(df.val)) {
+        toast({
+          title: 'Data inválida',
+          description: INVALID_BR_DATE_MESSAGE,
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
+    // 2. Validação do hidrômetro (intra-ficha e inter-fichas)
+    // Suporta formato brasileiro ("1.250,5") e internacional ("1250.5")
+    const parseHydrometerNumber = (val: unknown): number | null => {
+      if (val === null || val === undefined || val === '') return null
+      let s = String(val).trim()
+      if (s === '') return null
+      // Se contiver vírgula e ponto (ex: 1.250,5 ou 1,250.5)
+      if (s.includes(',') && s.includes('.')) {
+        if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+          // Formato brasileiro: 1.250,50 -> 1250.50
+          s = s.replace(/\./g, '').replace(',', '.')
+        } else {
+          // Formato americano com vírgulas de milhar: 1,250.50 -> 1250.50
+          s = s.replace(/,/g, '')
+        }
+      } else if (s.includes(',')) {
+        // Apenas vírgula decimal: 1250,5 -> 1250.5
+        s = s.replace(',', '.')
+      }
+      const n = parseFloat(s)
+      return isNaN(n) ? null : n
+    }
+
+    const normWellKey = (w: unknown) =>
+      String(w || '')
+        .trim()
+        .toUpperCase()
+
+    const HYDROMETER_ERROR_MSG =
+      '⚠️ Leitura inválida. O valor informado não pode ser menor que a leitura anterior deste hidrômetro.'
+
+    const extractionRows = formData.extraction_data || []
+
+    // 2a. Intra-ficha: afternoon >= morning no mesmo poço
+    for (const row of extractionRows) {
+      if (!row) continue
+      const mVal = parseHydrometerNumber(row.morning)
+      const aVal = parseHydrometerNumber(row.afternoon)
+      if (mVal !== null && aVal !== null && aVal < mVal) {
+        toast({
+          title: 'Leitura de hidrômetro inválida',
+          description: HYDROMETER_ERROR_MSG,
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
+    // 2b. Inter-fichas: comparar leituras do dia contra a última leitura registrada do mesmo poço no mesmo projeto
+    const currentProjectId = formData.projectId
+    const currentSheetId = formData.id || ''
+
+    if (currentProjectId && extractionRows.length > 0) {
+      let candidateSheets: OfflineFieldSheetItem[] = []
+
+      // Tenta buscar no servidor se online
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          let filterStr = `project = "${currentProjectId}" && deleted = false`
+          if (currentSheetId && !isProvisionalId(currentSheetId)) {
+            filterStr += ` && id != "${currentSheetId}"`
+          }
+          const serverRecs = await pb.collection('field_spreadsheets').getList(1, 15, {
+            filter: filterStr,
+            sort: '-date,-created',
+          })
+          candidateSheets = serverRecs.items.map((r: any) => {
+            let ext = r.extraction_data
+            if (typeof ext === 'string' && ext.trim() !== '') {
+              try {
+                ext = JSON.parse(ext)
+              } catch {
+                ext = []
+              }
+            }
+            return {
+              id: r.id,
+              projectId: r.project,
+              projectName: '',
+              date: r.date,
+              area: r.area,
+              operator: r.operator,
+              extraction_data: Array.isArray(ext) ? ext : [],
+              status: r.status,
+              syncStatus: 'synced',
+              lastModified: new Date(r.updated || 0).getTime(),
+            } as OfflineFieldSheetItem
+          })
+        } catch (serverErr) {
+          console.warn('Fallback para cache offline ao validar hidrômetro:', serverErr)
+          candidateSheets = []
+        }
+      }
+
+      // Se offline ou falha no servidor, busca do cache IndexedDB
+      if (candidateSheets.length === 0) {
+        try {
+          const allLocal = await offlineStorage.getAllFieldSheets()
+          candidateSheets = allLocal
+            .filter(
+              (s) => s.projectId === currentProjectId && !s.deleted && s.id !== currentSheetId,
+            )
+            .sort((a, b) => {
+              const dateA = a.date ? new Date(a.date).getTime() : a.lastModified || 0
+              const dateB = b.date ? new Date(b.date).getTime() : b.lastModified || 0
+              return dateB - dateA
+            })
+            .slice(0, 15)
+        } catch (cacheErr) {
+          console.warn('Erro ao ler cache IndexedDB para hidrômetro:', cacheErr)
+        }
+      }
+
+      if (candidateSheets.length > 0) {
+        const lastReadingsByWell: Record<string, number> = {}
+
+        for (const pastSheet of candidateSheets) {
+          const pastExt = pastSheet.extraction_data || []
+          for (const pRow of pastExt) {
+            if (!pRow) continue
+            const wKey = normWellKey(pRow.well)
+            if (!wKey) continue
+            if (lastReadingsByWell[wKey] !== undefined) continue
+
+            const pA = parseHydrometerNumber(pRow.afternoon)
+            const pM = parseHydrometerNumber(pRow.morning)
+            const highestPast = pA !== null ? pA : pM !== null ? pM : null
+            if (highestPast !== null) {
+              lastReadingsByWell[wKey] = highestPast
+            }
+          }
+        }
+
+        for (const curRow of extractionRows) {
+          if (!curRow) continue
+          const curKey = normWellKey(curRow.well)
+          if (!curKey) continue
+
+          const baseline = lastReadingsByWell[curKey]
+          if (baseline === undefined || baseline === null) continue
+
+          const curM = parseHydrometerNumber(curRow.morning)
+          const curA = parseHydrometerNumber(curRow.afternoon)
+
+          if (curM !== null && curM < baseline) {
+            toast({
+              title: 'Leitura de hidrômetro inválida',
+              description: HYDROMETER_ERROR_MSG,
+              variant: 'destructive',
+            })
+            return
+          }
+          if (curA !== null && curA < baseline) {
+            toast({
+              title: 'Leitura de hidrômetro inválida',
+              description: HYDROMETER_ERROR_MSG,
+              variant: 'destructive',
+            })
+            return
+          }
+        }
+      }
+    }
+
     setIsSaving(true)
     // Se o Admin estiver despachando/atribuindo a planilha ao Técnico, o status mantém-se 'draft'
     // (a permissão já permite ao Técnico editar rascunhos 'draft' e devoluções 'returned', sem sujar o histórico com devolução).
@@ -1880,9 +2069,9 @@ function FieldFullEditor({
           <div>
             <label className="epa-label">DATA</label>
             <Input
-              type="date"
               value={formData.date}
-              onChange={(e) => handleFieldChange('date', e.target.value)}
+              onChange={(e) => handleFieldChange('date', applyDateMask(e.target.value))}
+              placeholder="DD/MM/AAAA"
               disabled={isLocked || isFieldLockedByAdmin('date')}
               readOnly={isFieldLockedByAdmin('date')}
               className={cn(
@@ -1922,8 +2111,11 @@ function FieldFullEditor({
               <Input
                 type="number"
                 inputMode="decimal"
-                value={formData.pluviometer || 0}
-                onChange={(e) => handleFieldChange('pluviometer', Number(e.target.value))}
+                value={formData.pluviometer ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value
+                  handleFieldChange('pluviometer', val === '' ? '' : Number(val))
+                }}
                 disabled={isLocked}
                 className="mt-1 font-mono min-h-[42px]"
               />
@@ -2430,8 +2622,11 @@ function FieldFullEditor({
             <Input
               type="number"
               inputMode="decimal"
-              value={formData.nutrient_map_kg || 0}
-              onChange={(e) => handleFieldChange('nutrient_map_kg', Number(e.target.value))}
+              value={formData.nutrient_map_kg ?? ''}
+              onChange={(e) => {
+                const val = e.target.value
+                handleFieldChange('nutrient_map_kg', val === '' ? '' : Number(val))
+              }}
               disabled={isLocked}
               className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
@@ -2441,8 +2636,11 @@ function FieldFullEditor({
             <Input
               type="number"
               inputMode="decimal"
-              value={formData.nutrient_ureia_kg || 0}
-              onChange={(e) => handleFieldChange('nutrient_ureia_kg', Number(e.target.value))}
+              value={formData.nutrient_ureia_kg ?? ''}
+              onChange={(e) => {
+                const val = e.target.value
+                handleFieldChange('nutrient_ureia_kg', val === '' ? '' : Number(val))
+              }}
               disabled={isLocked}
               className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
@@ -2643,11 +2841,11 @@ function FieldFullEditor({
                   onChange={(e) =>
                     handleFieldChange('oil_removal_data', {
                       ...formData.oil_removal_data,
-                      sao1DataLimpeza: e.target.value,
+                      sao1DataLimpeza: applyDateMask(e.target.value),
                     })
                   }
                   disabled={isLocked}
-                  placeholder="Ex.: 24/04/26 ou DD/MM/AAAA"
+                  placeholder="DD/MM/AAAA"
                   className="mt-1 font-mono text-xs"
                 />
               </div>
@@ -2682,11 +2880,11 @@ function FieldFullEditor({
                   onChange={(e) =>
                     handleFieldChange('oil_removal_data', {
                       ...formData.oil_removal_data,
-                      sao2DataLimpeza: e.target.value,
+                      sao2DataLimpeza: applyDateMask(e.target.value),
                     })
                   }
                   disabled={isLocked}
-                  placeholder="Ex.: 24/04/26 ou DD/MM/AAAA"
+                  placeholder="DD/MM/AAAA"
                   className="mt-1 font-mono text-xs"
                 />
               </div>
@@ -2712,8 +2910,11 @@ function FieldFullEditor({
             <Input
               type="number"
               inputMode="numeric"
-              value={formData.waste_liquid_qty || 0}
-              onChange={(e) => handleFieldChange('waste_liquid_qty', Number(e.target.value))}
+              value={formData.waste_liquid_qty ?? ''}
+              onChange={(e) => {
+                const val = e.target.value
+                handleFieldChange('waste_liquid_qty', val === '' ? '' : Number(val))
+              }}
               disabled={isLocked}
               placeholder="Ex.: 02"
               className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
@@ -2724,8 +2925,11 @@ function FieldFullEditor({
             <Input
               type="number"
               inputMode="numeric"
-              value={formData.waste_solid_qty || 0}
-              onChange={(e) => handleFieldChange('waste_solid_qty', Number(e.target.value))}
+              value={formData.waste_solid_qty ?? ''}
+              onChange={(e) => {
+                const val = e.target.value
+                handleFieldChange('waste_solid_qty', val === '' ? '' : Number(val))
+              }}
               disabled={isLocked}
               placeholder="Ex.: 01"
               className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
