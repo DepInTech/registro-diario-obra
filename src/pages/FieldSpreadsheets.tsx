@@ -2304,19 +2304,9 @@ function FieldFullEditor({
                 <th className="p-2.5 border border-emerald-800 font-semibold text-center w-36">
                   Altura da bomba (m)
                 </th>
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[180px]">
-                  <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                    <span>Saída Autopump (500mL)*</span>
-                    {isReturnedField('autopump') && (
-                      <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
-                        🟨 CORREÇÃO
-                      </span>
-                    )}
-                  </div>
-                </th>
                 <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[210px]">
                   <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                    <span>Condição Autopump</span>
+                    <span>Saída Autopump (500mL)*</span>
                     {isReturnedField('autopump') && (
                       <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
                         🟨 CORREÇÃO
@@ -2422,29 +2412,11 @@ function FieldFullEditor({
                       )}
                     </td>
                     <td className="p-2 border border-slate-200 dark:border-slate-800">
-                      <Input
-                        inputMode="decimal"
-                        value={row.autopump}
-                        onChange={(e) => {
-                          handleExtractionCellChange(index, 'autopump', e.target.value)
-                          clearReturnedField('autopump')
-                        }}
-                        disabled={isLocked}
-                        placeholder="0,00"
-                        className={cn(
-                          'h-10 font-mono text-xs sm:text-sm text-center',
-                          isReturnedField('autopump') &&
-                            'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
-                        )}
-                      />
-                    </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
                       {(() => {
-                        const fixedConditions = ['Limpa', 'Turva', 'Oleosa']
-                        const rawVal = row.autopump_condition || ''
+                        const fixedChoices = ['Limpa', 'Turva', 'Oleosa']
+                        const rawVal = row.autopump || row.autopump_condition || ''
                         const isOtherText =
-                          rawVal === 'Outros' ||
-                          (rawVal !== '' && !fixedConditions.includes(rawVal))
+                          rawVal === 'Outros' || (rawVal !== '' && !fixedChoices.includes(rawVal))
 
                         if (isOtherText) {
                           const displayVal =
@@ -2462,6 +2434,7 @@ function FieldFullEditor({
                                   const updated = [...(formData.extraction_data || [])]
                                   updated[index] = {
                                     ...updated[index],
+                                    autopump: textVal,
                                     autopump_condition: textVal,
                                     autopump_condition_other: textVal,
                                   }
@@ -2469,7 +2442,7 @@ function FieldFullEditor({
                                   clearReturnedField('autopump')
                                 }}
                                 disabled={isLocked}
-                                placeholder="Descreva a condição..."
+                                placeholder="Descreva a saída..."
                                 className={cn(
                                   'h-10 text-xs sm:text-sm flex-1',
                                   isReturnedField('autopump') &&
@@ -2487,6 +2460,7 @@ function FieldFullEditor({
                                     const updated = [...(formData.extraction_data || [])]
                                     updated[index] = {
                                       ...updated[index],
+                                      autopump: '',
                                       autopump_condition: '',
                                       autopump_condition_other: '',
                                     }
@@ -2494,7 +2468,7 @@ function FieldFullEditor({
                                     clearReturnedField('autopump')
                                   }}
                                   className="h-10 px-2 text-[11px] shrink-0 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-                                  title="Voltar às opções de condição"
+                                  title="Voltar às opções de saída do autopump"
                                 >
                                   Opções
                                 </Button>
@@ -2513,6 +2487,7 @@ function FieldFullEditor({
                               const updated = [...(formData.extraction_data || [])]
                               updated[index] = {
                                 ...updated[index],
+                                autopump: selected === 'Outros' ? '' : selected,
                                 autopump_condition: selected,
                                 autopump_condition_other:
                                   selected === 'Outros'
@@ -3278,22 +3253,24 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
   let extractionRows = ''
   if (sheet.extraction_data && sheet.extraction_data.length > 0) {
     sheet.extraction_data.forEach((r) => {
-      const condText =
-        r.autopump_condition === 'Outros' && r.autopump_condition_other
-          ? `Outros — ${r.autopump_condition_other}`
-          : r.autopump_condition || ''
+      let finalAutopump = r.autopump || ''
+      if (!finalAutopump && r.autopump_condition) {
+        finalAutopump =
+          r.autopump_condition === 'Outros' && r.autopump_condition_other
+            ? `Outros — ${r.autopump_condition_other}`
+            : r.autopump_condition
+      }
 
       extractionRows += `<tr>
         <td style="border:1px solid #777;padding:5px 8px;text-align:center;font-weight:bold;">${r.well || '—'}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:right;">${r.morning || ''}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:right;">${r.afternoon || ''}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${r.pump || ''}</td>
-        <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${r.autopump || ''}</td>
-        <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${condText}</td>
+        <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${finalAutopump}</td>
       </tr>`
     })
   } else {
-    extractionRows = `<tr><td colspan="6" style="border:1px solid #777;padding:8px;text-align:center;color:#666;">Nenhum poço registrado</td></tr>`
+    extractionRows = `<tr><td colspan="5" style="border:1px solid #777;padding:8px;text-align:center;color:#666;">Nenhum poço registrado</td></tr>`
   }
 
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -3337,21 +3314,20 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
 
       <!-- 1. EXTRAÇÃO/VOLUME BOMBEADO -->
       <tr>
-        <td colspan="6" class="section-hdr" style="padding: 7px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
+        <td colspan="5" class="section-hdr" style="padding: 7px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
       </tr>
       <tr>
-        <th style="width: 18%;">Poço de Remediação</th>
-        <th style="width: 16%;">
+        <th style="width: 20%;">Poço de Remediação</th>
+        <th style="width: 20%;">
           Hidrômetro (Manhã)<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${morningTime || '—'}</span>
         </th>
-        <th style="width: 16%;">
+        <th style="width: 20%;">
           Hidrômetro (Tarde)<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${afternoonTime || '—'}</span>
         </th>
-        <th style="width: 14%;">Altura da bomba (m)</th>
-        <th style="width: 16%;">Saída de Cada Autopump (500mL)*</th>
-        <th style="width: 20%;">Condição Autopump (500 ml)</th>
+        <th style="width: 18%;">Altura da bomba (m)</th>
+        <th style="width: 22%;">Saída Autopump (500mL)*</th>
       </tr>
       ${extractionRows}
 

@@ -34,26 +34,20 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
   let extractionRows = ''
   if (Array.isArray(extData) && extData.length > 0) {
     extData.forEach((r) => {
-      let condText = ''
-      if (r.autopump_condition) {
-        if (r.autopump_condition === 'Outros' && r.autopump_condition_other) {
-          condText = `Outros — ${r.autopump_condition_other}`
-        } else {
-          condText = r.autopump_condition
-        }
+      let finalAutopump = r.autopump || ''
+      if (!finalAutopump && r.autopump_condition) {
+        finalAutopump =
+          r.autopump_condition === 'Outros' && r.autopump_condition_other
+            ? `Outros — ${r.autopump_condition_other}`
+            : r.autopump_condition
       }
-      const autopumpCell = r.autopump
-        ? condText
-          ? `${r.autopump} (${condText})`
-          : `${r.autopump}`
-        : condText || ''
 
       extractionRows += `<tr>
         <td style="border:1px solid #777;padding:5px 8px;text-align:center;font-weight:bold;">${r.well || '—'}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:right;">${r.morning || ''}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:right;">${r.afternoon || ''}</td>
         <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${r.pump || ''}</td>
-        <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${autopumpCell}</td>
+        <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${finalAutopump}</td>
       </tr>`
     })
   } else {
