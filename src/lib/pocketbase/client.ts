@@ -5,10 +5,14 @@ pb.autoCancellation(false)
 
 export async function forceRealtimeTeardown(): Promise<void> {
   try {
-    await pb.realtime.unsubscribe()
-  } catch (err) {
-    console.warn('Realtime teardown warning:', err)
+    const realtimeService = (pb as any).realtime
+    if (realtimeService && typeof realtimeService.unsubscribe === 'function') {
+      await realtimeService.unsubscribe()
+    }
+  } catch {
+    // ignore
   }
 }
 
+export { pb }
 export default pb

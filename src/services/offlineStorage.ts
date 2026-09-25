@@ -117,8 +117,8 @@ export interface OfflineFieldSheetItem {
   nutrient_ureia_kg?: number
   compressor_data?: Record<string, string>
   oil_removal_data?: Record<string, string>
-  waste_liquid_qty?: number
-  waste_solid_qty?: number
+  waste_liquid_qty?: string | number
+  waste_solid_qty?: string | number
   env_5s_check?: boolean
   env_checklist_monthly?: boolean
   observations?: string

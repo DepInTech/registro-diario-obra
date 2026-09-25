@@ -1151,8 +1151,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               nutrient_ureia_kg: sheet.nutrient_ureia_kg || 0,
               compressor_data: sheet.compressor_data || {},
               oil_removal_data: sheet.oil_removal_data || {},
-              waste_liquid_qty: sheet.waste_liquid_qty || 0,
-              waste_solid_qty: sheet.waste_solid_qty || 0,
+              waste_liquid_qty: sheet.waste_liquid_qty ?? '',
+              waste_solid_qty: sheet.waste_solid_qty ?? '',
               env_5s_check: Boolean(sheet.env_5s_check),
               env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
               observations: sheet.observations || '',
@@ -1290,8 +1290,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               nutrient_ureia_kg: sheet.nutrient_ureia_kg || 0,
               compressor_data: sheet.compressor_data || {},
               oil_removal_data: sheet.oil_removal_data || {},
-              waste_liquid_qty: sheet.waste_liquid_qty || 0,
-              waste_solid_qty: sheet.waste_solid_qty || 0,
+              waste_liquid_qty: sheet.waste_liquid_qty ?? '',
+              waste_solid_qty: sheet.waste_solid_qty ?? '',
               env_5s_check: Boolean(sheet.env_5s_check),
               env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
               observations: sheet.observations || '',
@@ -1993,8 +1993,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           let finalNutrientUreiaKg = record.nutrient_ureia_kg || 0
           let finalCompressorData = record.compressor_data || {}
           let finalOilRemovalData = record.oil_removal_data || {}
-          let finalWasteLiquidQty = record.waste_liquid_qty || 0
-          let finalWasteSolidQty = record.waste_solid_qty || 0
+          let finalWasteLiquidQty = record.waste_liquid_qty ?? ''
+          let finalWasteSolidQty = record.waste_solid_qty ?? ''
           let finalEnv5sCheck = Boolean(record.env_5s_check)
           let finalEnvChecklistMonthly = Boolean(record.env_checklist_monthly)
           let finalObservations = record.observations || ''
@@ -2605,8 +2605,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           let finalNutrientUreiaKg = record.nutrient_ureia_kg || 0
           let finalCompressorData = record.compressor_data || {}
           let finalOilRemovalData = record.oil_removal_data || {}
-          let finalWasteLiquidQty = record.waste_liquid_qty || 0
-          let finalWasteSolidQty = record.waste_solid_qty || 0
+          let finalWasteLiquidQty = record.waste_liquid_qty ?? ''
+          let finalWasteSolidQty = record.waste_solid_qty ?? ''
           let finalEnv5sCheck = Boolean(record.env_5s_check)
           let finalEnvChecklistMonthly = Boolean(record.env_checklist_monthly)
           let finalObservations = record.observations || ''

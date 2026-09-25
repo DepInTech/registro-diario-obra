@@ -188,8 +188,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 nutrient_ureia_kg: rec.nutrient_ureia_kg || 0,
                 compressor_data: rec.compressor_data || {},
                 oil_removal_data: rec.oil_removal_data || {},
-                waste_liquid_qty: rec.waste_liquid_qty || 0,
-                waste_solid_qty: rec.waste_solid_qty || 0,
+                waste_liquid_qty: rec.waste_liquid_qty ?? '',
+                waste_solid_qty: rec.waste_solid_qty ?? '',
                 env_5s_check: Boolean(rec.env_5s_check),
                 env_checklist_monthly: Boolean(rec.env_checklist_monthly),
                 observations: rec.observations || '',
@@ -645,8 +645,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         sao2Volume: '',
         sao2DataLimpeza: '',
       },
-      waste_liquid_qty: '' as any,
-      waste_solid_qty: '' as any,
+      waste_liquid_qty: '',
+      waste_solid_qty: '',
       env_5s_check: false,
       env_checklist_monthly: false,
       observations: '',
@@ -965,7 +965,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                     </div>
                     <div>
                       <p className="font-mono text-sm font-semibold">
-                        {sheet.waste_liquid_qty || 0} L
+                        {sheet.waste_liquid_qty ? `${sheet.waste_liquid_qty}` : '—'}
                       </p>
                       <p className="text-[9px] text-slate-400">Resíduos</p>
                     </div>
@@ -2908,30 +2908,22 @@ function FieldFullEditor({
           <div>
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Líquido</label>
             <Input
-              type="number"
-              inputMode="numeric"
+              type="text"
               value={formData.waste_liquid_qty ?? ''}
-              onChange={(e) => {
-                const val = e.target.value
-                handleFieldChange('waste_liquid_qty', val === '' ? '' : Number(val))
-              }}
+              onChange={(e) => handleFieldChange('waste_liquid_qty', e.target.value)}
               disabled={isLocked}
-              placeholder="Ex.: 02"
+              placeholder="Ex.: 02 ou 2 tambores"
               className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
           </div>
           <div>
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Sólido</label>
             <Input
-              type="number"
-              inputMode="numeric"
+              type="text"
               value={formData.waste_solid_qty ?? ''}
-              onChange={(e) => {
-                const val = e.target.value
-                handleFieldChange('waste_solid_qty', val === '' ? '' : Number(val))
-              }}
+              onChange={(e) => handleFieldChange('waste_solid_qty', e.target.value)}
               disabled={isLocked}
-              placeholder="Ex.: 01"
+              placeholder="Ex.: 01 ou 1 bombona"
               className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
             />
           </div>
@@ -3376,8 +3368,8 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
         <td colspan="3" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Sólido</td>
       </tr>
       <tr>
-        <td colspan="2" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_liquid_qty ?? 0}</td>
-        <td colspan="3" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_solid_qty ?? 0}</td>
+        <td colspan="2" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_liquid_qty || '—'}</td>
+        <td colspan="3" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_solid_qty || '—'}</td>
       </tr>
 
       <!-- 7. CONTROLES AMBIENTAIS E 5S -->
