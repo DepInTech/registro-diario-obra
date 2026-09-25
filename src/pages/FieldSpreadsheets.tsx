@@ -2439,43 +2439,104 @@ function FieldFullEditor({
                       />
                     </td>
                     <td className="p-2 border border-slate-200 dark:border-slate-800">
-                      <div className="space-y-1.5">
-                        <select
-                          value={row.autopump_condition || ''}
-                          onChange={(e) => {
-                            handleExtractionCellChange(index, 'autopump_condition', e.target.value)
-                            clearReturnedField('autopump')
-                          }}
-                          disabled={isLocked}
-                          className={cn(
-                            'epa-input h-10 w-full text-xs sm:text-sm',
-                            isReturnedField('autopump') &&
-                              'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
-                          )}
-                        >
-                          <option value="">Selecione...</option>
-                          <option value="Limpa">Limpa</option>
-                          <option value="Turva">Turva</option>
-                          <option value="Oleosa">Oleosa</option>
-                          <option value="Outros">Outros</option>
-                        </select>
-                        {row.autopump_condition === 'Outros' && (
-                          <Input
-                            value={row.autopump_condition_other || ''}
+                      {(() => {
+                        const fixedConditions = ['Limpa', 'Turva', 'Oleosa']
+                        const rawVal = row.autopump_condition || ''
+                        const isOtherText =
+                          rawVal === 'Outros' ||
+                          (rawVal !== '' && !fixedConditions.includes(rawVal))
+
+                        if (isOtherText) {
+                          const displayVal =
+                            rawVal === 'Outros' ? row.autopump_condition_other || '' : rawVal
+
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <Input
+                                type="text"
+                                value={displayVal}
+                                onChange={(e) => {
+                                  const textVal = e.target.value
+                                  const currentRow = formData.extraction_data?.[index]
+                                  if (!currentRow) return
+                                  const updated = [...(formData.extraction_data || [])]
+                                  updated[index] = {
+                                    ...updated[index],
+                                    autopump_condition: textVal,
+                                    autopump_condition_other: textVal,
+                                  }
+                                  handleFieldChange('extraction_data', updated)
+                                  clearReturnedField('autopump')
+                                }}
+                                disabled={isLocked}
+                                placeholder="Descreva a condição..."
+                                className={cn(
+                                  'h-10 text-xs sm:text-sm flex-1',
+                                  isReturnedField('autopump') &&
+                                    'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                                )}
+                              />
+                              {!isLocked && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    const currentRow = formData.extraction_data?.[index]
+                                    if (!currentRow) return
+                                    const updated = [...(formData.extraction_data || [])]
+                                    updated[index] = {
+                                      ...updated[index],
+                                      autopump_condition: '',
+                                      autopump_condition_other: '',
+                                    }
+                                    handleFieldChange('extraction_data', updated)
+                                    clearReturnedField('autopump')
+                                  }}
+                                  className="h-10 px-2 text-[11px] shrink-0 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                                  title="Voltar às opções de condição"
+                                >
+                                  Opções
+                                </Button>
+                              )}
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <select
+                            value={rawVal}
                             onChange={(e) => {
-                              handleExtractionCellChange(
-                                index,
-                                'autopump_condition_other',
-                                e.target.value,
-                              )
+                              const selected = e.target.value
+                              const currentRow = formData.extraction_data?.[index]
+                              if (!currentRow) return
+                              const updated = [...(formData.extraction_data || [])]
+                              updated[index] = {
+                                ...updated[index],
+                                autopump_condition: selected,
+                                autopump_condition_other:
+                                  selected === 'Outros'
+                                    ? ''
+                                    : updated[index].autopump_condition_other,
+                              }
+                              handleFieldChange('extraction_data', updated)
                               clearReturnedField('autopump')
                             }}
                             disabled={isLocked}
-                            placeholder="Descreva: (ex. presença de sedimentos)"
-                            className="h-9 text-xs sm:text-sm border-amber-300 bg-amber-50/50 text-slate-800 dark:border-amber-700 dark:bg-amber-950/30 dark:text-slate-200"
-                          />
-                        )}
-                      </div>
+                            className={cn(
+                              'epa-input h-10 w-full text-xs sm:text-sm',
+                              isReturnedField('autopump') &&
+                                'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
+                            )}
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="Limpa">Limpa</option>
+                            <option value="Turva">Turva</option>
+                            <option value="Oleosa">Oleosa</option>
+                            <option value="Outros">Outros</option>
+                          </select>
+                        )
+                      })()}
                     </td>
                     {!isLocked && (isAdmin || isExtractionRowEmpty(lockedRow || row)) && (
                       <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
