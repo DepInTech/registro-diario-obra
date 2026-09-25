@@ -1,15 +1,18 @@
 import PocketBase from 'pocketbase'
 
-const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-export const forceRealtimeTeardown = async () => {
+/**
+ * Tears down all realtime subscriptions and aborts any active SSE connection.
+ * Used by AuthContext and SyncContext to safely reset the client state.
+ */
+export function forceRealtimeTeardown(): void {
   try {
-    await pb.realtime.unsubscribe()
-  } catch (_) {
-    // ignorar erros ao desconectar realtime
+    pb.realtime.unsubscribe()
+  } catch {
+    // Ignore teardown errors
   }
 }
 
-export { pb }
 export default pb
