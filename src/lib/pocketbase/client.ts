@@ -7,7 +7,7 @@ export async function forceRealtimeTeardown(): Promise<void> {
   try {
     await pb.realtime.unsubscribe()
   } catch (err) {
-    console.warn('Erro ao desmontar realtime do PocketBase:', err)
+    console.warn('forceRealtimeTeardown error:', err)
   }
 }
 

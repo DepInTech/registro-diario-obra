@@ -233,7 +233,7 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
           <td colspan="2"><b>Data:</b> ${dateStr}</td>
         </tr>
         <tr>
-          <td colspan="2"><b>Clima:</b> ${rdo.getString('weather')}</td>
+          <td colspan="2"><b>Clima:</b> ${rdo.getString('weather') || 'Ensolarado'}</td>
         </tr>
       </table>
     </div>

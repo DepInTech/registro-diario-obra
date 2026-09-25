@@ -99,7 +99,7 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
         <td class="label-col">ÁREA:</td>
         <td>${sheet.getString('area')}</td>
         <td class="label-col">CLIMA:</td>
-        <td colspan="2">${sheet.getString('weather') || 'Sol'}</td>
+        <td colspan="2">${sheet.getString('weather') || 'Ensolarado'}</td>
       </tr>
       <tr>
         <td class="label-col">PLUVIÔMETRO:</td>

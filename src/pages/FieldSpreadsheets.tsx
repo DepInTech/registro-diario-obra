@@ -175,7 +175,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 area: rec.area || 'Oficina Central',
                 operator: rec.operator,
                 operatorName: parsedSnapshot?.technician_name || op?.name || 'Carlos Oliveira',
-                weather: rec.weather || 'Sol',
+                weather: rec.weather || 'Ensolarado',
                 pluviometer:
                   rec.pluviometer === 0 || rec.pluviometer === '0' ? '' : (rec.pluviometer ?? ''),
                 morning_time: rec.morning_time || '',
@@ -612,7 +612,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       operator: finalOperator,
       operatorName: finalOperatorName,
       admin_snapshot: initialSheetSnapshot,
-      weather: 'Sol',
+      weather: 'Ensolarado',
       pluviometer: '' as any,
       morning_time: '',
       afternoon_time: '',
@@ -2144,20 +2144,76 @@ function FieldFullEditor({
             <label className="epa-label">CLIMA</label>
             {isFieldLockedByAdmin('weather') ? (
               <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                <span>{formData.weather || 'Sol'}</span>
+                <span>{formData.weather || 'Ensolarado'}</span>
               </div>
             ) : (
-              <select
-                value={formData.weather || 'Sol'}
-                onChange={(e) => handleFieldChange('weather', e.target.value)}
-                disabled={isLocked}
-                className="epa-input mt-1"
-              >
-                <option value="Sol">Sol</option>
-                <option value="Nublado">Nublado</option>
-                <option value="Chuva">Chuva</option>
-                <option value="Instável">Instável</option>
-              </select>
+              (() => {
+                const fixedChoices = ['Ensolarado', 'Chuvoso', 'Instável']
+                const rawWeather = formData.weather ?? 'Ensolarado'
+                const isOtherText =
+                  rawWeather === 'Outros' ||
+                  (rawWeather !== '' && !fixedChoices.includes(rawWeather))
+
+                if (isOtherText) {
+                  const displayVal = rawWeather === 'Outros' ? '' : rawWeather
+                  return (
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <Input
+                        type="text"
+                        value={displayVal}
+                        onChange={(e) => {
+                          handleFieldChange('weather', e.target.value)
+                          clearReturnedField('weather')
+                        }}
+                        disabled={isLocked}
+                        placeholder="Descreva a condição do clima..."
+                        className={cn(
+                          'min-h-[42px] text-xs sm:text-sm flex-1',
+                          isReturnedField('weather') &&
+                            'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                        )}
+                      />
+                      {!isLocked && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            handleFieldChange('weather', 'Ensolarado')
+                            clearReturnedField('weather')
+                          }}
+                          className="min-h-[42px] px-2.5 text-[11px] shrink-0 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                          title="Voltar às opções de clima"
+                        >
+                          Opções
+                        </Button>
+                      )}
+                    </div>
+                  )
+                }
+
+                return (
+                  <select
+                    value={rawWeather}
+                    onChange={(e) => {
+                      const selected = e.target.value
+                      handleFieldChange('weather', selected === 'Outros' ? 'Outros' : selected)
+                      clearReturnedField('weather')
+                    }}
+                    disabled={isLocked}
+                    className={cn(
+                      'epa-input mt-1 min-h-[42px]',
+                      isReturnedField('weather') &&
+                        'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
+                    )}
+                  >
+                    <option value="Ensolarado">Ensolarado</option>
+                    <option value="Chuvoso">Chuvoso</option>
+                    <option value="Instável">Instável</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                )
+              })()
             )}
           </div>
           <div>
@@ -3305,7 +3361,7 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
         <td class="label-col">ÁREA:</td>
         <td>${sheet.area || ''}</td>
         <td class="label-col">CLIMA:</td>
-        <td colspan="2">${sheet.weather || 'Sol'}</td>
+        <td colspan="2">${sheet.weather || 'Ensolarado'}</td>
       </tr>
       <tr>
         <td class="label-col">PLUVIÔMETRO:</td>

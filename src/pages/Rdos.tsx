@@ -215,7 +215,7 @@ export function RdosPage({ query }: { query: string }) {
                   (rec as any).empresa_executora || company?.name || 'EPA Gestão Ambiental',
                 location: proj?.location || 'Refinaria Sul — Área Industrial',
                 reportDate: rec.report_date ? rec.report_date.slice(0, 10) : '2025-05-28',
-                weather: rec.weather || 'Sol',
+                weather: rec.weather || 'Ensolarado',
                 performedBy: rec.performed_by,
                 performedByName: performer?.name || 'Carlos Oliveira',
                 supervisedBy: rec.supervised_by,
@@ -550,7 +550,7 @@ export function RdosPage({ query }: { query: string }) {
       companyName: finalCompanyName,
       location: initialLocation,
       reportDate: nowIso.slice(0, 10),
-      weather: 'Sol',
+      weather: 'Ensolarado',
       performedBy: user?.role === 'technician' ? user?.id || '' : baseSheetRdo?.performed_by || '',
       performedByName:
         user?.role === 'technician' ? user?.name || '' : baseSheetRdo?.performed_by_name || '',
@@ -2164,27 +2164,76 @@ function RdoFullPageEditor({
             </div>
             {isFieldLockedByAdmin('weather') ? (
               <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                <span>{formData.weather || 'Sol'}</span>
+                <span>{formData.weather || 'Ensolarado'}</span>
               </div>
             ) : (
-              <select
-                value={formData.weather ?? 'Sol'}
-                onChange={(e) => {
-                  handleFieldChange('weather', e.target.value)
-                  clearReturnedField('weather')
-                }}
-                disabled={isLocked}
-                className={cn(
-                  'epa-input mt-1.5',
-                  isReturnedField('weather') &&
-                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
-                )}
-              >
-                <option value="Sol">Sol</option>
-                <option value="Nublado">Nublado</option>
-                <option value="Chuva">Chuva</option>
-                <option value="Instável">Instável</option>
-              </select>
+              (() => {
+                const fixedChoices = ['Ensolarado', 'Chuvoso', 'Instável']
+                const rawWeather = formData.weather ?? 'Ensolarado'
+                const isOtherText =
+                  rawWeather === 'Outros' ||
+                  (rawWeather !== '' && !fixedChoices.includes(rawWeather))
+
+                if (isOtherText) {
+                  const displayVal = rawWeather === 'Outros' ? '' : rawWeather
+                  return (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      <Input
+                        type="text"
+                        value={displayVal}
+                        onChange={(e) => {
+                          handleFieldChange('weather', e.target.value)
+                          clearReturnedField('weather')
+                        }}
+                        disabled={isLocked}
+                        placeholder="Descreva a condição do clima..."
+                        className={cn(
+                          'min-h-[42px] text-xs sm:text-sm flex-1',
+                          isReturnedField('weather') &&
+                            'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+                        )}
+                      />
+                      {!isLocked && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            handleFieldChange('weather', 'Ensolarado')
+                            clearReturnedField('weather')
+                          }}
+                          className="min-h-[42px] px-2.5 text-[11px] shrink-0 text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+                          title="Voltar às opções de clima"
+                        >
+                          Opções
+                        </Button>
+                      )}
+                    </div>
+                  )
+                }
+
+                return (
+                  <select
+                    value={rawWeather}
+                    onChange={(e) => {
+                      const selected = e.target.value
+                      handleFieldChange('weather', selected === 'Outros' ? 'Outros' : selected)
+                      clearReturnedField('weather')
+                    }}
+                    disabled={isLocked}
+                    className={cn(
+                      'epa-input mt-1.5 min-h-[42px]',
+                      isReturnedField('weather') &&
+                        'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+                    )}
+                  >
+                    <option value="Ensolarado">Ensolarado</option>
+                    <option value="Chuvoso">Chuvoso</option>
+                    <option value="Instável">Instável</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                )
+              })()
             )}
           </div>
           <div>
