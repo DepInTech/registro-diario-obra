@@ -289,7 +289,7 @@ export function Projects({
       setProjectsList(
         staticProjects.map((p) => ({
           ...p,
-          assignedUsersIds: ['mb059ge3zci2tzr', 'cfpekk93zx4j1pr', '2n6he1v3guzt3yt'],
+          assignedUsersIds: ['mb059ge3zci2tzr', '4o5u72v8w6k277l', '2n6he1v3guzt3yt'],
           archived: false,
         })),
       )
@@ -298,7 +298,7 @@ export function Projects({
       setProjectsList(
         staticProjects.map((p) => ({
           ...p,
-          assignedUsersIds: ['mb059ge3zci2tzr', 'cfpekk93zx4j1pr', '2n6he1v3guzt3yt'],
+          assignedUsersIds: ['mb059ge3zci2tzr', '4o5u72v8w6k277l', '2n6he1v3guzt3yt'],
           archived: false,
         })),
       )

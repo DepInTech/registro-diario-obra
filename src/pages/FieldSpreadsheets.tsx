@@ -558,16 +558,70 @@ export function FieldSpreadsheets({ query }: { query: string }) {
 
     const nowIso = new Date().toISOString()
     const finalArea = (baseSheetField?.area || 'Oficina Central').trim()
-    const finalOperator = (
-      baseSheetField?.operator ||
-      (user?.role === 'technician' ? user?.id : '') ||
-      'cfpekk93zx4j1pr'
-    ).trim()
-    const finalOperatorName = (
-      baseSheetField?.technician_name ||
-      (user?.role === 'technician' ? user?.name : '') ||
-      'Carlos Oliveira'
-    ).trim()
+
+    // Validação estrita do operator: nunca usar ID inexistente como 'cfpekk93zx4j1pr'
+    let resolvedOperator = ''
+    let resolvedOperatorName = ''
+
+    try {
+      let activeUsers: any[] = []
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          activeUsers = await pb.collection('users').getFullList({
+            filter: 'active = true',
+            sort: 'name',
+          })
+        } catch {
+          // offline fallback
+        }
+      }
+
+      const candidateOpId = (baseSheetField?.operator || '').trim()
+      const candidateOpName = (
+        baseSheetField?.technician_name ||
+        baseSheetField?.operatorName ||
+        ''
+      ).trim()
+
+      const foundUser =
+        candidateOpId && candidateOpId !== 'cfpekk93zx4j1pr'
+          ? activeUsers.find((u) => u.id === candidateOpId)
+          : null
+
+      if (foundUser) {
+        resolvedOperator = foundUser.id
+        resolvedOperatorName = foundUser.name || candidateOpName
+      } else if (
+        candidateOpId &&
+        candidateOpId !== 'cfpekk93zx4j1pr' &&
+        isPocketBaseId(candidateOpId)
+      ) {
+        // ID com formato válido PocketBase sem lista remota disponível
+        resolvedOperator = candidateOpId
+        resolvedOperatorName = candidateOpName || user?.name || ''
+      } else if (user?.id && !isProvisionalId(user.id)) {
+        // Fallback seguro: usuário autenticado atual (Admin ou Técnico)
+        resolvedOperator = user.id
+        resolvedOperatorName = (user.name || '').trim()
+      } else if (activeUsers.length > 0) {
+        const firstTech = activeUsers.find((u) => u.role === 'technician') || activeUsers[0]
+        resolvedOperator = firstTech.id
+        resolvedOperatorName = firstTech.name || ''
+      }
+    } catch {
+      if (user?.id && !isProvisionalId(user.id)) {
+        resolvedOperator = user.id
+        resolvedOperatorName = (user.name || '').trim()
+      }
+    }
+
+    if (!resolvedOperator) {
+      resolvedOperator = user?.id || ''
+      resolvedOperatorName = (user?.name || '').trim()
+    }
+
+    const finalOperator = resolvedOperator.trim()
+    const finalOperatorName = (resolvedOperatorName || user?.name || '').trim()
 
     let initialSheetSnapshot: any = undefined
 

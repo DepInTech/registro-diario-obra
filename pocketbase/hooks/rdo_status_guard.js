@@ -34,14 +34,58 @@ onRecordCreateRequest(
             } catch (_) {}
           }
 
+          // Helper defensivo para resolver usuário válido na coleção users
+          const resolveValidUserId = (candidateId) => {
+            if (
+              !candidateId ||
+              typeof candidateId !== 'string' ||
+              candidateId.trim() === '' ||
+              candidateId === 'cfpekk93zx4j1pr' ||
+              candidateId.startsWith('user_') ||
+              candidateId.startsWith('field_') ||
+              candidateId.startsWith('rdo_') ||
+              candidateId.startsWith('p_')
+            ) {
+              return null
+            }
+            try {
+              const u = $app.findRecordById('users', candidateId.trim())
+              return u ? u.id : null
+            } catch {
+              return null
+            }
+          }
+
+          const fallbackUserId = () => {
+            if (e.auth && e.auth.id) {
+              const authUser = resolveValidUserId(e.auth.id)
+              if (authUser) return authUser
+            }
+            try {
+              const tech = $app.findFirstRecordByFilter(
+                'users',
+                'role = "technician" && active = true',
+              )
+              if (tech) return tech.id
+            } catch {}
+            try {
+              const anyActive = $app.findFirstRecordByFilter('users', 'active = true')
+              if (anyActive) return anyActive.id
+            } catch {}
+            return ''
+          }
+
           // Sanitização de relations obrigatórias
           if (col === 'field_spreadsheets') {
-            // operator deve ser ID de usuário válido
+            // operator deve ser relation válida na coleção users
             try {
-              const op = e.record.getString('operator')
-              if (!op || op.trim() === '' || op.startsWith('user_') || op.startsWith('field_')) {
-                const curAuthId = e.auth ? e.auth.id : ''
-                if (curAuthId) e.record.set('operator', curAuthId)
+              const rawOp = e.record.getString('operator')
+              const validOp = resolveValidUserId(rawOp)
+              if (validOp) {
+                e.record.set('operator', validOp)
+              } else {
+                const fb = fallbackUserId()
+                if (fb) e.record.set('operator', fb)
               }
             } catch (_) {}
 
@@ -66,6 +110,33 @@ onRecordCreateRequest(
             try {
               const ar = e.record.getString('area')
               if (!ar || ar.trim() === '') e.record.set('area', 'Geral')
+            } catch (_) {}
+          } else if (col === 'reports_rdo') {
+            // performed_by e supervised_by defensivos
+            try {
+              const rawPerf = e.record.getString('performed_by')
+              if (rawPerf) {
+                const validPerf = resolveValidUserId(rawPerf)
+                if (validPerf) {
+                  e.record.set('performed_by', validPerf)
+                } else {
+                  const fb = fallbackUserId()
+                  if (fb) e.record.set('performed_by', fb)
+                }
+              }
+            } catch (_) {}
+
+            try {
+              const rawSup = e.record.getString('supervised_by')
+              if (rawSup) {
+                const validSup = resolveValidUserId(rawSup)
+                if (validSup) {
+                  e.record.set('supervised_by', validSup)
+                } else {
+                  const fb = fallbackUserId()
+                  if (fb) e.record.set('supervised_by', fb)
+                }
+              }
             } catch (_) {}
           }
         }

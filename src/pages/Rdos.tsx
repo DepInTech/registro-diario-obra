@@ -543,6 +543,20 @@ export function RdosPage({ query }: { query: string }) {
       }
     }
 
+    const finalPerformedBy = (
+      user?.role === 'technician'
+        ? user?.id || ''
+        : baseSheetRdo?.performed_by && baseSheetRdo.performed_by !== 'cfpekk93zx4j1pr'
+          ? baseSheetRdo.performed_by
+          : user?.id || ''
+    ).trim()
+
+    const finalPerformedByName = (
+      user?.role === 'technician'
+        ? user?.name || ''
+        : baseSheetRdo?.performed_by_name || user?.name || ''
+    ).trim()
+
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
       number: undefined,
@@ -554,9 +568,8 @@ export function RdosPage({ query }: { query: string }) {
       location: initialLocation,
       reportDate: nowIso.slice(0, 10),
       weather: 'Ensolarado',
-      performedBy: user?.role === 'technician' ? user?.id || '' : baseSheetRdo?.performed_by || '',
-      performedByName:
-        user?.role === 'technician' ? user?.name || '' : baseSheetRdo?.performed_by_name || '',
+      performedBy: finalPerformedBy,
+      performedByName: finalPerformedByName,
       supervisedBy: finalSupervisedBy,
       supervisedByName: finalSupervisedByName,
       activityTitle: finalActivityTitle,
