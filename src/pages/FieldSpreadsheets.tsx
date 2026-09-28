@@ -2018,8 +2018,9 @@ function FieldFullEditor({
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold tracking-tight">
               {typeof formData.number === 'number' && formData.number > 0
-                ? `Planilha Nº ${formData.number} · ${formData.date}`
-                : `Planilha de Campo (Rascunho Offline) · ${formData.date}`}
+                ? `Planilha Nº ${formData.number}`
+                : 'Planilha de Campo'}
+              {formData.date ? ` · ${formData.date}` : ''}
             </h2>
             <StatusBadge status={formData.status} />
             <SheetSyncBadge
@@ -2268,20 +2269,7 @@ function FieldFullEditor({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div>
-            <label className="epa-label">Número da Planilha (Sequencial do Servidor)</label>
-            <Input
-              readOnly
-              disabled
-              value={
-                typeof formData.number === 'number' && formData.number > 0
-                  ? `Planilha Nº ${formData.number}`
-                  : 'Planilha Offline'
-              }
-              className="mt-1 font-mono min-h-[42px] bg-slate-100 cursor-not-allowed text-slate-700 font-semibold dark:bg-slate-800 dark:text-slate-300"
-            />
-          </div>
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
             {(() => {

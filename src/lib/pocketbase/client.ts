@@ -7,9 +7,11 @@ export { pb }
 
 export async function forceRealtimeTeardown(): Promise<void> {
   try {
-    await pb.realtime.unsubscribe()
-  } catch (err) {
-    console.warn('Realtime teardown warning:', err)
+    if (pb?.realtime) {
+      await pb.realtime.unsubscribe()
+    }
+  } catch {
+    // Silently ignore teardown errors on unmounted / aborted sockets
   }
 }
 
