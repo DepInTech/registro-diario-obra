@@ -94,22 +94,50 @@ onRecordCreateRequest(
         const parseSnapshotObj = (val) => {
           if (!val) return {}
           try {
-            if (typeof val === 'string') {
-              const trimmed = val.trim()
-              if (!trimmed) return {}
-              const p = JSON.parse(trimmed)
-              return p && typeof p === 'object' && !Array.isArray(p) ? p : {}
+            let cur = val
+            let attempts = 0
+            while (typeof cur === 'string' && attempts < 3) {
+              const trimmed = cur.trim()
+              if (
+                !trimmed ||
+                trimmed === '""' ||
+                trimmed === '{}' ||
+                trimmed === 'null' ||
+                trimmed === 'undefined'
+              ) {
+                return {}
+              }
+              cur = JSON.parse(trimmed)
+              attempts++
             }
-            // Se for Go map ou Go slice ou objeto, JSON roundtrip cria um Object puro JS
-            const str = JSON.stringify(val)
-            const p = JSON.parse(str)
-            return p && typeof p === 'object' && !Array.isArray(p) ? p : {}
+            if (!cur || typeof cur !== 'object' || Array.isArray(cur)) {
+              return {}
+            }
+            // Se for Go map ou Goja wrapper, garante clone JS puro
+            const p = JSON.parse(JSON.stringify(cur))
+            if (typeof p.filled_fields === 'string') {
+              try {
+                const pf = JSON.parse(p.filled_fields.trim())
+                if (pf && typeof pf === 'object' && !Array.isArray(pf)) p.filled_fields = pf
+              } catch (_) {}
+            }
+            if (typeof p.wells === 'string') {
+              try {
+                const pw = JSON.parse(p.wells.trim())
+                if (Array.isArray(pw)) p.wells = pw
+              } catch (_) {}
+            }
+            return p
           } catch (_) {
             return {}
           }
         }
 
         let existingSnapshot = parseSnapshotObj(e.record.get('admin_snapshot'))
+        // Se já houver admin_snapshot válido, garante normalizado
+        if (existingSnapshot && Object.keys(existingSnapshot).length > 0) {
+          e.record.set('admin_snapshot', existingSnapshot)
+        }
 
         if (collectionName === 'reports_rdo') {
           const supId = e.record.getString('supervised_by')
@@ -194,13 +222,38 @@ onRecordUpdateRequest(
           let snapshot = null
           try {
             const rawSnap = e.record.original().get('admin_snapshot')
-            if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
-              const parsed = JSON.parse(rawSnap)
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                snapshot = parsed
+            let cur = rawSnap
+            let attempts = 0
+            while (typeof cur === 'string' && attempts < 3) {
+              const trimmed = cur.trim()
+              if (
+                !trimmed ||
+                trimmed === '""' ||
+                trimmed === '{}' ||
+                trimmed === 'null' ||
+                trimmed === 'undefined'
+              ) {
+                cur = null
+                break
               }
-            } else if (rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap)) {
-              snapshot = JSON.parse(JSON.stringify(rawSnap))
+              cur = JSON.parse(trimmed)
+              attempts++
+            }
+            if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
+              snapshot = JSON.parse(JSON.stringify(cur))
+              if (typeof snapshot.filled_fields === 'string') {
+                try {
+                  const pf = JSON.parse(snapshot.filled_fields.trim())
+                  if (pf && typeof pf === 'object' && !Array.isArray(pf))
+                    snapshot.filled_fields = pf
+                } catch (_) {}
+              }
+              if (typeof snapshot.wells === 'string') {
+                try {
+                  const pw = JSON.parse(snapshot.wells.trim())
+                  if (Array.isArray(pw)) snapshot.wells = pw
+                } catch (_) {}
+              }
             }
           } catch (_) {}
 
@@ -405,21 +458,48 @@ onRecordUpdateRequest(
         const parseSnapshotObjUpdate = (val) => {
           if (!val) return {}
           try {
-            if (typeof val === 'string') {
-              const trimmed = val.trim()
-              if (!trimmed) return {}
-              const p = JSON.parse(trimmed)
-              return p && typeof p === 'object' && !Array.isArray(p) ? p : {}
+            let cur = val
+            let attempts = 0
+            while (typeof cur === 'string' && attempts < 3) {
+              const trimmed = cur.trim()
+              if (
+                !trimmed ||
+                trimmed === '""' ||
+                trimmed === '{}' ||
+                trimmed === 'null' ||
+                trimmed === 'undefined'
+              ) {
+                return {}
+              }
+              cur = JSON.parse(trimmed)
+              attempts++
             }
-            const str = JSON.stringify(val)
-            const p = JSON.parse(str)
-            return p && typeof p === 'object' && !Array.isArray(p) ? p : {}
+            if (!cur || typeof cur !== 'object' || Array.isArray(cur)) {
+              return {}
+            }
+            const p = JSON.parse(JSON.stringify(cur))
+            if (typeof p.filled_fields === 'string') {
+              try {
+                const pf = JSON.parse(p.filled_fields.trim())
+                if (pf && typeof pf === 'object' && !Array.isArray(pf)) p.filled_fields = pf
+              } catch (_) {}
+            }
+            if (typeof p.wells === 'string') {
+              try {
+                const pw = JSON.parse(p.wells.trim())
+                if (Array.isArray(pw)) p.wells = pw
+              } catch (_) {}
+            }
+            return p
           } catch (_) {
             return {}
           }
         }
 
         let existingSnapshot = parseSnapshotObjUpdate(e.record.get('admin_snapshot'))
+        if (existingSnapshot && Object.keys(existingSnapshot).length > 0) {
+          e.record.set('admin_snapshot', existingSnapshot)
+        }
 
         if (collectionName === 'reports_rdo') {
           const supId = e.record.getString('supervised_by')

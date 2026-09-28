@@ -52,6 +52,7 @@ import { offlineStorage, OfflineRdoItem } from '@/services/offlineStorage'
 import { authHeaders, exportUrl, updateRdoStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
+import { parseAdminSnapshot } from '@/lib/payloadSanitizer'
 import { type Status } from '@/data/epa'
 import { EPA_LOGO_BASE64 } from '@/components/epaLogoBase64'
 import { CorrectionHistorySection } from '@/components/CorrectionHistorySection'
@@ -174,12 +175,7 @@ export function RdosPage({ query }: { query: string }) {
               const generalPhotos = photos.filter((p) => (p as any).category !== 'field_inspection')
 
               const rawSnapshot = (rec as any).admin_snapshot
-              const parsedSnapshot =
-                typeof rawSnapshot === 'string' && rawSnapshot.trim() !== ''
-                  ? JSON.parse(rawSnapshot)
-                  : rawSnapshot && typeof rawSnapshot === 'object'
-                    ? rawSnapshot
-                    : undefined
+              const parsedSnapshot = parseAdminSnapshot(rawSnapshot) || undefined
 
               // Poços: se vieram de report_wells, usa eles. Se não houver nenhum em report_wells,
               // usa os poços guardados dentro do admin_snapshot do próprio registro!
@@ -387,7 +383,8 @@ export function RdosPage({ query }: { query: string }) {
         initialContractCode = activeProj.contract || initialContractCode
         initialLocation = activeProj.location || initialLocation
         if (activeProj.base_sheet_published && activeProj.base_sheet_rdo) {
-          baseSheetRdo = activeProj.base_sheet_rdo
+          const rawBaseRdo = activeProj.base_sheet_rdo
+          baseSheetRdo = parseAdminSnapshot(rawBaseRdo) || rawBaseRdo
         }
       }
     } catch (e) {
@@ -1381,11 +1378,19 @@ function RdoFullPageEditor({
     (!isAdmin && (formData.status === 'approved' || formData.status === 'submitted')) || isDeleted
 
   // Snapshot administrativo gravado no registro persistido (fonte da verdade definitiva)
-  // Prioriza o admin_snapshot vindo do servidor / initialReport ou do próprio formData
-  const adminSnapshot = initialReport.admin_snapshot || formData.admin_snapshot
-  const snapshotWells = adminSnapshot?.wells || []
-  const snapshotFilledFields = (adminSnapshot?.filled_fields || {}) as Record<string, any>
-
+  // Prioriza initialReport.admin_snapshot ou formData.admin_snapshot normalizados com parseAdminSnapshot
+  const adminSnapshot =
+    parseAdminSnapshot(initialReport?.admin_snapshot) ||
+    parseAdminSnapshot(formData.admin_snapshot) ||
+    null
+  const snapshotWells = Array.isArray(adminSnapshot?.wells) ? adminSnapshot.wells : []
+  const snapshotFilledFields = (
+    adminSnapshot?.filled_fields &&
+    typeof adminSnapshot.filled_fields === 'object' &&
+    !Array.isArray(adminSnapshot.filled_fields)
+      ? adminSnapshot.filled_fields
+      : {}
+  ) as Record<string, any>
   const isFieldLockedByAdmin = (field: string) =>
     !isAdmin &&
     snapshotFilledFields[field] !== undefined &&
@@ -1671,7 +1676,11 @@ function RdoFullPageEditor({
     // supervised_by_name (texto puro), performed_by/performed_by_name, empresa_executora,
     // wells completos com valores preenchidos e o dicionário completo filled_fields.
     // Se for o Técnico salvando, preserva o admin_snapshot que já veio do Admin/servidor.
-    let currentAdminSnapshot = formData.admin_snapshot || initialReport.admin_snapshot
+    let currentAdminSnapshot =
+      parseAdminSnapshot(formData.admin_snapshot) ||
+      parseAdminSnapshot(initialReport.admin_snapshot) ||
+      formData.admin_snapshot ||
+      initialReport.admin_snapshot
     if (isAdmin) {
       const wellsSnapshot = (formData.wells || []).map((w) => ({
         id: w.id,
@@ -2539,20 +2548,26 @@ function RdoFullPageEditor({
               )}
             </div>
             <div className="p-4 bg-white dark:bg-slate-900">
-              <Input
-                placeholder="Ex.: Tamponamento de poços de monitoramento ou Operação de Extração"
-                value={formData.activityTitle ?? ''}
-                onChange={(e) => {
-                  handleFieldChange('activityTitle', e.target.value)
-                  clearReturnedField('activityTitle')
-                }}
-                disabled={isLocked}
-                className={cn(
-                  'font-medium text-sm border-slate-300 dark:border-slate-700',
-                  isReturnedField('activityTitle') &&
-                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30',
-                )}
-              />
+              {isFieldLockedByAdmin('activityTitle') ? (
+                <div className="flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-sm font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                  <span>{formData.activityTitle || ''}</span>
+                </div>
+              ) : (
+                <Input
+                  placeholder="Ex.: Tamponamento de poços de monitoramento ou Operação de Extração"
+                  value={formData.activityTitle ?? ''}
+                  onChange={(e) => {
+                    handleFieldChange('activityTitle', e.target.value)
+                    clearReturnedField('activityTitle')
+                  }}
+                  disabled={isLocked}
+                  className={cn(
+                    'font-medium text-sm border-slate-300 dark:border-slate-700',
+                    isReturnedField('activityTitle') &&
+                      'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30',
+                  )}
+                />
+              )}
             </div>
           </div>
 
@@ -2576,20 +2591,26 @@ function RdoFullPageEditor({
             </div>
             <div className="p-4 bg-white dark:bg-slate-900 space-y-6">
               <div>
-                <Textarea
-                  placeholder="Descreva minuciosamente os serviços executados, procedimentos e informações de campo..."
-                  value={formData.activityDescription ?? ''}
-                  onChange={(e) => {
-                    handleFieldChange('activityDescription', e.target.value)
-                    clearReturnedField('activityDescription')
-                  }}
-                  disabled={isLocked}
-                  className={cn(
-                    'epa-textarea min-h-[120px] text-xs sm:text-sm',
-                    isReturnedField('activityDescription') &&
-                      'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30',
-                  )}
-                />
+                {isFieldLockedByAdmin('activityDescription') ? (
+                  <div className="p-3 rounded-lg bg-slate-100 text-slate-800 text-xs sm:text-sm border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[100px] whitespace-pre-wrap cursor-not-allowed select-none">
+                    <span>{formData.activityDescription || ''}</span>
+                  </div>
+                ) : (
+                  <Textarea
+                    placeholder="Descreva minuciosamente os serviços executados, procedimentos e informações de campo..."
+                    value={formData.activityDescription ?? ''}
+                    onChange={(e) => {
+                      handleFieldChange('activityDescription', e.target.value)
+                      clearReturnedField('activityDescription')
+                    }}
+                    disabled={isLocked}
+                    className={cn(
+                      'epa-textarea min-h-[120px] text-xs sm:text-sm',
+                      isReturnedField('activityDescription') &&
+                        'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30',
+                    )}
+                  />
+                )}
               </div>
 
               {/* FOTO DO CAMPO / LOCAL DA INSPEÇÃO (CENTRALIZADA COM LEGENDA ACIMA) */}
@@ -3170,20 +3191,26 @@ function RdoFullPageEditor({
                 </span>
               )}
             </div>
-            <Input
-              placeholder="Ex.: Não houve"
-              value={formData.interferences ?? ''}
-              onChange={(e) => {
-                handleFieldChange('interferences', e.target.value)
-                clearReturnedField('interferences')
-              }}
-              disabled={isLocked}
-              className={cn(
-                'mt-1.5',
-                isReturnedField('interferences') &&
-                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
-              )}
-            />
+            {isFieldLockedByAdmin('interferences') ? (
+              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.interferences || ''}</span>
+              </div>
+            ) : (
+              <Input
+                placeholder="Ex.: Não houve"
+                value={formData.interferences ?? ''}
+                onChange={(e) => {
+                  handleFieldChange('interferences', e.target.value)
+                  clearReturnedField('interferences')
+                }}
+                disabled={isLocked}
+                className={cn(
+                  'mt-1.5',
+                  isReturnedField('interferences') &&
+                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+                )}
+              />
+            )}
           </div>
           <div>
             <div className="flex items-center justify-between">
@@ -3194,20 +3221,26 @@ function RdoFullPageEditor({
                 </span>
               )}
             </div>
-            <Input
-              placeholder="Ex.: Não houve"
-              value={formData.planChanges ?? ''}
-              onChange={(e) => {
-                handleFieldChange('planChanges', e.target.value)
-                clearReturnedField('planChanges')
-              }}
-              disabled={isLocked}
-              className={cn(
-                'mt-1.5',
-                isReturnedField('planChanges') &&
-                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
-              )}
-            />
+            {isFieldLockedByAdmin('planChanges') ? (
+              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.planChanges || ''}</span>
+              </div>
+            ) : (
+              <Input
+                placeholder="Ex.: Não houve"
+                value={formData.planChanges ?? ''}
+                onChange={(e) => {
+                  handleFieldChange('planChanges', e.target.value)
+                  clearReturnedField('planChanges')
+                }}
+                disabled={isLocked}
+                className={cn(
+                  'mt-1.5',
+                  isReturnedField('planChanges') &&
+                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+                )}
+              />
+            )}
           </div>
           <div>
             <div className="flex items-center justify-between">
@@ -3218,20 +3251,26 @@ function RdoFullPageEditor({
                 </span>
               )}
             </div>
-            <Input
-              placeholder="Ex.: Sem ocorrências ou 00h30"
-              value={formData.timeWaiting ?? ''}
-              onChange={(e) => {
-                handleFieldChange('timeWaiting', e.target.value)
-                clearReturnedField('timeWaiting')
-              }}
-              disabled={isLocked}
-              className={cn(
-                'mt-1.5',
-                isReturnedField('timeWaiting') &&
-                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
-              )}
-            />
+            {isFieldLockedByAdmin('timeWaiting') ? (
+              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.timeWaiting || ''}</span>
+              </div>
+            ) : (
+              <Input
+                placeholder="Ex.: Sem ocorrências ou 00h30"
+                value={formData.timeWaiting ?? ''}
+                onChange={(e) => {
+                  handleFieldChange('timeWaiting', e.target.value)
+                  clearReturnedField('timeWaiting')
+                }}
+                disabled={isLocked}
+                className={cn(
+                  'mt-1.5',
+                  isReturnedField('timeWaiting') &&
+                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+                )}
+              />
+            )}
           </div>
           <div className="sm:col-span-2">
             <div className="flex items-center justify-between">
@@ -3242,20 +3281,26 @@ function RdoFullPageEditor({
                 </span>
               )}
             </div>
-            <Input
-              placeholder="Ex.: 00h00 ou 01h20"
-              value={formData.timeDisplacement ?? ''}
-              onChange={(e) => {
-                handleFieldChange('timeDisplacement', e.target.value)
-                clearReturnedField('timeDisplacement')
-              }}
-              disabled={isLocked}
-              className={cn(
-                'mt-1.5',
-                isReturnedField('timeDisplacement') &&
-                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
-              )}
-            />
+            {isFieldLockedByAdmin('timeDisplacement') ? (
+              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.timeDisplacement || ''}</span>
+              </div>
+            ) : (
+              <Input
+                placeholder="Ex.: 00h00 ou 01h20"
+                value={formData.timeDisplacement ?? ''}
+                onChange={(e) => {
+                  handleFieldChange('timeDisplacement', e.target.value)
+                  clearReturnedField('timeDisplacement')
+                }}
+                disabled={isLocked}
+                className={cn(
+                  'mt-1.5',
+                  isReturnedField('timeDisplacement') &&
+                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+                )}
+              />
+            )}
           </div>
         </div>
       </section>

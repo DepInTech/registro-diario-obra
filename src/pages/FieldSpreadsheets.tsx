@@ -55,6 +55,7 @@ import {
 import { authHeaders, exportUrl, updateFieldStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
+import { parseAdminSnapshot, isValidPocketBaseId } from '@/lib/payloadSanitizer'
 import { type Status } from '@/data/epa'
 import {
   FIELD_SHEET_RETURN_OPTIONS,
@@ -160,12 +161,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
               const fallbackAfternoon = rawExt.find((r) => r.afternoon_time)?.afternoon_time || ''
 
               const rawSnapshot = (rec as any).admin_snapshot
-              const parsedSnapshot =
-                typeof rawSnapshot === 'string' && rawSnapshot.trim() !== ''
-                  ? JSON.parse(rawSnapshot)
-                  : rawSnapshot && typeof rawSnapshot === 'object'
-                    ? rawSnapshot
-                    : undefined
+              const parsedSnapshot = parseAdminSnapshot(rawSnapshot) || undefined
 
               const item: OfflineFieldSheetItem = {
                 id: rec.id,
@@ -484,7 +480,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         initialClientName = activeProj.client || ''
         initialContractCode = activeProj.contract || activeProj.code || ''
         if (activeProj.base_sheet_published && activeProj.base_sheet_field) {
-          baseSheetField = activeProj.base_sheet_field
+          const rawBaseField = activeProj.base_sheet_field
+          baseSheetField = parseAdminSnapshot(rawBaseField) || rawBaseField
         }
       }
     } catch (e) {
@@ -594,7 +591,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       } else if (
         candidateOpId &&
         candidateOpId !== 'cfpekk93zx4j1pr' &&
-        isPocketBaseId(candidateOpId)
+        isValidPocketBaseId(candidateOpId)
       ) {
         // ID com formato válido PocketBase sem lista remota disponível
         resolvedOperator = candidateOpId
@@ -1341,10 +1338,19 @@ function FieldFullEditor({
   }, [formData.projectId])
 
   // Snapshot administrativo gravado no registro persistido (fonte da verdade definitiva)
-  // Prioriza initialSheet.admin_snapshot ou formData.admin_snapshot
-  const adminSnapshot = initialSheet.admin_snapshot || formData.admin_snapshot
-  const snapshotWells = adminSnapshot?.wells || []
-  const snapshotFilledFields = (adminSnapshot?.filled_fields || {}) as Record<string, any>
+  // Prioriza initialSheet.admin_snapshot ou formData.admin_snapshot normalizados com parseAdminSnapshot
+  const adminSnapshot =
+    parseAdminSnapshot(initialSheet.admin_snapshot) ||
+    parseAdminSnapshot(formData.admin_snapshot) ||
+    null
+  const snapshotWells = Array.isArray(adminSnapshot?.wells) ? adminSnapshot.wells : []
+  const snapshotFilledFields = (
+    adminSnapshot?.filled_fields &&
+    typeof adminSnapshot.filled_fields === 'object' &&
+    !Array.isArray(adminSnapshot.filled_fields)
+      ? adminSnapshot.filled_fields
+      : {}
+  ) as Record<string, any>
 
   const isFieldLockedByAdmin = (field: string) =>
     !isAdmin &&
@@ -1703,7 +1709,11 @@ function FieldFullEditor({
     // Se quem está salvando é o Admin, gera e atualiza o admin_snapshot contendo
     // technician_name (texto puro), operator, poços PR configurados (com well e pump)
     // e o dicionário filled_fields com todos os campos estruturais preenchidos pelo Admin.
-    let currentAdminSnapshot = formData.admin_snapshot || initialSheet.admin_snapshot
+    let currentAdminSnapshot =
+      parseAdminSnapshot(formData.admin_snapshot) ||
+      parseAdminSnapshot(initialSheet.admin_snapshot) ||
+      formData.admin_snapshot ||
+      initialSheet.admin_snapshot
     if (isAdmin) {
       const wellsSnapshot = (formData.extraction_data || []).map((row) => ({
         well: String(row.well || '').trim(),

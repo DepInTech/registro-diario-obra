@@ -63,24 +63,75 @@ export function sanitizeDateToIso(raw: unknown): string {
  * Garante que admin_snapshot seja SEMPRE um objeto plano Javascript ({...}), NUNCA array ou nulo.
  * Se for string JSON, faz o parse e valida se é objeto.
  */
-export function sanitizeAdminSnapshot(raw: unknown): Record<string, unknown> | undefined {
-  if (raw === undefined || raw === null) return undefined
+/**
+ * Normaliza qualquer valor recebido para objeto plano seguro (Record<string, any>).
+ * Suporta string JSON, múltiplos níveis de stringificação, nulos, undefined e Goja objects.
+ * Retorna null se não houver payload válido em formato de objeto.
+ */
+export function parseAdminSnapshot(raw: unknown): Record<string, any> | null {
+  if (raw === undefined || raw === null) return null
 
-  let obj: any = raw
-  if (typeof raw === 'string') {
-    const trimmed = raw.trim()
-    if (!trimmed) return undefined
+  let cur: any = raw
+  // Trata casos em que a string JSON foi duplamente serializada
+  let attempts = 0
+  while (typeof cur === 'string' && attempts < 3) {
+    const trimmed = cur.trim()
+    if (
+      !trimmed ||
+      trimmed === '""' ||
+      trimmed === '{}' ||
+      trimmed === 'null' ||
+      trimmed === 'undefined'
+    ) {
+      return null
+    }
     try {
-      obj = JSON.parse(trimmed)
+      cur = JSON.parse(trimmed)
+      attempts++
     } catch {
-      return {}
+      return null
     }
   }
 
-  // Se for array ou não for objeto, retorna objeto vazio
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
-    return {}
+  if (!cur || typeof cur !== 'object' || Array.isArray(cur)) {
+    return null
   }
+
+  // Normaliza sub-propriedades que também possam ter chegado como string JSON
+  if (typeof cur.filled_fields === 'string') {
+    try {
+      const parsedFields = JSON.parse(cur.filled_fields.trim())
+      if (parsedFields && typeof parsedFields === 'object' && !Array.isArray(parsedFields)) {
+        cur.filled_fields = parsedFields
+      } else {
+        cur.filled_fields = {}
+      }
+    } catch {
+      cur.filled_fields = {}
+    }
+  }
+
+  if (typeof cur.wells === 'string') {
+    try {
+      const parsedWells = JSON.parse(cur.wells.trim())
+      cur.wells = Array.isArray(parsedWells) ? parsedWells : []
+    } catch {
+      cur.wells = []
+    }
+  }
+
+  return cur
+}
+
+/**
+ * Garante que admin_snapshot seja SEMPRE um objeto plano Javascript ({...}), NUNCA array ou nulo.
+ * Se for string JSON, faz o parse e valida se é objeto.
+ */
+export function sanitizeAdminSnapshot(raw: unknown): Record<string, unknown> | undefined {
+  if (raw === undefined || raw === null) return undefined
+
+  const obj = parseAdminSnapshot(raw)
+  if (!obj) return {}
 
   // Se tiver preenchimento, clona para garantir objeto plano
   const sanitized: Record<string, unknown> = {}
