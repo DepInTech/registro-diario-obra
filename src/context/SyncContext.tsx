@@ -7,6 +7,7 @@ import {
   OfflineProjectItem,
 } from '@/services/offlineStorage'
 import { useToast } from '@/hooks/use-toast'
+import { brDateToIso } from '@/lib/dateMask'
 
 export const SYNC_BROADCAST_EVENT = 'epa_sync_complete'
 export const REALTIME_RECORD_UPDATE = 'epa_realtime_record_update'
@@ -595,10 +596,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               throw new Error('Responsável pela execução (performed_by) é obrigatório.')
             }
 
+            const sanitizedReportDate =
+              brDateToIso(rdo.reportDate) || new Date().toISOString().slice(0, 10)
             const payload: Record<string, unknown> = {
               project: targetProjectId,
               empresa_executora: rdo.companyName || 'EPA Gestão Ambiental',
-              report_date: rdo.reportDate,
+              report_date: sanitizedReportDate,
               weather: rdo.weather || 'Sol',
               performed_by: targetPerformedBy,
               supervised_by: targetSupervisedBy || undefined,
@@ -647,11 +650,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               const wellIdClean = String(well.well_id || '').trim()
               if (!wellIdClean) continue
 
-              // Sanitização: completion_date vazio -> null ou ISO válido, nunca undefined
+              // Sanitização: completion_date vazio -> null ou ISO válido (YYYY-MM-DD), nunca undefined
               let sanitizedDate: string | null = null
               if (well.completion_date && String(well.completion_date).trim() !== '') {
-                const dateStr = String(well.completion_date).trim()
-                sanitizedDate = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00.000Z`
+                const isoDate = brDateToIso(String(well.completion_date).trim())
+                sanitizedDate = isoDate
+                  ? isoDate.includes('T')
+                    ? isoDate
+                    : `${isoDate}T12:00:00.000Z`
+                  : null
               }
 
               try {
@@ -854,9 +861,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               continue
             }
 
+            const sanitizedUpdateReportDate =
+              brDateToIso(rdo.reportDate) || new Date().toISOString().slice(0, 10)
             const payload: Record<string, unknown> = {
               number: rdo.number,
-              report_date: rdo.reportDate,
+              report_date: sanitizedUpdateReportDate,
               weather: rdo.weather,
               performed_by: rdo.performedBy,
               supervised_by: rdo.supervisedBy || undefined,
@@ -906,11 +915,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                 const wellIdClean = String(well.well_id || '').trim()
                 if (!wellIdClean) continue
 
-                // Sanitização: completion_date vazio -> null ou ISO válido, nunca undefined
+                // Sanitização: completion_date vazio -> null ou ISO válido (YYYY-MM-DD), nunca undefined
                 let sanitizedDate: string | null = null
                 if (well.completion_date && String(well.completion_date).trim() !== '') {
-                  const dateStr = String(well.completion_date).trim()
-                  sanitizedDate = dateStr.includes('T') ? dateStr : `${dateStr}T12:00:00.000Z`
+                  const isoDate = brDateToIso(String(well.completion_date).trim())
+                  sanitizedDate = isoDate
+                    ? isoDate.includes('T')
+                      ? isoDate
+                      : `${isoDate}T12:00:00.000Z`
+                    : null
                 }
 
                 const wellPayload = {
@@ -1133,16 +1146,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             const targetOperator =
               sheet.operator && !isProvisionalId(sheet.operator) ? sheet.operator : currentUserId
 
+            const sanitizedSheetDate =
+              brDateToIso(sheet.date) || new Date().toISOString().slice(0, 10)
             const payload: Record<string, unknown> = {
               project: targetProjectId,
               operator: targetOperator,
-              date: sheet.date || new Date().toISOString().slice(0, 10),
+              date: sanitizedSheetDate,
               area: sheet.area || 'Geral',
               weather: sheet.weather || 'Sol',
               pluviometer:
-                sheet.pluviometer === 0 || sheet.pluviometer === '0'
+                sheet.pluviometer === null || sheet.pluviometer === undefined
                   ? ''
-                  : (sheet.pluviometer ?? ''),
+                  : String(sheet.pluviometer),
               morning_time: sheet.morning_time || '',
               afternoon_time: sheet.afternoon_time || '',
               infiltration_morning_time: sheet.infiltration_morning_time || '',
@@ -1151,23 +1166,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               infiltration_data: sheet.infiltration_data || {},
               nutrient_done: Boolean(sheet.nutrient_done),
               nutrient_map_kg:
-                sheet.nutrient_map_kg === 0 || sheet.nutrient_map_kg === '0'
+                sheet.nutrient_map_kg === null || sheet.nutrient_map_kg === undefined
                   ? ''
-                  : (sheet.nutrient_map_kg ?? ''),
+                  : String(sheet.nutrient_map_kg),
               nutrient_ureia_kg:
-                sheet.nutrient_ureia_kg === 0 || sheet.nutrient_ureia_kg === '0'
+                sheet.nutrient_ureia_kg === null || sheet.nutrient_ureia_kg === undefined
                   ? ''
-                  : (sheet.nutrient_ureia_kg ?? ''),
+                  : String(sheet.nutrient_ureia_kg),
               compressor_data: sheet.compressor_data || {},
               oil_removal_data: sheet.oil_removal_data || {},
               waste_liquid_qty:
-                sheet.waste_liquid_qty === 0 || sheet.waste_liquid_qty === '0'
+                sheet.waste_liquid_qty === null || sheet.waste_liquid_qty === undefined
                   ? ''
-                  : (sheet.waste_liquid_qty ?? ''),
+                  : String(sheet.waste_liquid_qty),
               waste_solid_qty:
-                sheet.waste_solid_qty === 0 || sheet.waste_solid_qty === '0'
+                sheet.waste_solid_qty === null || sheet.waste_solid_qty === undefined
                   ? ''
-                  : (sheet.waste_solid_qty ?? ''),
+                  : String(sheet.waste_solid_qty),
               env_5s_check: Boolean(sheet.env_5s_check),
               env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
               observations: sheet.observations || '',
@@ -1288,15 +1303,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               continue
             }
 
+            const sanitizedUpdateSheetDate =
+              brDateToIso(sheet.date) || new Date().toISOString().slice(0, 10)
             const payload: Record<string, unknown> = {
               operator: sheet.operator,
-              date: sheet.date,
+              date: sanitizedUpdateSheetDate,
               area: sheet.area || 'Geral',
               weather: sheet.weather || 'Sol',
               pluviometer:
-                sheet.pluviometer === 0 || sheet.pluviometer === '0'
+                sheet.pluviometer === null || sheet.pluviometer === undefined
                   ? ''
-                  : (sheet.pluviometer ?? ''),
+                  : String(sheet.pluviometer),
               morning_time: sheet.morning_time || '',
               afternoon_time: sheet.afternoon_time || '',
               infiltration_morning_time: sheet.infiltration_morning_time || '',
@@ -1305,23 +1322,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               infiltration_data: sheet.infiltration_data || {},
               nutrient_done: Boolean(sheet.nutrient_done),
               nutrient_map_kg:
-                sheet.nutrient_map_kg === 0 || sheet.nutrient_map_kg === '0'
+                sheet.nutrient_map_kg === null || sheet.nutrient_map_kg === undefined
                   ? ''
-                  : (sheet.nutrient_map_kg ?? ''),
+                  : String(sheet.nutrient_map_kg),
               nutrient_ureia_kg:
-                sheet.nutrient_ureia_kg === 0 || sheet.nutrient_ureia_kg === '0'
+                sheet.nutrient_ureia_kg === null || sheet.nutrient_ureia_kg === undefined
                   ? ''
-                  : (sheet.nutrient_ureia_kg ?? ''),
+                  : String(sheet.nutrient_ureia_kg),
               compressor_data: sheet.compressor_data || {},
               oil_removal_data: sheet.oil_removal_data || {},
               waste_liquid_qty:
-                sheet.waste_liquid_qty === 0 || sheet.waste_liquid_qty === '0'
+                sheet.waste_liquid_qty === null || sheet.waste_liquid_qty === undefined
                   ? ''
-                  : (sheet.waste_liquid_qty ?? ''),
+                  : String(sheet.waste_liquid_qty),
               waste_solid_qty:
-                sheet.waste_solid_qty === 0 || sheet.waste_solid_qty === '0'
+                sheet.waste_solid_qty === null || sheet.waste_solid_qty === undefined
                   ? ''
-                  : (sheet.waste_solid_qty ?? ''),
+                  : String(sheet.waste_solid_qty),
               env_5s_check: Boolean(sheet.env_5s_check),
               env_checklist_monthly: Boolean(sheet.env_checklist_monthly),
               observations: sheet.observations || '',

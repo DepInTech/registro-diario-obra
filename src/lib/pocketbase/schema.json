@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28T12:32:13.329Z",
+  "generatedAt": "2026-09-28T12:40:15.839Z",
   "collections": [
     {
       "name": "users",
@@ -836,12 +836,6 @@
           "system": false
         },
         {
-          "name": "pluviometer",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
           "name": "extraction_data",
           "type": "json",
           "required": false,
@@ -860,18 +854,6 @@
           "system": false
         },
         {
-          "name": "nutrient_map_kg",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "nutrient_ureia_kg",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
           "name": "compressor_data",
           "type": "json",
           "required": false,
@@ -880,18 +862,6 @@
         {
           "name": "oil_removal_data",
           "type": "json",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "waste_liquid_qty",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "waste_solid_qty",
-          "type": "number",
           "required": false,
           "system": false
         },
@@ -1040,6 +1010,36 @@
         {
           "name": "admin_snapshot",
           "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "waste_liquid_qty",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "waste_solid_qty",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pluviometer",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nutrient_map_kg",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nutrient_ureia_kg",
+          "type": "text",
           "required": false,
           "system": false
         }

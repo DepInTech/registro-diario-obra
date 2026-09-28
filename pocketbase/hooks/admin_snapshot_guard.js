@@ -13,8 +13,11 @@ onRecordCreateRequest(
         try {
           const rawSnap = e.record.get('admin_snapshot')
           if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
-            existingSnapshot = JSON.parse(rawSnap)
-          } else if (rawSnap && typeof rawSnap === 'object') {
+            const parsed = JSON.parse(rawSnap)
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              existingSnapshot = parsed
+            }
+          } else if (rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap)) {
             existingSnapshot = JSON.parse(JSON.stringify(rawSnap))
           }
         } catch (_) {}
@@ -115,8 +118,11 @@ onRecordUpdateRequest(
           try {
             const rawSnap = e.record.original().get('admin_snapshot')
             if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
-              snapshot = JSON.parse(rawSnap)
-            } else if (rawSnap && typeof rawSnap === 'object') {
+              const parsed = JSON.parse(rawSnap)
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                snapshot = parsed
+              }
+            } else if (rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap)) {
               snapshot = JSON.parse(JSON.stringify(rawSnap))
             }
           } catch (_) {}
@@ -260,8 +266,11 @@ onRecordUpdateRequest(
         try {
           const rawSnap = e.record.get('admin_snapshot')
           if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
-            existingSnapshot = JSON.parse(rawSnap)
-          } else if (rawSnap && typeof rawSnap === 'object') {
+            const parsed = JSON.parse(rawSnap)
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              existingSnapshot = parsed
+            }
+          } else if (rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap)) {
             existingSnapshot = JSON.parse(JSON.stringify(rawSnap))
           }
         } catch (_) {}
