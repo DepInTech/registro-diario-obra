@@ -62,14 +62,37 @@ export async function createReport(
 ) {
   const payload = new FormData()
   Object.entries(draft).forEach(([key, value]) => {
-    if (value !== undefined && value !== '')
-      payload.append(key, value instanceof File ? value : String(value))
+    if (value !== undefined && value !== '') {
+      if (key === 'report_date' || key === 'date') {
+        const strVal = String(value).trim()
+        const brMatch = strVal.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+        const normalized = brMatch ? `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}` : strVal
+        payload.append(key, normalized)
+      } else {
+        payload.append(key, value instanceof File ? value : String(value))
+      }
+    }
   })
   const report = await pb.collection('reports_rdo').create<ReportRdo>(payload)
   await Promise.all(
     wells
       .filter((row) => row.well_id)
-      .map((row) => pb.collection('report_wells').create({ report: report.id, ...row })),
+      .map((row) => {
+        let compDate: string | null = null
+        if (row.completion_date && String(row.completion_date).trim() !== '') {
+          const s = String(row.completion_date).trim()
+          const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+          const iso = br ? `${br[3]}-${br[2]}-${br[1]}` : s
+          compDate = iso.includes('T') ? iso : `${iso}T12:00:00.000Z`
+        }
+        return pb.collection('report_wells').create({
+          report: report.id,
+          well_id: row.well_id,
+          depth: row.depth,
+          completion_date: compDate,
+          diameter: row.diameter,
+        })
+      }),
   )
   for (let index = 0; index < photos.length; index += 1) {
     const photo = new FormData()

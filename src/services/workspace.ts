@@ -8,6 +8,8 @@ export function signOut() {
   pb.authStore.clear()
 }
 
+import { sanitizeRdoPayload, sanitizeFieldSpreadsheetPayload } from '@/lib/payloadSanitizer'
+
 export async function updateRdoStatus(
   id: string,
   status: string,
@@ -26,7 +28,7 @@ export async function updateRdoStatus(
   if (changeHistory !== undefined) {
     data.change_history = changeHistory
   }
-  return pb.collection('reports_rdo').update(id, data)
+  return pb.collection('reports_rdo').update(id, sanitizeRdoPayload(data))
 }
 
 export async function updateFieldStatus(
@@ -47,7 +49,7 @@ export async function updateFieldStatus(
   if (changeHistory !== undefined) {
     data.change_history = changeHistory
   }
-  return pb.collection('field_spreadsheets').update(id, data)
+  return pb.collection('field_spreadsheets').update(id, sanitizeFieldSpreadsheetPayload(data))
 }
 
 export async function askEpaCopilot(
