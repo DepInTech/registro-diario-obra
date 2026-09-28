@@ -305,25 +305,51 @@ onRecordUpdateRequest(
                 }
               }
 
-              // d) Inspeciona filled_fields genéricos para reports_rdo (ex.: activity_title etc se preenchidos no snapshot)
-              for (const [fName, fVal] of Object.entries(filledFields)) {
-                if (fVal === undefined || fVal === null || String(fVal).trim() === '') continue
-                // Mapeamento de nomes camelCase para schema PocketBase
-                let colField = fName
-                if (fName === 'performedByName' || fName === 'performedBy')
-                  colField = 'performed_by'
-                if (fName === 'supervisedByName' || fName === 'supervisedBy')
-                  colField = 'supervised_by'
-                if (fName === 'companyName' || fName === 'empresa_executora')
-                  colField = 'empresa_executora'
+              // d) Inspeciona todos os campos de reports_rdo definidos no snapshot pelo Admin
+              // Se o Admin preencheu e o Técnico enviar valor diferente, restaura o valor do Admin
+              const rdoFieldMapping = {
+                report_date: ['report_date', 'reportDate', 'date'],
+                weather: ['weather'],
+                activity_title: ['activity_title', 'activityTitle'],
+                activity_description: ['activity_description', 'activityDescription'],
+                time_displacement: ['time_displacement', 'timeDisplacement'],
+                time_waiting: ['time_waiting', 'timeWaiting'],
+                interferences: ['interferences'],
+                plan_changes: ['plan_changes', 'planChanges'],
+                accidents: ['accidents'],
+              }
 
-                if (
-                  colField === 'supervised_by' ||
-                  colField === 'performed_by' ||
-                  colField === 'empresa_executora'
-                ) {
-                  // Já checados ou relação
-                  continue
+              for (const [colName, aliases] of Object.entries(rdoFieldMapping)) {
+                let adminVal = undefined
+                for (let a = 0; a < aliases.length; a++) {
+                  const k = aliases[a]
+                  if (
+                    snapshot[k] !== undefined &&
+                    snapshot[k] !== null &&
+                    String(snapshot[k]).trim() !== ''
+                  ) {
+                    adminVal = snapshot[k]
+                    break
+                  }
+                  if (
+                    filledFields[k] !== undefined &&
+                    filledFields[k] !== null &&
+                    String(filledFields[k]).trim() !== ''
+                  ) {
+                    adminVal = filledFields[k]
+                    break
+                  }
+                }
+
+                if (adminVal !== undefined && adminVal !== null && String(adminVal).trim() !== '') {
+                  const strAdmin = String(adminVal).trim()
+                  const curVal = e.record.get(colName)
+                  const strCur =
+                    curVal !== undefined && curVal !== null ? String(curVal).trim() : ''
+                  if (strCur !== strAdmin) {
+                    // Restaura silenciosamente ou garante o valor do Admin
+                    e.record.set(colName, adminVal)
+                  }
                 }
               }
 
@@ -341,7 +367,104 @@ onRecordUpdateRequest(
                 }
               }
 
-              // b) poços e altura da bomba configurados pelo Admin em extraction_data
+              // b) Inspeciona todos os campos estruturais da Planilha definidos pelo Admin
+              // Simples/texto/booleano: date, weather, pluviometer, nutrient_done, nutrient_map_kg, nutrient_ureia_kg,
+              // waste_liquid_qty, waste_solid_qty, env_5s_check, env_checklist_monthly, observations,
+              // morning_time, afternoon_time, infiltration_morning_time, infiltration_afternoon_time
+              const sheetFieldMapping = {
+                date: ['date'],
+                weather: ['weather'],
+                pluviometer: ['pluviometer'],
+                nutrient_done: ['nutrient_done'],
+                nutrient_map_kg: ['nutrient_map_kg'],
+                nutrient_ureia_kg: ['nutrient_ureia_kg'],
+                waste_liquid_qty: ['waste_liquid_qty'],
+                waste_solid_qty: ['waste_solid_qty'],
+                env_5s_check: ['env_5s_check'],
+                env_checklist_monthly: ['env_checklist_monthly'],
+                observations: ['observations'],
+                morning_time: ['morning_time'],
+                afternoon_time: ['afternoon_time'],
+                infiltration_morning_time: ['infiltration_morning_time'],
+                infiltration_afternoon_time: ['infiltration_afternoon_time'],
+              }
+
+              for (const [colName, aliases] of Object.entries(sheetFieldMapping)) {
+                let adminVal = undefined
+                for (let a = 0; a < aliases.length; a++) {
+                  const k = aliases[a]
+                  if (snapshot[k] !== undefined && snapshot[k] !== null) {
+                    if (typeof snapshot[k] === 'boolean' || String(snapshot[k]).trim() !== '') {
+                      adminVal = snapshot[k]
+                      break
+                    }
+                  }
+                  if (filledFields[k] !== undefined && filledFields[k] !== null) {
+                    if (
+                      typeof filledFields[k] === 'boolean' ||
+                      String(filledFields[k]).trim() !== ''
+                    ) {
+                      adminVal = filledFields[k]
+                      break
+                    }
+                  }
+                }
+
+                if (adminVal !== undefined && adminVal !== null) {
+                  if (typeof adminVal === 'boolean') {
+                    // Se foi definido como true pelo admin, técnico não pode desligar
+                    if (adminVal === true) {
+                      e.record.set(colName, true)
+                    }
+                  } else {
+                    const strAdmin = String(adminVal).trim()
+                    if (strAdmin !== '') {
+                      const curVal = e.record.get(colName)
+                      const strCur =
+                        curVal !== undefined && curVal !== null ? String(curVal).trim() : ''
+                      if (strCur !== strAdmin) {
+                        e.record.set(colName, adminVal)
+                      }
+                    }
+                  }
+                }
+              }
+
+              // c) Objetos JSON estruturais: infiltration_data, compressor_data, oil_removal_data
+              const jsonFieldNames = ['infiltration_data', 'compressor_data', 'oil_removal_data']
+              for (let j = 0; j < jsonFieldNames.length; j++) {
+                const jf = jsonFieldNames[j]
+                const adminObj = snapshot[jf] || filledFields[jf]
+                if (adminObj && typeof adminObj === 'object' && !Array.isArray(adminObj)) {
+                  let curObj = {}
+                  try {
+                    const raw = e.record.get(jf)
+                    if (typeof raw === 'string' && raw.trim() !== '') curObj = JSON.parse(raw)
+                    else if (raw && typeof raw === 'object') curObj = raw
+                  } catch (_) {}
+
+                  let mergedObj = Object.assign({}, curObj)
+                  let changed = false
+                  for (const [subK, subV] of Object.entries(adminObj)) {
+                    if (subV !== undefined && subV !== null && String(subV).trim() !== '') {
+                      const strSubV = String(subV).trim()
+                      const curSubV =
+                        curObj[subK] !== undefined && curObj[subK] !== null
+                          ? String(curObj[subK]).trim()
+                          : ''
+                      if (curSubV !== strSubV) {
+                        mergedObj[subK] = subV
+                        changed = true
+                      }
+                    }
+                  }
+                  if (changed) {
+                    e.record.set(jf, mergedObj)
+                  }
+                }
+              }
+
+              // d) poços e altura da bomba configurados pelo Admin em extraction_data
               const snapWells = Array.isArray(snapshot.wells) ? snapshot.wells : []
               if (snapWells.length > 0) {
                 let nextExt = []
@@ -385,7 +508,7 @@ onRecordUpdateRequest(
                 }
               }
 
-              // c) Garante que o Técnico NÃO possa sobrescrever ou limpar o admin_snapshot existente
+              // e) Garante que o Técnico NÃO possa sobrescrever ou limpar o admin_snapshot existente
               e.record.set('admin_snapshot', snapshot)
             }
           }

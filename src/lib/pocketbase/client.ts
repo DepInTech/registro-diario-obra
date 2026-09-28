@@ -3,11 +3,14 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-export async function forceRealtimeTeardown(): Promise<void> {
+/**
+ * Teardown helper for realtime connections when logging out or changing context
+ */
+export function forceRealtimeTeardown(): void {
   try {
-    await pb.realtime.unsubscribe()
-  } catch {
-    // Ignore teardown errors
+    pb.realtime?.unsubscribe()
+  } catch (err) {
+    console.warn('[PB Client] Realtime teardown warning:', err)
   }
 }
 

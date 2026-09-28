@@ -375,8 +375,46 @@ onRecordUpdateRequest((e) => {
           'Não é permitido alterar dados de poços em um RDO enviado para aprovação ou aprovado.',
         )
       }
+
+      // Proteção de poços pré-cadastrados pelo Administrador via admin_snapshot do RDO pai
+      const rawSnap = parentReport.get('admin_snapshot')
+      let snapObj = null
+      if (typeof rawSnap === 'string' && rawSnap.trim()) {
+        try {
+          snapObj = JSON.parse(rawSnap)
+        } catch (_) {}
+      } else if (rawSnap && typeof rawSnap === 'object') {
+        snapObj = rawSnap
+      }
+
+      if (snapObj && Array.isArray(snapObj.wells)) {
+        const origWellId = e.record.original().getString('well_id')
+        const snapMatch = snapObj.wells.find(function (w) {
+          return w && String(w.well_id || w.well || '').trim() === String(origWellId).trim()
+        })
+        if (snapMatch) {
+          // Poço configurado pelo Admin: não pode alterar identificação
+          const nextWellId = e.record.getString('well_id')
+          if (nextWellId !== origWellId) {
+            throw new BadRequestError(
+              'Identificação do poço definida pelo Administrador não pode ser alterada.',
+            )
+          }
+          // Se profundidade estava definida no snapshot, não pode alterar
+          if (
+            snapMatch.depth !== undefined &&
+            snapMatch.depth !== null &&
+            String(snapMatch.depth).trim() !== ''
+          ) {
+            const nextDepth = e.record.get('depth')
+            if (String(nextDepth) !== String(snapMatch.depth)) {
+              e.record.set('depth', snapMatch.depth)
+            }
+          }
+        }
+      }
     } catch (err) {
-      if (err instanceof ForbiddenError) throw err
+      if (err instanceof ForbiddenError || err instanceof BadRequestError) throw err
     }
   }
 
@@ -399,27 +437,72 @@ onRecordDeleteRequest((e) => {
           'Não é permitido remover poços de um RDO enviado para aprovação ou aprovado.',
         )
       }
+
+      // Proteção contra exclusão de poços pré-cadastrados pelo Administrador
+      const rawSnap = parentReport.get('admin_snapshot')
+      let snapObj = null
+      if (typeof rawSnap === 'string' && rawSnap.trim()) {
+        try {
+          snapObj = JSON.parse(rawSnap)
+        } catch (_) {}
+      } else if (rawSnap && typeof rawSnap === 'object') {
+        snapObj = rawSnap
+      }
+
+      if (snapObj && Array.isArray(snapObj.wells)) {
+        const delWellId = e.record.getString('well_id')
+        const snapMatch = snapObj.wells.find(function (w) {
+          return w && String(w.well_id || w.well || '').trim() === String(delWellId).trim()
+        })
+        if (snapMatch) {
+          throw new BadRequestError(
+            'Poços cadastrados pelo Administrador não podem ser removidos pelo Técnico.',
+          )
+        }
+      }
     } catch (err) {
-      if (err instanceof ForbiddenError) throw err
+      if (err instanceof ForbiddenError || err instanceof BadRequestError) throw err
     }
   }
 
   e.next()
 }, 'report_wells')
 
-// 5. projects UPDATE guard
+// 5. projects UPDATE guard (RBAC + Blindagem Anti-Downgrade de Ficha Base)
 onRecordUpdateRequest((e) => {
   const auth = e.auth
-  if (!auth) return e.next()
-  const role = auth.getString('role')
-  if (role === 'admin') return e.next()
-
-  const prevArchived = e.record.original().getBool('archived')
-  const nextArchived = e.record.getBool('archived')
+  const role = auth ? auth.getString('role') : ''
 
   // Técnico NÃO pode arquivar ou desarquivar projetos
-  if (prevArchived !== nextArchived) {
-    throw new ForbiddenError('Apenas administradores podem arquivar ou desarquivar projetos.')
+  if (role !== 'admin' && e.record.original()) {
+    const prevArchived = e.record.original().getBool('archived')
+    const nextArchived = e.record.getBool('archived')
+    if (prevArchived !== nextArchived) {
+      throw new ForbiddenError('Apenas administradores podem arquivar ou desarquivar projetos.')
+    }
+  }
+
+  // Blindagem anti-downgrade em projects:
+  // Se base_sheet_updated_at já estiver persistido no servidor e o payload trouxer um
+  // base_sheet_updated_at anterior ao existente, rejeita a atualização para impedir que bundle
+  // antigo em cache local sobrescreva ficha base recente do projeto.
+  if (e.record.original()) {
+    const currentBaseUpdatedAt = e.record.original().getString('base_sheet_updated_at')
+    const incomingBaseUpdatedAt = e.record.getString('base_sheet_updated_at')
+
+    if (currentBaseUpdatedAt && incomingBaseUpdatedAt) {
+      const curTime = new Date(currentBaseUpdatedAt).getTime()
+      const incTime = new Date(incomingBaseUpdatedAt).getTime()
+      if (!isNaN(curTime) && !isNaN(incTime) && incTime < curTime) {
+        throw new BadRequestError(
+          'Rejeitado pelo servidor: a ficha base do projeto no servidor (' +
+            currentBaseUpdatedAt +
+            ') é mais recente que a versão enviada (' +
+            incomingBaseUpdatedAt +
+            '). Recarregue a página antes de publicar a ficha base.',
+        )
+      }
+    }
   }
 
   e.next()

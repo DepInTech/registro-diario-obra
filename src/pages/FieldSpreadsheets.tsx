@@ -620,10 +620,194 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     const finalOperator = resolvedOperator.trim()
     const finalOperatorName = (resolvedOperatorName || user?.name || '').trim()
 
+    // Herança completa dos valores cadastrados pelo Administrador na ficha base
+    const baseFilled =
+      baseSheetField?.filled_fields && typeof baseSheetField.filled_fields === 'object'
+        ? baseSheetField.filled_fields
+        : {}
+
+    const inheritedDate = baseSheetField?.date || baseFilled.date || nowIso.slice(0, 10)
+    const inheritedWeather = baseSheetField?.weather || baseFilled.weather || 'Ensolarado'
+    const inheritedPluviometer =
+      baseSheetField?.pluviometer !== undefined &&
+      baseSheetField?.pluviometer !== null &&
+      baseSheetField?.pluviometer !== ''
+        ? baseSheetField.pluviometer
+        : baseFilled.pluviometer !== undefined &&
+            baseFilled.pluviometer !== null &&
+            baseFilled.pluviometer !== ''
+          ? baseFilled.pluviometer
+          : ('' as any)
+    const inheritedMorningTime = baseSheetField?.morning_time || baseFilled.morning_time || ''
+    const inheritedAfternoonTime = baseSheetField?.afternoon_time || baseFilled.afternoon_time || ''
+    const inheritedInfMorningTime =
+      baseSheetField?.infiltration_morning_time || baseFilled.infiltration_morning_time || ''
+    const inheritedInfAfternoonTime =
+      baseSheetField?.infiltration_afternoon_time || baseFilled.infiltration_afternoon_time || ''
+    const inheritedInfiltrationData = {
+      geralMorning: '',
+      geralAfternoon: '',
+      out1Morning: '',
+      out1Afternoon: '',
+      out2Morning: '',
+      out2Afternoon: '',
+      out3Morning: '',
+      out3Afternoon: '',
+      bombaInfiltracao: '',
+      bombaGeral: '',
+      ...(baseSheetField?.infiltration_data || {}),
+      ...(baseFilled.infiltration_data || {}),
+    }
+    const inheritedNutrientDone = Boolean(
+      baseSheetField?.nutrient_done ?? baseFilled.nutrient_done ?? false,
+    )
+    const inheritedNutrientMap =
+      baseSheetField?.nutrient_map_kg !== undefined &&
+      baseSheetField?.nutrient_map_kg !== null &&
+      baseSheetField?.nutrient_map_kg !== ''
+        ? baseSheetField.nutrient_map_kg
+        : baseFilled.nutrient_map_kg !== undefined &&
+            baseFilled.nutrient_map_kg !== null &&
+            baseFilled.nutrient_map_kg !== ''
+          ? baseFilled.nutrient_map_kg
+          : ('' as any)
+    const inheritedNutrientUreia =
+      baseSheetField?.nutrient_ureia_kg !== undefined &&
+      baseSheetField?.nutrient_ureia_kg !== null &&
+      baseSheetField?.nutrient_ureia_kg !== ''
+        ? baseSheetField.nutrient_ureia_kg
+        : baseFilled.nutrient_ureia_kg !== undefined &&
+            baseFilled.nutrient_ureia_kg !== null &&
+            baseFilled.nutrient_ureia_kg !== ''
+          ? baseFilled.nutrient_ureia_kg
+          : ('' as any)
+    const inheritedCompressorData = {
+      horimetro1: '',
+      horimetro2: '',
+      pressao1: '',
+      pressao2: '',
+      drenagem1: '',
+      drenagem2: '',
+      tempoDesligado1: '',
+      tempoDesligado2: '',
+      filtroAr1: '',
+      filtroAr2: '',
+      nivelOleo1: '',
+      nivelOleo2: '',
+      trocaOleo1: '',
+      trocaOleo2: '',
+      linhaAr1: '',
+      linhaAr2: '',
+      ...(baseFilled.compressor_data || {}),
+      ...(baseSheetField?.compressor_data || {}),
+    }
+    const inheritedOilRemovalData = {
+      sao1Volume: '',
+      sao1DataLimpeza: '',
+      sao2Volume: '',
+      sao2DataLimpeza: '',
+      ...(baseFilled.oil_removal_data || {}),
+      ...(baseSheetField?.oil_removal_data || {}),
+    }
+    const inheritedWasteLiquid =
+      baseSheetField?.waste_liquid_qty !== undefined &&
+      baseSheetField?.waste_liquid_qty !== null &&
+      baseSheetField?.waste_liquid_qty !== ''
+        ? baseSheetField.waste_liquid_qty
+        : baseFilled.waste_liquid_qty !== undefined &&
+            baseFilled.waste_liquid_qty !== null &&
+            baseFilled.waste_liquid_qty !== ''
+          ? baseFilled.waste_liquid_qty
+          : ''
+    const inheritedWasteSolid =
+      baseSheetField?.waste_solid_qty !== undefined &&
+      baseSheetField?.waste_solid_qty !== null &&
+      baseSheetField?.waste_solid_qty !== ''
+        ? baseSheetField.waste_solid_qty
+        : baseFilled.waste_solid_qty !== undefined &&
+            baseFilled.waste_solid_qty !== null &&
+            baseFilled.waste_solid_qty !== ''
+          ? baseFilled.waste_solid_qty
+          : ''
+    const inheritedEnv5s = Boolean(baseSheetField?.env_5s_check ?? baseFilled.env_5s_check ?? false)
+    const inheritedEnvMonthly = Boolean(
+      baseSheetField?.env_checklist_monthly ?? baseFilled.env_checklist_monthly ?? false,
+    )
+    const inheritedObservations = baseSheetField?.observations || baseFilled.observations || ''
+
     let initialSheetSnapshot: any = undefined
 
     if (baseSheetField) {
       // Ficha base ativa do projeto: gera o snapshot que trava os campos no Técnico
+      // Monta filled_fields com os valores reais preenchidos pelo Admin na base
+      const mergedFilledFields: Record<string, any> = {
+        operator: finalOperator,
+        operatorName: finalOperatorName,
+        area: finalArea,
+        ...baseFilled,
+      }
+      if (baseSheetField.date) mergedFilledFields.date = baseSheetField.date
+      if (baseSheetField.weather) mergedFilledFields.weather = baseSheetField.weather
+      if (
+        baseSheetField.pluviometer !== undefined &&
+        baseSheetField.pluviometer !== null &&
+        String(baseSheetField.pluviometer).trim() !== ''
+      ) {
+        mergedFilledFields.pluviometer = baseSheetField.pluviometer
+      }
+      if (baseSheetField.morning_time) mergedFilledFields.morning_time = baseSheetField.morning_time
+      if (baseSheetField.afternoon_time)
+        mergedFilledFields.afternoon_time = baseSheetField.afternoon_time
+      if (baseSheetField.infiltration_morning_time)
+        mergedFilledFields.infiltration_morning_time = baseSheetField.infiltration_morning_time
+      if (baseSheetField.infiltration_afternoon_time)
+        mergedFilledFields.infiltration_afternoon_time = baseSheetField.infiltration_afternoon_time
+      if (baseSheetField.nutrient_done)
+        mergedFilledFields.nutrient_done = baseSheetField.nutrient_done
+      if (
+        baseSheetField.nutrient_map_kg !== undefined &&
+        baseSheetField.nutrient_map_kg !== null &&
+        String(baseSheetField.nutrient_map_kg).trim() !== ''
+      ) {
+        mergedFilledFields.nutrient_map_kg = baseSheetField.nutrient_map_kg
+      }
+      if (
+        baseSheetField.nutrient_ureia_kg !== undefined &&
+        baseSheetField.nutrient_ureia_kg !== null &&
+        String(baseSheetField.nutrient_ureia_kg).trim() !== ''
+      ) {
+        mergedFilledFields.nutrient_ureia_kg = baseSheetField.nutrient_ureia_kg
+      }
+      if (
+        baseSheetField.waste_liquid_qty !== undefined &&
+        baseSheetField.waste_liquid_qty !== null &&
+        String(baseSheetField.waste_liquid_qty).trim() !== ''
+      ) {
+        mergedFilledFields.waste_liquid_qty = baseSheetField.waste_liquid_qty
+      }
+      if (
+        baseSheetField.waste_solid_qty !== undefined &&
+        baseSheetField.waste_solid_qty !== null &&
+        String(baseSheetField.waste_solid_qty).trim() !== ''
+      ) {
+        mergedFilledFields.waste_solid_qty = baseSheetField.waste_solid_qty
+      }
+      if (baseSheetField.env_5s_check) mergedFilledFields.env_5s_check = baseSheetField.env_5s_check
+      if (baseSheetField.env_checklist_monthly)
+        mergedFilledFields.env_checklist_monthly = baseSheetField.env_checklist_monthly
+      if (baseSheetField.observations) mergedFilledFields.observations = baseSheetField.observations
+
+      // Também adiciona ao initialSheetSnapshot as subchaves de compressores, SAO e infiltração preenchidas
+      if (baseSheetField.compressor_data || baseFilled.compressor_data) {
+        mergedFilledFields.compressor_data = inheritedCompressorData
+      }
+      if (baseSheetField.oil_removal_data || baseFilled.oil_removal_data) {
+        mergedFilledFields.oil_removal_data = inheritedOilRemovalData
+      }
+      if (baseSheetField.infiltration_data || baseFilled.infiltration_data) {
+        mergedFilledFields.infiltration_data = inheritedInfiltrationData
+      }
+
       initialSheetSnapshot = {
         operator: finalOperator,
         technician_name: finalOperatorName,
@@ -631,12 +815,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
           well: row.well || '',
           pump: row.pump || '',
         })),
-        filled_fields: {
-          operator: finalOperator,
-          operatorName: finalOperatorName,
-          area: finalArea,
-          ...(baseSheetField.filled_fields || {}),
-        },
+        filled_fields: mergedFilledFields,
         captured_at: nowIso,
       }
     } else if (user?.role === 'admin') {
@@ -662,62 +841,29 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       projectName: initialProjectName,
       clientName: initialClientName,
       contractCode: initialContractCode,
-      date: nowIso.slice(0, 10),
+      date: inheritedDate,
       area: finalArea,
       operator: finalOperator,
       operatorName: finalOperatorName,
       admin_snapshot: initialSheetSnapshot,
-      weather: 'Ensolarado',
-      pluviometer: '' as any,
-      morning_time: '',
-      afternoon_time: '',
-      infiltration_morning_time: '',
-      infiltration_afternoon_time: '',
+      weather: inheritedWeather,
+      pluviometer: inheritedPluviometer,
+      morning_time: inheritedMorningTime,
+      afternoon_time: inheritedAfternoonTime,
+      infiltration_morning_time: inheritedInfMorningTime,
+      infiltration_afternoon_time: inheritedInfAfternoonTime,
       extraction_data: initialExtractionData,
-      infiltration_data: {
-        geralMorning: '',
-        geralAfternoon: '',
-        out1Morning: '',
-        out1Afternoon: '',
-        out2Morning: '',
-        out2Afternoon: '',
-        out3Morning: '',
-        out3Afternoon: '',
-        bombaInfiltracao: '',
-        bombaGeral: '',
-      },
-      nutrient_done: false,
-      nutrient_map_kg: '' as any,
-      nutrient_ureia_kg: '' as any,
-      compressor_data: {
-        horimetro1: '',
-        horimetro2: '',
-        pressao1: '',
-        pressao2: '',
-        drenagem1: '',
-        drenagem2: '',
-        tempoDesligado1: '',
-        tempoDesligado2: '',
-        filtroAr1: '',
-        filtroAr2: '',
-        nivelOleo1: '',
-        nivelOleo2: '',
-        trocaOleo1: '',
-        trocaOleo2: '',
-        linhaAr1: '',
-        linhaAr2: '',
-      },
-      oil_removal_data: {
-        sao1Volume: '',
-        sao1DataLimpeza: '',
-        sao2Volume: '',
-        sao2DataLimpeza: '',
-      },
-      waste_liquid_qty: '',
-      waste_solid_qty: '',
-      env_5s_check: false,
-      env_checklist_monthly: false,
-      observations: '',
+      infiltration_data: inheritedInfiltrationData,
+      nutrient_done: inheritedNutrientDone,
+      nutrient_map_kg: inheritedNutrientMap,
+      nutrient_ureia_kg: inheritedNutrientUreia,
+      compressor_data: inheritedCompressorData,
+      oil_removal_data: inheritedOilRemovalData,
+      waste_liquid_qty: inheritedWasteLiquid,
+      waste_solid_qty: inheritedWasteSolid,
+      env_5s_check: inheritedEnv5s,
+      env_checklist_monthly: inheritedEnvMonthly,
+      observations: inheritedObservations,
       status: 'draft',
       syncStatus: 'pending_create',
       lastModified: Date.now(),
@@ -1352,11 +1498,31 @@ function FieldFullEditor({
       : {}
   ) as Record<string, any>
 
-  const isFieldLockedByAdmin = (field: string) =>
-    !isAdmin &&
-    snapshotFilledFields[field] !== undefined &&
-    snapshotFilledFields[field] !== null &&
-    String(snapshotFilledFields[field]).trim() !== ''
+  const isFieldLockedByAdmin = (field: string) => {
+    if (isAdmin) return false
+    const val = snapshotFilledFields[field]
+    if (val === undefined || val === null) return false
+    if (typeof val === 'boolean') {
+      // Compatibilidade legada com snapshots antigos onde o valor era booleano true
+      return val
+    }
+    if (typeof val === 'object') {
+      return Object.values(val).some(
+        (v) => v !== undefined && v !== null && String(v).trim() !== '' && v !== false,
+      )
+    }
+    return String(val).trim() !== ''
+  }
+
+  const isSubFieldLockedByAdmin = (parentField: string, subField: string) => {
+    if (isAdmin) return false
+    const parentVal = snapshotFilledFields[parentField]
+    if (!parentVal || typeof parentVal !== 'object') return false
+    const subVal = parentVal[subField]
+    return (
+      subVal !== undefined && subVal !== null && String(subVal).trim() !== '' && subVal !== false
+    )
+  }
 
   const handleFieldChange = (field: keyof OfflineFieldSheetItem, value: any) => {
     if (isFieldLockedByAdmin(field as string)) {
@@ -1790,21 +1956,6 @@ function FieldFullEditor({
             row.autopump !== undefined && row.autopump !== null ? String(row.autopump).trim() : '',
         }))
 
-        const filledFieldsRecord: Record<string, boolean> = {}
-        if (formData.projectName?.trim()) filledFieldsRecord.projectName = true
-        if (formData.clientName?.trim()) filledFieldsRecord.clientName = true
-        if (formData.contractCode?.trim()) filledFieldsRecord.contractCode = true
-        if (formData.area?.trim()) filledFieldsRecord.area = true
-        if (formData.operator?.trim()) filledFieldsRecord.operator = true
-        if (formData.operatorName?.trim()) filledFieldsRecord.operatorName = true
-
-        structuralWells.forEach((w) => {
-          if (w.well) {
-            filledFieldsRecord[`well_${w.well}`] = true
-            if (w.pump) filledFieldsRecord[`pump_${w.well}`] = true
-          }
-        })
-
         const baseSheetFieldPayload = {
           projectId: formData.projectId,
           projectName: formData.projectName || '',
@@ -1815,21 +1966,52 @@ function FieldFullEditor({
           operatorName: formData.operatorName || '',
           technician_name: formData.operatorName || '',
           technicianName: formData.operatorName || '',
+          date: formData.date || '',
+          weather: formData.weather || '',
+          pluviometer: formData.pluviometer ?? '',
+          morning_time: formData.morning_time || '',
+          afternoon_time: formData.afternoon_time || '',
+          infiltration_morning_time: formData.infiltration_morning_time || '',
+          infiltration_afternoon_time: formData.infiltration_afternoon_time || '',
+          infiltration_data: formData.infiltration_data || {},
+          nutrient_done: formData.nutrient_done || false,
+          nutrient_map_kg: formData.nutrient_map_kg ?? '',
+          nutrient_ureia_kg: formData.nutrient_ureia_kg ?? '',
+          compressor_data: formData.compressor_data || {},
+          oil_removal_data: formData.oil_removal_data || {},
+          waste_liquid_qty: formData.waste_liquid_qty ?? '',
+          waste_solid_qty: formData.waste_solid_qty ?? '',
+          env_5s_check: formData.env_5s_check || false,
+          env_checklist_monthly: formData.env_checklist_monthly || false,
+          observations: formData.observations || '',
           wells: structuralWells,
           extraction_data: structuralWells,
-          filled_fields: filledFieldsRecord,
+          filled_fields: filledFieldsMap,
           published: true,
           published_at: new Date().toISOString(),
         }
 
+        // Validação anti-downgrade e integridade estrutural no frontend:
+        const requiredKeys = ['weather', 'infiltration_data', 'compressor_data', 'oil_removal_data']
+        const missingKeys = requiredKeys.filter((k) => !(k in baseSheetFieldPayload))
+        if (missingKeys.length > 0) {
+          toast({
+            title: 'Atenção: Versão desatualizada em cache detectada',
+            description: `O formulário está com chaves ausentes (${missingKeys.join(', ')}). Recarregue a página com Ctrl+F5 para atualizar o aplicativo.`,
+            variant: 'destructive',
+          })
+          return
+        }
+
         try {
           const proj = await offlineStorage.getProject(formData.projectId)
+          const nowIso = new Date().toISOString()
           if (proj) {
             await offlineStorage.saveProject({
               ...proj,
               base_sheet_field: baseSheetFieldPayload,
               base_sheet_published: true,
-              base_sheet_updated_at: new Date().toISOString(),
+              base_sheet_updated_at: nowIso,
               lastModified: Date.now(),
               syncStatus: 'pending_update',
             })
@@ -1838,11 +2020,19 @@ function FieldFullEditor({
             await pb.collection('projects').update(formData.projectId, {
               base_sheet_field: baseSheetFieldPayload,
               base_sheet_published: true,
-              base_sheet_updated_at: new Date().toISOString(),
+              base_sheet_updated_at: nowIso,
             })
           }
-        } catch (e) {
+        } catch (e: any) {
           console.warn('Falha ao publicar ficha base (Planilha de Campo):', e)
+          if (e?.message?.includes('servidor') || e?.message?.includes('recente')) {
+            toast({
+              title: 'Bloqueio de versão pelo servidor',
+              description: e.message,
+              variant: 'destructive',
+            })
+            return
+          }
         }
       }
 
@@ -2190,7 +2380,7 @@ function FieldFullEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                {isAdmin ? 'Atribuir ao Técnico' : 'Enviar para aprovação'}
+                {isAdmin ? 'Enviar para o Técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}
@@ -2559,9 +2749,12 @@ function FieldFullEditor({
                         handleFieldChange('morning_time', e.target.value)
                         clearReturnedField('hidrometro')
                       }}
-                      disabled={isLocked}
+                      disabled={isLocked || isFieldLockedByAdmin('morning_time')}
+                      readOnly={isFieldLockedByAdmin('morning_time')}
                       className={cn(
                         'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        isFieldLockedByAdmin('morning_time') &&
+                          'bg-slate-200 text-slate-700 cursor-not-allowed',
                         isReturnedField('hidrometro') &&
                           'border-2 border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100 font-semibold',
                       )}
@@ -2586,9 +2779,12 @@ function FieldFullEditor({
                         handleFieldChange('afternoon_time', e.target.value)
                         clearReturnedField('hidrometro')
                       }}
-                      disabled={isLocked}
+                      disabled={isLocked || isFieldLockedByAdmin('afternoon_time')}
+                      readOnly={isFieldLockedByAdmin('afternoon_time')}
                       className={cn(
                         'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        isFieldLockedByAdmin('afternoon_time') &&
+                          'bg-slate-200 text-slate-700 cursor-not-allowed',
                         isReturnedField('hidrometro') &&
                           'border-2 border-amber-500 bg-amber-50 text-amber-950 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-100 font-semibold',
                       )}
@@ -2868,8 +3064,13 @@ function FieldFullEditor({
                       onChange={(e) =>
                         handleFieldChange('infiltration_morning_time', e.target.value)
                       }
-                      disabled={isLocked}
-                      className="h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1"
+                      disabled={isLocked || isFieldLockedByAdmin('infiltration_morning_time')}
+                      readOnly={isFieldLockedByAdmin('infiltration_morning_time')}
+                      className={cn(
+                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        isFieldLockedByAdmin('infiltration_morning_time') &&
+                          'bg-slate-200 text-slate-700 cursor-not-allowed',
+                      )}
                     />
                   </div>
                 </th>
@@ -2883,8 +3084,13 @@ function FieldFullEditor({
                       onChange={(e) =>
                         handleFieldChange('infiltration_afternoon_time', e.target.value)
                       }
-                      disabled={isLocked}
-                      className="h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1"
+                      disabled={isLocked || isFieldLockedByAdmin('infiltration_afternoon_time')}
+                      readOnly={isFieldLockedByAdmin('infiltration_afternoon_time')}
+                      className={cn(
+                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        isFieldLockedByAdmin('infiltration_afternoon_time') &&
+                          'bg-slate-200 text-slate-700 cursor-not-allowed',
+                      )}
                     />
                   </div>
                 </th>
@@ -2896,53 +3102,69 @@ function FieldFullEditor({
                 { label: 'Saída 01', mKey: 'out1Morning', aKey: 'out1Afternoon' },
                 { label: 'Saída 02', mKey: 'out2Morning', aKey: 'out2Afternoon' },
                 { label: 'Saída 03', mKey: 'out3Morning', aKey: 'out3Afternoon' },
-              ].map((row) => (
-                <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                  <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-300">
-                    {row.label}
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      inputMode="decimal"
-                      value={formData.infiltration_data?.[row.mKey] || ''}
-                      onChange={(e) => {
-                        handleFieldChange('infiltration_data', {
-                          ...formData.infiltration_data,
-                          [row.mKey]: e.target.value,
-                        })
-                        clearReturnedField('infiltracao')
-                      }}
-                      disabled={isLocked}
-                      placeholder="0,00"
-                      className={cn(
-                        'h-10 font-mono text-xs sm:text-sm text-right',
-                        isReturnedField('infiltracao') &&
-                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+              ].map((row) => {
+                const isMLocked = isSubFieldLockedByAdmin('infiltration_data', row.mKey)
+                const isALocked = isSubFieldLockedByAdmin('infiltration_data', row.aKey)
+                return (
+                  <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
+                    <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-300">
+                      {row.label}
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      {isMLocked ? (
+                        <div className="flex items-center justify-end px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                          <span>{formData.infiltration_data?.[row.mKey] || '—'}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={formData.infiltration_data?.[row.mKey] || ''}
+                          onChange={(e) => {
+                            handleFieldChange('infiltration_data', {
+                              ...formData.infiltration_data,
+                              [row.mKey]: e.target.value,
+                            })
+                            clearReturnedField('infiltracao')
+                          }}
+                          disabled={isLocked}
+                          placeholder="0,00"
+                          className={cn(
+                            'h-10 font-mono text-xs sm:text-sm text-right',
+                            isReturnedField('infiltracao') &&
+                              'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                          )}
+                        />
                       )}
-                    />
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      inputMode="decimal"
-                      value={formData.infiltration_data?.[row.aKey] || ''}
-                      onChange={(e) => {
-                        handleFieldChange('infiltration_data', {
-                          ...formData.infiltration_data,
-                          [row.aKey]: e.target.value,
-                        })
-                        clearReturnedField('infiltracao')
-                      }}
-                      disabled={isLocked}
-                      placeholder="0,00"
-                      className={cn(
-                        'h-10 font-mono text-xs sm:text-sm text-right',
-                        isReturnedField('infiltracao') &&
-                          'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      {isALocked ? (
+                        <div className="flex items-center justify-end px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                          <span>{formData.infiltration_data?.[row.aKey] || '—'}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={formData.infiltration_data?.[row.aKey] || ''}
+                          onChange={(e) => {
+                            handleFieldChange('infiltration_data', {
+                              ...formData.infiltration_data,
+                              [row.aKey]: e.target.value,
+                            })
+                            clearReturnedField('infiltracao')
+                          }}
+                          disabled={isLocked}
+                          placeholder="0,00"
+                          className={cn(
+                            'h-10 font-mono text-xs sm:text-sm text-right',
+                            isReturnedField('infiltracao') &&
+                              'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
+                          )}
+                        />
                       )}
-                    />
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -2951,33 +3173,45 @@ function FieldFullEditor({
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-4">
           <div>
             <label className="epa-label">Pressão da Bomba (Infiltração)</label>
-            <Input
-              value={formData.infiltration_data?.bombaInfiltracao || ''}
-              onChange={(e) =>
-                handleFieldChange('infiltration_data', {
-                  ...formData.infiltration_data,
-                  bombaInfiltracao: e.target.value,
-                })
-              }
-              disabled={isLocked}
-              placeholder="Ex.: 3 bar / PSI"
-              className="mt-1 font-mono text-xs"
-            />
+            {isSubFieldLockedByAdmin('infiltration_data', 'bombaInfiltracao') ? (
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                <span>{formData.infiltration_data?.bombaInfiltracao || '—'}</span>
+              </div>
+            ) : (
+              <Input
+                value={formData.infiltration_data?.bombaInfiltracao || ''}
+                onChange={(e) =>
+                  handleFieldChange('infiltration_data', {
+                    ...formData.infiltration_data,
+                    bombaInfiltracao: e.target.value,
+                  })
+                }
+                disabled={isLocked}
+                placeholder="Ex.: 3 bar / PSI"
+                className="mt-1 font-mono text-xs"
+              />
+            )}
           </div>
           <div>
             <label className="epa-label">Pressão da Bomba - Geral</label>
-            <Input
-              value={formData.infiltration_data?.bombaGeral || ''}
-              onChange={(e) =>
-                handleFieldChange('infiltration_data', {
-                  ...formData.infiltration_data,
-                  bombaGeral: e.target.value,
-                })
-              }
-              disabled={isLocked}
-              placeholder="Ex.: 4 bar / PSI"
-              className="mt-1 font-mono text-xs"
-            />
+            {isSubFieldLockedByAdmin('infiltration_data', 'bombaGeral') ? (
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                <span>{formData.infiltration_data?.bombaGeral || '—'}</span>
+              </div>
+            ) : (
+              <Input
+                value={formData.infiltration_data?.bombaGeral || ''}
+                onChange={(e) =>
+                  handleFieldChange('infiltration_data', {
+                    ...formData.infiltration_data,
+                    bombaGeral: e.target.value,
+                  })
+                }
+                disabled={isLocked}
+                placeholder="Ex.: 4 bar / PSI"
+                className="mt-1 font-mono text-xs"
+              />
+            )}
           </div>
         </div>
       </section>
@@ -3004,7 +3238,7 @@ function FieldFullEditor({
             <Switch
               checked={formData.nutrient_done || false}
               onCheckedChange={(c) => handleFieldChange('nutrient_done', c)}
-              disabled={isLocked}
+              disabled={isLocked || isFieldLockedByAdmin('nutrient_done')}
             />
           </div>
           <div>
@@ -3017,9 +3251,14 @@ function FieldFullEditor({
                   : (formData.nutrient_map_kg ?? '')
               }
               onChange={(e) => handleFieldChange('nutrient_map_kg', e.target.value)}
-              disabled={isLocked}
+              disabled={isLocked || isFieldLockedByAdmin('nutrient_map_kg')}
+              readOnly={isFieldLockedByAdmin('nutrient_map_kg')}
               placeholder="Ex.: 10 ou 1.250,5"
-              className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
+              className={cn(
+                'mt-1 font-mono text-xs sm:text-sm min-h-[42px]',
+                isFieldLockedByAdmin('nutrient_map_kg') &&
+                  'bg-slate-200 text-slate-700 cursor-not-allowed',
+              )}
             />
           </div>
           <div>
@@ -3032,9 +3271,14 @@ function FieldFullEditor({
                   : (formData.nutrient_ureia_kg ?? '')
               }
               onChange={(e) => handleFieldChange('nutrient_ureia_kg', e.target.value)}
-              disabled={isLocked}
+              disabled={isLocked || isFieldLockedByAdmin('nutrient_ureia_kg')}
+              readOnly={isFieldLockedByAdmin('nutrient_ureia_kg')}
               placeholder="Ex.: 10 ou 1.250,5"
-              className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
+              className={cn(
+                'mt-1 font-mono text-xs sm:text-sm min-h-[42px]',
+                isFieldLockedByAdmin('nutrient_ureia_kg') &&
+                  'bg-slate-200 text-slate-700 cursor-not-allowed',
+              )}
             />
           </div>
         </div>
@@ -3095,43 +3339,59 @@ function FieldFullEditor({
                   k2: 'trocaOleo2',
                   ph: 'Ex.: 6000HR',
                 },
-              ].map((row) => (
-                <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                  <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
-                    {row.label}
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      inputMode="decimal"
-                      value={formData.compressor_data?.[row.k1] || ''}
-                      onChange={(e) =>
-                        handleFieldChange('compressor_data', {
-                          ...formData.compressor_data,
-                          [row.k1]: e.target.value,
-                        })
-                      }
-                      disabled={isLocked}
-                      placeholder={row.ph}
-                      className="h-10 font-mono text-xs sm:text-sm text-center"
-                    />
-                  </td>
-                  <td className="p-2 border border-slate-200 dark:border-slate-800">
-                    <Input
-                      inputMode="decimal"
-                      value={formData.compressor_data?.[row.k2] || ''}
-                      onChange={(e) =>
-                        handleFieldChange('compressor_data', {
-                          ...formData.compressor_data,
-                          [row.k2]: e.target.value,
-                        })
-                      }
-                      disabled={isLocked}
-                      placeholder={row.ph}
-                      className="h-10 font-mono text-xs sm:text-sm text-center"
-                    />
-                  </td>
-                </tr>
-              ))}
+              ].map((row) => {
+                const isK1Locked = isSubFieldLockedByAdmin('compressor_data', row.k1)
+                const isK2Locked = isSubFieldLockedByAdmin('compressor_data', row.k2)
+                return (
+                  <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
+                    <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                      {row.label}
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      {isK1Locked ? (
+                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                          <span>{formData.compressor_data?.[row.k1] || '—'}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={formData.compressor_data?.[row.k1] || ''}
+                          onChange={(e) =>
+                            handleFieldChange('compressor_data', {
+                              ...formData.compressor_data,
+                              [row.k1]: e.target.value,
+                            })
+                          }
+                          disabled={isLocked}
+                          placeholder={row.ph}
+                          className="h-10 font-mono text-xs sm:text-sm text-center"
+                        />
+                      )}
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      {isK2Locked ? (
+                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                          <span>{formData.compressor_data?.[row.k2] || '—'}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={formData.compressor_data?.[row.k2] || ''}
+                          onChange={(e) =>
+                            handleFieldChange('compressor_data', {
+                              ...formData.compressor_data,
+                              [row.k2]: e.target.value,
+                            })
+                          }
+                          disabled={isLocked}
+                          placeholder={row.ph}
+                          className="h-10 font-mono text-xs sm:text-sm text-center"
+                        />
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
@@ -3153,41 +3413,59 @@ function FieldFullEditor({
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
-                  Pressão da Linha de Ar (ex.: PSI)
-                </td>
-                <td className="p-2 border border-slate-200 dark:border-slate-800">
-                  <Input
-                    inputMode="decimal"
-                    value={formData.compressor_data?.linhaAr1 || ''}
-                    onChange={(e) =>
-                      handleFieldChange('compressor_data', {
-                        ...formData.compressor_data,
-                        linhaAr1: e.target.value,
-                      })
-                    }
-                    disabled={isLocked}
-                    placeholder="Ex.: 85 PSI"
-                    className="h-10 font-mono text-xs sm:text-sm text-center"
-                  />
-                </td>
-                <td className="p-2 border border-slate-200 dark:border-slate-800">
-                  <Input
-                    inputMode="decimal"
-                    value={formData.compressor_data?.linhaAr2 || ''}
-                    onChange={(e) =>
-                      handleFieldChange('compressor_data', {
-                        ...formData.compressor_data,
-                        linhaAr2: e.target.value,
-                      })
-                    }
-                    disabled={isLocked}
-                    placeholder="Ex.: 85 PSI"
-                    className="h-10 font-mono text-xs sm:text-sm text-center"
-                  />
-                </td>
-              </tr>
+              {(() => {
+                const isAr1Locked = isSubFieldLockedByAdmin('compressor_data', 'linhaAr1')
+                const isAr2Locked = isSubFieldLockedByAdmin('compressor_data', 'linhaAr2')
+                return (
+                  <tr>
+                    <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                      Pressão da Linha de Ar (ex.: PSI)
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      {isAr1Locked ? (
+                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                          <span>{formData.compressor_data?.linhaAr1 || '—'}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={formData.compressor_data?.linhaAr1 || ''}
+                          onChange={(e) =>
+                            handleFieldChange('compressor_data', {
+                              ...formData.compressor_data,
+                              linhaAr1: e.target.value,
+                            })
+                          }
+                          disabled={isLocked}
+                          placeholder="Ex.: 85 PSI"
+                          className="h-10 font-mono text-xs sm:text-sm text-center"
+                        />
+                      )}
+                    </td>
+                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                      {isAr2Locked ? (
+                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                          <span>{formData.compressor_data?.linhaAr2 || '—'}</span>
+                        </div>
+                      ) : (
+                        <Input
+                          inputMode="decimal"
+                          value={formData.compressor_data?.linhaAr2 || ''}
+                          onChange={(e) =>
+                            handleFieldChange('compressor_data', {
+                              ...formData.compressor_data,
+                              linhaAr2: e.target.value,
+                            })
+                          }
+                          disabled={isLocked}
+                          placeholder="Ex.: 85 PSI"
+                          className="h-10 font-mono text-xs sm:text-sm text-center"
+                        />
+                      )}
+                    </td>
+                  </tr>
+                )
+              })()}
             </tbody>
           </table>
         </div>
@@ -3213,33 +3491,45 @@ function FieldFullEditor({
             <div className="mt-3 space-y-3">
               <div>
                 <label className="epa-label">Volume de óleo removido (mL)</label>
-                <Input
-                  value={formData.oil_removal_data?.sao1Volume || ''}
-                  onChange={(e) =>
-                    handleFieldChange('oil_removal_data', {
-                      ...formData.oil_removal_data,
-                      sao1Volume: e.target.value,
-                    })
-                  }
-                  disabled={isLocked}
-                  placeholder="Ex.: 0"
-                  className="mt-1 font-mono text-xs"
-                />
+                {isSubFieldLockedByAdmin('oil_removal_data', 'sao1Volume') ? (
+                  <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                    <span>{formData.oil_removal_data?.sao1Volume || '—'}</span>
+                  </div>
+                ) : (
+                  <Input
+                    value={formData.oil_removal_data?.sao1Volume || ''}
+                    onChange={(e) =>
+                      handleFieldChange('oil_removal_data', {
+                        ...formData.oil_removal_data,
+                        sao1Volume: e.target.value,
+                      })
+                    }
+                    disabled={isLocked}
+                    placeholder="Ex.: 0"
+                    className="mt-1 font-mono text-xs"
+                  />
+                )}
               </div>
               <div>
                 <label className="epa-label">Data da última limpeza</label>
-                <Input
-                  value={formData.oil_removal_data?.sao1DataLimpeza || ''}
-                  onChange={(e) =>
-                    handleFieldChange('oil_removal_data', {
-                      ...formData.oil_removal_data,
-                      sao1DataLimpeza: applyDateMask(e.target.value),
-                    })
-                  }
-                  disabled={isLocked}
-                  placeholder="DD/MM/AAAA"
-                  className="mt-1 font-mono text-xs"
-                />
+                {isSubFieldLockedByAdmin('oil_removal_data', 'sao1DataLimpeza') ? (
+                  <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                    <span>{formData.oil_removal_data?.sao1DataLimpeza || '—'}</span>
+                  </div>
+                ) : (
+                  <Input
+                    value={formData.oil_removal_data?.sao1DataLimpeza || ''}
+                    onChange={(e) =>
+                      handleFieldChange('oil_removal_data', {
+                        ...formData.oil_removal_data,
+                        sao1DataLimpeza: applyDateMask(e.target.value),
+                      })
+                    }
+                    disabled={isLocked}
+                    placeholder="DD/MM/AAAA"
+                    className="mt-1 font-mono text-xs"
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -3252,33 +3542,45 @@ function FieldFullEditor({
             <div className="mt-3 space-y-3">
               <div>
                 <label className="epa-label">Volume de óleo removido (mL)</label>
-                <Input
-                  value={formData.oil_removal_data?.sao2Volume || ''}
-                  onChange={(e) =>
-                    handleFieldChange('oil_removal_data', {
-                      ...formData.oil_removal_data,
-                      sao2Volume: e.target.value,
-                    })
-                  }
-                  disabled={isLocked}
-                  placeholder="Ex.: 0"
-                  className="mt-1 font-mono text-xs"
-                />
+                {isSubFieldLockedByAdmin('oil_removal_data', 'sao2Volume') ? (
+                  <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                    <span>{formData.oil_removal_data?.sao2Volume || '—'}</span>
+                  </div>
+                ) : (
+                  <Input
+                    value={formData.oil_removal_data?.sao2Volume || ''}
+                    onChange={(e) =>
+                      handleFieldChange('oil_removal_data', {
+                        ...formData.oil_removal_data,
+                        sao2Volume: e.target.value,
+                      })
+                    }
+                    disabled={isLocked}
+                    placeholder="Ex.: 0"
+                    className="mt-1 font-mono text-xs"
+                  />
+                )}
               </div>
               <div>
                 <label className="epa-label">Data da última limpeza</label>
-                <Input
-                  value={formData.oil_removal_data?.sao2DataLimpeza || ''}
-                  onChange={(e) =>
-                    handleFieldChange('oil_removal_data', {
-                      ...formData.oil_removal_data,
-                      sao2DataLimpeza: applyDateMask(e.target.value),
-                    })
-                  }
-                  disabled={isLocked}
-                  placeholder="DD/MM/AAAA"
-                  className="mt-1 font-mono text-xs"
-                />
+                {isSubFieldLockedByAdmin('oil_removal_data', 'sao2DataLimpeza') ? (
+                  <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                    <span>{formData.oil_removal_data?.sao2DataLimpeza || '—'}</span>
+                  </div>
+                ) : (
+                  <Input
+                    value={formData.oil_removal_data?.sao2DataLimpeza || ''}
+                    onChange={(e) =>
+                      handleFieldChange('oil_removal_data', {
+                        ...formData.oil_removal_data,
+                        sao2DataLimpeza: applyDateMask(e.target.value),
+                      })
+                    }
+                    disabled={isLocked}
+                    placeholder="DD/MM/AAAA"
+                    className="mt-1 font-mono text-xs"
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -3299,33 +3601,57 @@ function FieldFullEditor({
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Líquido</label>
-            <Input
-              type="text"
-              value={
-                formData.waste_liquid_qty === 0 || formData.waste_liquid_qty === '0'
-                  ? ''
-                  : (formData.waste_liquid_qty ?? '')
-              }
-              onChange={(e) => handleFieldChange('waste_liquid_qty', e.target.value)}
-              disabled={isLocked}
-              placeholder="Ex.: 02 ou 2 tambores"
-              className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
-            />
+            {isFieldLockedByAdmin('waste_liquid_qty') ? (
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>
+                  {formData.waste_liquid_qty === 0 ||
+                  formData.waste_liquid_qty === '0' ||
+                  formData.waste_liquid_qty === ''
+                    ? '—'
+                    : formData.waste_liquid_qty}
+                </span>
+              </div>
+            ) : (
+              <Input
+                type="text"
+                value={
+                  formData.waste_liquid_qty === 0 || formData.waste_liquid_qty === '0'
+                    ? ''
+                    : (formData.waste_liquid_qty ?? '')
+                }
+                onChange={(e) => handleFieldChange('waste_liquid_qty', e.target.value)}
+                disabled={isLocked}
+                placeholder="Ex.: 02 ou 2 tambores"
+                className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
+              />
+            )}
           </div>
           <div>
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Sólido</label>
-            <Input
-              type="text"
-              value={
-                formData.waste_solid_qty === 0 || formData.waste_solid_qty === '0'
-                  ? ''
-                  : (formData.waste_solid_qty ?? '')
-              }
-              onChange={(e) => handleFieldChange('waste_solid_qty', e.target.value)}
-              disabled={isLocked}
-              placeholder="Ex.: 01 ou 1 bombona"
-              className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
-            />
+            {isFieldLockedByAdmin('waste_solid_qty') ? (
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>
+                  {formData.waste_solid_qty === 0 ||
+                  formData.waste_solid_qty === '0' ||
+                  formData.waste_solid_qty === ''
+                    ? '—'
+                    : formData.waste_solid_qty}
+                </span>
+              </div>
+            ) : (
+              <Input
+                type="text"
+                value={
+                  formData.waste_solid_qty === 0 || formData.waste_solid_qty === '0'
+                    ? ''
+                    : (formData.waste_solid_qty ?? '')
+                }
+                onChange={(e) => handleFieldChange('waste_solid_qty', e.target.value)}
+                disabled={isLocked}
+                placeholder="Ex.: 01 ou 1 bombona"
+                className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
+              />
+            )}
           </div>
         </div>
       </section>
@@ -3349,11 +3675,19 @@ function FieldFullEditor({
                 {formData.env_5s_check ? 'Sim (Conforme)' : 'Não'}
               </p>
             </div>
-            <Switch
-              checked={formData.env_5s_check || false}
-              onCheckedChange={(c) => handleFieldChange('env_5s_check', c)}
-              disabled={isLocked}
-            />
+            {isFieldLockedByAdmin('env_5s_check') ? (
+              <div className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 cursor-not-allowed select-none">
+                <span>
+                  {formData.env_5s_check ? 'Definido Sim (Admin)' : 'Definido Não (Admin)'}
+                </span>
+              </div>
+            ) : (
+              <Switch
+                checked={formData.env_5s_check || false}
+                onCheckedChange={(c) => handleFieldChange('env_5s_check', c)}
+                disabled={isLocked}
+              />
+            )}
           </div>
           <div className="flex items-center justify-between rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 p-4">
             <div>
@@ -3362,11 +3696,19 @@ function FieldFullEditor({
                 {formData.env_checklist_monthly ? 'Sim (Conforme)' : 'Não'}
               </p>
             </div>
-            <Switch
-              checked={formData.env_checklist_monthly || false}
-              onCheckedChange={(c) => handleFieldChange('env_checklist_monthly', c)}
-              disabled={isLocked}
-            />
+            {isFieldLockedByAdmin('env_checklist_monthly') ? (
+              <div className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 cursor-not-allowed select-none">
+                <span>
+                  {formData.env_checklist_monthly ? 'Definido Sim (Admin)' : 'Definido Não (Admin)'}
+                </span>
+              </div>
+            ) : (
+              <Switch
+                checked={formData.env_checklist_monthly || false}
+                onCheckedChange={(c) => handleFieldChange('env_checklist_monthly', c)}
+                disabled={isLocked}
+              />
+            )}
           </div>
         </div>
       </section>
@@ -3381,13 +3723,19 @@ function FieldFullEditor({
             Registro livre de ocorrências, serviços de manutenção e anotações operacionais
           </p>
         </div>
-        <Textarea
-          value={formData.observations || ''}
-          onChange={(e) => handleFieldChange('observations', e.target.value)}
-          disabled={isLocked}
-          placeholder="Ex.: * Foi realizado a manutenção do PR-49."
-          className="mt-4 min-h-[120px]"
-        />
+        {isFieldLockedByAdmin('observations') ? (
+          <div className="mt-4 p-4 rounded-xl bg-slate-100 text-slate-800 text-xs font-sans border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[120px] cursor-not-allowed select-none whitespace-pre-wrap">
+            {formData.observations || '—'}
+          </div>
+        ) : (
+          <Textarea
+            value={formData.observations || ''}
+            onChange={(e) => handleFieldChange('observations', e.target.value)}
+            disabled={isLocked}
+            placeholder="Ex.: * Foi realizado a manutenção do PR-49."
+            className="mt-4 min-h-[120px]"
+          />
+        )}
       </section>
 
       {/* 9. BOTÕES FINAIS DE AÇÃO E VALIDAÇÃO */}
@@ -3427,7 +3775,7 @@ function FieldFullEditor({
                 className="min-h-[44px] bg-blue-600 text-white hover:bg-blue-700 flex-1 sm:flex-none text-xs font-semibold shadow-sm"
               >
                 <Send className="mr-1.5 h-4 w-4" />
-                {isAdmin ? 'Atribuir ao Técnico' : 'Enviar para aprovação'}
+                {isAdmin ? 'Enviar para o Técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}

@@ -21,6 +21,9 @@ export type Contract = RecordModel & {
   expand?: { client?: Client; company?: Company }
 }
 export interface BaseSheetRdo {
+  reportDate?: string
+  report_date?: string
+  weather?: string
   supervised_by?: string
   supervised_by_name?: string
   performed_by?: string
@@ -28,6 +31,14 @@ export interface BaseSheetRdo {
   empresa_executora?: string
   activity_title?: string
   activity_description_base?: string
+  timeDisplacement?: string
+  time_displacement?: string
+  timeWaiting?: string
+  time_waiting?: string
+  interferences?: string
+  planChanges?: string
+  plan_changes?: string
+  accidents?: string
   wells?: Array<{
     well_id: string
     depth?: number
@@ -41,6 +52,24 @@ export interface BaseSheetField {
   operator?: string
   technician_name?: string
   area?: string
+  date?: string
+  weather?: string
+  pluviometer?: number | string
+  morning_time?: string
+  afternoon_time?: string
+  infiltration_morning_time?: string
+  infiltration_afternoon_time?: string
+  infiltration_data?: Record<string, any>
+  nutrient_done?: boolean
+  nutrient_map_kg?: number | string
+  nutrient_ureia_kg?: number | string
+  compressor_data?: Record<string, any>
+  oil_removal_data?: Record<string, any>
+  waste_liquid_qty?: string | number
+  waste_solid_qty?: string | number
+  env_5s_check?: boolean
+  env_checklist_monthly?: boolean
+  observations?: string
   wells?: Array<{
     well: string
     pump?: string

@@ -478,29 +478,122 @@ export function RdosPage({ query }: { query: string }) {
     }
 
     const nowIso = new Date().toISOString()
-    const finalCompanyName = (baseSheetRdo?.empresa_executora || initialCompanyName).trim()
+    const baseFilled = (baseSheetRdo?.filled_fields || {}) as Record<string, any>
+    const finalCompanyName = (
+      baseSheetRdo?.empresa_executora ||
+      baseSheetRdo?.companyName ||
+      baseFilled.companyName ||
+      baseFilled.empresa_executora ||
+      initialCompanyName
+    ).trim()
     const finalSupervisedBy = (
       baseSheetRdo?.supervised_by ||
+      baseSheetRdo?.supervisedBy ||
+      baseFilled.supervisedBy ||
+      baseFilled.supervised_by ||
       (user?.role === 'admin' ? user?.id : '') ||
       ''
     ).trim()
     const finalSupervisedByName = (
       baseSheetRdo?.supervised_by_name ||
+      baseSheetRdo?.supervisedByName ||
+      baseFilled.supervisedByName ||
+      baseFilled.supervised_by_name ||
       (user?.role === 'admin' ? user?.name : '') ||
       ''
     ).trim()
-    const finalActivityTitle = (baseSheetRdo?.activity_title || '').trim()
-    const finalActivityDescription = (baseSheetRdo?.activity_description_base || '').trim()
+    const finalActivityTitle = (
+      baseSheetRdo?.activity_title ||
+      baseSheetRdo?.activityTitle ||
+      baseFilled.activityTitle ||
+      baseFilled.activity_title ||
+      ''
+    ).trim()
+    const finalActivityDescription = (
+      baseSheetRdo?.activity_description_base ||
+      baseSheetRdo?.activityDescription ||
+      baseFilled.activityDescription ||
+      baseFilled.activity_description_base ||
+      ''
+    ).trim()
+    const inheritedWeather = (baseSheetRdo?.weather || baseFilled.weather || 'Ensolarado').trim()
+    const inheritedReportDate = (
+      baseSheetRdo?.reportDate ||
+      baseSheetRdo?.report_date ||
+      baseFilled.reportDate ||
+      baseFilled.report_date ||
+      nowIso.slice(0, 10)
+    ).trim()
+    const inheritedTimeDisplacement = (
+      baseSheetRdo?.timeDisplacement ||
+      baseSheetRdo?.time_displacement ||
+      baseFilled.timeDisplacement ||
+      baseFilled.time_displacement ||
+      ''
+    ).trim()
+    const inheritedTimeWaiting = (
+      baseSheetRdo?.timeWaiting ||
+      baseSheetRdo?.time_waiting ||
+      baseFilled.timeWaiting ||
+      baseFilled.time_waiting ||
+      ''
+    ).trim()
+    const inheritedInterferences = (
+      baseSheetRdo?.interferences ||
+      baseFilled.interferences ||
+      ''
+    ).trim()
+    const inheritedPlanChanges = (
+      baseSheetRdo?.planChanges ||
+      baseSheetRdo?.plan_changes ||
+      baseFilled.planChanges ||
+      baseFilled.plan_changes ||
+      ''
+    ).trim()
+    const inheritedAccidents = (baseSheetRdo?.accidents || baseFilled.accidents || '').trim()
 
     let initialSnapshot: any = undefined
 
     if (baseSheetRdo) {
       // Ficha base ativa do projeto: gera o snapshot que trava os campos no Técnico
+      const mergedFilledFields: Record<string, any> = {
+        ...(baseSheetRdo.filled_fields || {}),
+      }
+      if (finalSupervisedBy) mergedFilledFields.supervisedBy = finalSupervisedBy
+      if (finalSupervisedByName) mergedFilledFields.supervisedByName = finalSupervisedByName
+      if (finalCompanyName) mergedFilledFields.companyName = finalCompanyName
+      if (finalActivityTitle) mergedFilledFields.activityTitle = finalActivityTitle
+      if (finalActivityDescription)
+        mergedFilledFields.activityDescription = finalActivityDescription
+      if (baseSheetRdo.weather || baseFilled.weather) mergedFilledFields.weather = inheritedWeather
+      if (
+        baseSheetRdo.reportDate ||
+        baseSheetRdo.report_date ||
+        baseFilled.reportDate ||
+        baseFilled.report_date
+      )
+        mergedFilledFields.reportDate = inheritedReportDate
+      if (inheritedTimeDisplacement) mergedFilledFields.timeDisplacement = inheritedTimeDisplacement
+      if (inheritedTimeWaiting) mergedFilledFields.timeWaiting = inheritedTimeWaiting
+      if (inheritedInterferences) mergedFilledFields.interferences = inheritedInterferences
+      if (inheritedPlanChanges) mergedFilledFields.planChanges = inheritedPlanChanges
+      if (inheritedAccidents) mergedFilledFields.accidents = inheritedAccidents
+
       initialSnapshot = {
         supervised_by: finalSupervisedBy,
         supervised_by_name: finalSupervisedByName,
-        performed_by: (baseSheetRdo.performed_by || '').trim(),
-        performed_by_name: (baseSheetRdo.performed_by_name || '').trim(),
+        performed_by: (
+          baseSheetRdo.performed_by ||
+          baseSheetRdo.performedBy ||
+          baseFilled.performedBy ||
+          ''
+        ).trim(),
+        performed_by_name: (
+          baseSheetRdo.performed_by_name ||
+          baseSheetRdo.performedByName ||
+          baseFilled.performedByName ||
+          ''
+        ).trim(),
         empresa_executora: finalCompanyName,
         wells: (preloadedWells || []).map((w) => ({
           well_id: w.well_id,
@@ -508,14 +601,7 @@ export function RdosPage({ query }: { query: string }) {
           completion_date: w.completion_date || '',
           diameter: w.diameter || '',
         })),
-        filled_fields: {
-          supervisedBy: finalSupervisedBy,
-          supervisedByName: finalSupervisedByName,
-          companyName: finalCompanyName,
-          ...(finalActivityTitle ? { activityTitle: finalActivityTitle } : {}),
-          ...(finalActivityDescription ? { activityDescription: finalActivityDescription } : {}),
-          ...(baseSheetRdo.filled_fields || {}),
-        },
+        filled_fields: mergedFilledFields,
         captured_at: nowIso,
       }
     } else if (user?.role === 'admin') {
@@ -554,6 +640,67 @@ export function RdosPage({ query }: { query: string }) {
         : baseSheetRdo?.performed_by_name || user?.name || ''
     ).trim()
 
+    const baseRdoFilled =
+      baseSheetRdo?.filled_fields && typeof baseSheetRdo.filled_fields === 'object'
+        ? baseSheetRdo.filled_fields
+        : {}
+
+    const inheritedReportDate =
+      baseSheetRdo?.reportDate ||
+      baseSheetRdo?.report_date ||
+      baseRdoFilled.reportDate ||
+      baseRdoFilled.report_date ||
+      nowIso.slice(0, 10)
+
+    const inheritedWeather =
+      baseSheetRdo?.weather ||
+      baseRdoFilled.weather ||
+      'Ensolarado'
+
+    const inheritedTimeDisplacement =
+      baseSheetRdo?.timeDisplacement ||
+      baseSheetRdo?.time_displacement ||
+      baseRdoFilled.timeDisplacement ||
+      baseRdoFilled.time_displacement ||
+      ''
+
+    const inheritedTimeWaiting =
+      baseSheetRdo?.timeWaiting ||
+      baseSheetRdo?.time_waiting ||
+      baseRdoFilled.timeWaiting ||
+      baseRdoFilled.time_waiting ||
+      ''
+
+    const inheritedInterferences =
+      baseSheetRdo?.interferences ||
+      baseRdoFilled.interferences ||
+      ''
+
+    const inheritedPlanChanges =
+      baseSheetRdo?.planChanges ||
+      baseSheetRdo?.plan_changes ||
+      baseRdoFilled.planChanges ||
+      baseRdoFilled.plan_changes ||
+      ''
+
+    const inheritedAccidents =
+      baseSheetRdo?.accidents ||
+      baseRdoFilled.accidents ||
+      ''
+
+    if (baseSheetRdo && initialSnapshot) {
+      initialSnapshot.filled_fields = {
+        ...initialSnapshot.filled_fields,
+        ...(inheritedReportDate ? { reportDate: inheritedReportDate } : {}),
+        ...(baseSheetRdo.weather || baseRdoFilled.weather ? { weather: inheritedWeather } : {}),
+        ...(inheritedTimeDisplacement ? { timeDisplacement: inheritedTimeDisplacement } : {}),
+        ...(inheritedTimeWaiting ? { timeWaiting: inheritedTimeWaiting } : {}),
+        ...(inheritedInterferences ? { interferences: inheritedInterferences } : {}),
+        ...(inheritedPlanChanges ? { planChanges: inheritedPlanChanges } : {}),
+        ...(inheritedAccidents ? { accidents: inheritedAccidents } : {}),
+      }
+    }
+
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
       number: undefined,
@@ -563,19 +710,19 @@ export function RdosPage({ query }: { query: string }) {
       contractCode: initialContractCode,
       companyName: finalCompanyName,
       location: initialLocation,
-      reportDate: nowIso.slice(0, 10),
-      weather: 'Ensolarado',
+      reportDate: inheritedReportDate,
+      weather: inheritedWeather,
       performedBy: finalPerformedBy,
       performedByName: finalPerformedByName,
       supervisedBy: finalSupervisedBy,
       supervisedByName: finalSupervisedByName,
       activityTitle: finalActivityTitle,
       activityDescription: finalActivityDescription,
-      timeDisplacement: '',
-      timeWaiting: '',
-      interferences: '',
-      planChanges: '',
-      accidents: '',
+      timeDisplacement: inheritedTimeDisplacement,
+      timeWaiting: inheritedTimeWaiting,
+      interferences: inheritedInterferences,
+      planChanges: inheritedPlanChanges,
+      accidents: inheritedAccidents,
       status: 'draft',
       wells: preloadedWells,
       photos: [],
@@ -583,8 +730,7 @@ export function RdosPage({ query }: { query: string }) {
       admin_snapshot: initialSnapshot,
       syncStatus: 'pending_create',
       lastModified: Date.now(),
-    }
-    setIsNew(true)
+    }    setIsNew(true)
     setEditing(newReport)
   }
 
@@ -1391,11 +1537,21 @@ function RdoFullPageEditor({
       ? adminSnapshot.filled_fields
       : {}
   ) as Record<string, any>
-  const isFieldLockedByAdmin = (field: string) =>
-    !isAdmin &&
-    snapshotFilledFields[field] !== undefined &&
-    snapshotFilledFields[field] !== null &&
-    String(snapshotFilledFields[field]).trim() !== ''
+  const isFieldLockedByAdmin = (field: string) => {
+    if (isAdmin) return false
+    const val = snapshotFilledFields[field]
+    if (val === undefined || val === null) return false
+    if (typeof val === 'boolean') {
+      // Compatibilidade legada com snapshots antigos onde o valor era booleano true
+      return val
+    }
+    if (typeof val === 'object') {
+      return Object.values(val).some(
+        (v) => v !== undefined && v !== null && String(v).trim() !== '' && v !== false,
+      )
+    }
+    return String(val).trim() !== ''
+  }
 
   const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
     if (isFieldLockedByAdmin(field as string)) {
@@ -1773,31 +1929,14 @@ function RdoFullPageEditor({
 
       if (isAdmin && formData.projectId) {
         const structuralWells = (formData.wells || []).map((w: any) => ({
+          well_id: w.well_id || w.wellId || w.id || '',
           wellId: w.well_id || w.wellId || w.id || '',
           identification: w.well_id || w.identification || '',
           depth: w.depth !== undefined && w.depth !== null ? String(w.depth) : '',
           diameter: w.diameter || '',
+          completion_date: w.completion_date || w.completionDate || '',
           completionDate: w.completion_date || w.completionDate || '',
         }))
-
-        const filledFieldsRecord: Record<string, boolean> = {}
-        if (formData.projectName?.trim()) filledFieldsRecord.projectName = true
-        if (formData.clientName?.trim()) filledFieldsRecord.clientName = true
-        if (formData.contractCode?.trim()) filledFieldsRecord.contractCode = true
-        if (formData.location?.trim()) filledFieldsRecord.location = true
-        if (formData.companyName?.trim()) filledFieldsRecord.companyName = true
-        if (formData.supervisedBy?.trim()) filledFieldsRecord.supervisedBy = true
-        if (formData.supervisedByName?.trim()) filledFieldsRecord.supervisedByName = true
-        if (formData.performedBy?.trim()) filledFieldsRecord.performedBy = true
-        if (formData.performedByName?.trim()) filledFieldsRecord.performedByName = true
-        if (formData.activityTitle?.trim()) filledFieldsRecord.activityTitle = true
-        if (formData.activityDescription?.trim()) filledFieldsRecord.activityDescription = true
-
-        structuralWells.forEach((w) => {
-          if (w.wellId || w.identification) {
-            filledFieldsRecord[`well_${w.wellId || w.identification}`] = true
-          }
-        })
 
         const baseSheetRdoPayload = {
           projectId: formData.projectId,
@@ -1817,19 +1956,44 @@ function RdoFullPageEditor({
           activity_title: formData.activityTitle || '',
           activity_description_base: formData.activityDescription || '',
           area: formData.location || '',
+          reportDate: formData.reportDate || '',
+          report_date: formData.reportDate || '',
+          weather: formData.weather || '',
+          timeDisplacement: formData.timeDisplacement || '',
+          time_displacement: formData.timeDisplacement || '',
+          timeWaiting: formData.timeWaiting || '',
+          time_waiting: formData.timeWaiting || '',
+          interferences: formData.interferences || '',
+          planChanges: formData.planChanges || '',
+          plan_changes: formData.planChanges || '',
+          accidents: formData.accidents || '',
           wells: structuralWells,
-          filled_fields: filledFieldsRecord,
+          ...filledFieldsMap,
+          filled_fields: { ...filledFieldsMap },
           published: true,
           published_at: new Date().toISOString(),
         }
+        // Validação anti-downgrade e integridade estrutural no frontend:
+        const requiredKeys = ['weather', 'activityTitle', 'wells']
+        const missingKeys = requiredKeys.filter((k) => !(k in baseSheetRdoPayload))
+        if (missingKeys.length > 0) {
+          toast({
+            title: 'Atenção: Versão desatualizada em cache detectada',
+            description: `O formulário está com chaves ausentes (${missingKeys.join(', ')}). Recarregue a página com Ctrl+F5 para atualizar o aplicativo.`,
+            variant: 'destructive',
+          })
+          return
+        }
+
         try {
           const proj = await offlineStorage.getProject(formData.projectId)
+          const nowIso = new Date().toISOString()
           if (proj) {
             await offlineStorage.saveProject({
               ...proj,
               base_sheet_rdo: baseSheetRdoPayload,
               base_sheet_published: true,
-              base_sheet_updated_at: new Date().toISOString(),
+              base_sheet_updated_at: nowIso,
               lastModified: Date.now(),
               syncStatus: 'pending_update',
             })
@@ -1838,11 +2002,19 @@ function RdoFullPageEditor({
             await pb.collection('projects').update(formData.projectId, {
               base_sheet_rdo: baseSheetRdoPayload,
               base_sheet_published: true,
-              base_sheet_updated_at: new Date().toISOString(),
+              base_sheet_updated_at: nowIso,
             })
           }
-        } catch (e) {
+        } catch (e: any) {
           console.warn('Falha ao publicar ficha base (RDO):', e)
+          if (e?.message?.includes('servidor') || e?.message?.includes('recente')) {
+            toast({
+              title: 'Bloqueio de versão pelo servidor',
+              description: e.message,
+              variant: 'destructive',
+            })
+            return
+          }
         }
       }
 
@@ -3167,20 +3339,26 @@ function RdoFullPageEditor({
                 </span>
               )}
             </div>
-            <Input
-              placeholder="Ex.: Não houve"
-              value={formData.accidents ?? ''}
-              onChange={(e) => {
-                handleFieldChange('accidents', e.target.value)
-                clearReturnedField('accidents')
-              }}
-              disabled={isLocked}
-              className={cn(
-                'mt-1.5',
-                isReturnedField('accidents') &&
-                  'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
-              )}
-            />
+            {isFieldLockedByAdmin('accidents') ? (
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.accidents || '—'}</span>
+              </div>
+            ) : (
+              <Input
+                placeholder="Ex.: Não houve"
+                value={formData.accidents ?? ''}
+                onChange={(e) => {
+                  handleFieldChange('accidents', e.target.value)
+                  clearReturnedField('accidents')
+                }}
+                disabled={isLocked}
+                className={cn(
+                  'mt-1.5',
+                  isReturnedField('accidents') &&
+                    'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
+                )}
+              />
+            )}
           </div>
           <div>
             <div className="flex items-center justify-between">
@@ -3192,12 +3370,12 @@ function RdoFullPageEditor({
               )}
             </div>
             {isFieldLockedByAdmin('interferences') ? (
-              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                <span>{formData.interferences || ''}</span>
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.interferences || '—'}</span>
               </div>
             ) : (
               <Input
-                placeholder="Ex.: Não houve"
+                placeholder="Ex.: Chuva intensa, falta de energia"
                 value={formData.interferences ?? ''}
                 onChange={(e) => {
                   handleFieldChange('interferences', e.target.value)
@@ -3210,8 +3388,7 @@ function RdoFullPageEditor({
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
               />
-            )}
-          </div>
+            )}          </div>
           <div>
             <div className="flex items-center justify-between">
               <label className="epa-label">Mudanças no Plano de Trabalho</label>
@@ -3244,7 +3421,7 @@ function RdoFullPageEditor({
           </div>
           <div>
             <div className="flex items-center justify-between">
-              <label className="epa-label">Tempo de Espera</label>
+              <label className="epa-label">Tempo em Espera (Horas ou Horários)</label>
               {isReturnedField('timeWaiting') && (
                 <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
                   🟨 CORREÇÃO SOLICITADA
@@ -3252,12 +3429,12 @@ function RdoFullPageEditor({
               )}
             </div>
             {isFieldLockedByAdmin('timeWaiting') ? (
-              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                <span>{formData.timeWaiting || ''}</span>
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.timeWaiting || '—'}</span>
               </div>
             ) : (
               <Input
-                placeholder="Ex.: Sem ocorrências ou 00h30"
+                placeholder="Ex.: 01h30 (aguardando liberação da portaria)"
                 value={formData.timeWaiting ?? ''}
                 onChange={(e) => {
                   handleFieldChange('timeWaiting', e.target.value)
@@ -3272,9 +3449,9 @@ function RdoFullPageEditor({
               />
             )}
           </div>
-          <div className="sm:col-span-2">
+          <div>
             <div className="flex items-center justify-between">
-              <label className="epa-label">Tempo de Deslocamento</label>
+              <label className="epa-label">Tempo de Deslocamento (Horas ou Horários)</label>
               {isReturnedField('timeDisplacement') && (
                 <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[9px] font-bold text-amber-950 uppercase">
                   🟨 CORREÇÃO SOLICITADA
@@ -3282,12 +3459,12 @@ function RdoFullPageEditor({
               )}
             </div>
             {isFieldLockedByAdmin('timeDisplacement') ? (
-              <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
-                <span>{formData.timeDisplacement || ''}</span>
+              <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-medium border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
+                <span>{formData.timeDisplacement || '—'}</span>
               </div>
             ) : (
               <Input
-                placeholder="Ex.: 00h00 ou 01h20"
+                placeholder="Ex.: 02h00 (trajeto base -> campo)"
                 value={formData.timeDisplacement ?? ''}
                 onChange={(e) => {
                   handleFieldChange('timeDisplacement', e.target.value)
@@ -3300,8 +3477,7 @@ function RdoFullPageEditor({
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
               />
-            )}
-          </div>
+            )}          </div>
         </div>
       </section>
 
@@ -3336,7 +3512,7 @@ function RdoFullPageEditor({
                 disabled={isSaving || !formData.activityTitle.trim()}
                 className="min-h-[44px] bg-emerald-700 hover:bg-emerald-800 text-white flex-1 sm:flex-none"
               >
-                {isAdmin ? 'Enviar para o técnico' : 'Enviar para aprovação'}
+                {isAdmin ? 'Enviar para o Técnico' : 'Enviar para aprovação'}
               </Button>
             </>
           )}

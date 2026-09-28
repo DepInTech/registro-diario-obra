@@ -243,6 +243,45 @@ export function sanitizeRdoPayload(raw: Record<string, any>): Record<string, unk
     const snap = sanitizeAdminSnapshot(payload.admin_snapshot)
     if (snap) {
       payload.admin_snapshot = snap
+      // No fluxo offline / sanitização: garantir que valores do admin_snapshot têm prioridade
+      // sobre alterações indevidas em campos bloqueados pelo Admin
+      const ff =
+        snap.filled_fields && typeof snap.filled_fields === 'object' ? snap.filled_fields : {}
+      const mappings: Record<string, string[]> = {
+        supervised_by: ['supervised_by', 'supervisedBy'],
+        performed_by: ['performed_by', 'performedBy'],
+        empresa_executora: ['empresa_executora', 'companyName'],
+        report_date: ['report_date', 'reportDate', 'date'],
+        weather: ['weather'],
+        activity_title: ['activity_title', 'activityTitle'],
+        activity_description: ['activity_description', 'activityDescription'],
+        time_displacement: ['time_displacement', 'timeDisplacement'],
+        time_waiting: ['time_waiting', 'timeWaiting'],
+        interferences: ['interferences'],
+        plan_changes: ['plan_changes', 'planChanges'],
+        accidents: ['accidents'],
+      }
+
+      for (const [col, aliases] of Object.entries(mappings)) {
+        let snapVal: any = undefined
+        for (const alias of aliases) {
+          if (
+            snap[alias] !== undefined &&
+            snap[alias] !== null &&
+            String(snap[alias]).trim() !== ''
+          ) {
+            snapVal = snap[alias]
+            break
+          }
+          if (ff[alias] !== undefined && ff[alias] !== null && String(ff[alias]).trim() !== '') {
+            snapVal = ff[alias]
+            break
+          }
+        }
+        if (snapVal !== undefined && snapVal !== null && String(snapVal).trim() !== '') {
+          payload[col] = snapVal
+        }
+      }
     } else {
       delete payload.admin_snapshot
     }
@@ -317,6 +356,111 @@ export function sanitizeFieldSpreadsheetPayload(raw: Record<string, any>): Recor
     const snap = sanitizeAdminSnapshot(payload.admin_snapshot)
     if (snap) {
       payload.admin_snapshot = snap
+      const ff =
+        snap.filled_fields && typeof snap.filled_fields === 'object' ? snap.filled_fields : {}
+
+      // No fluxo offline / sanitização: garantir que valores do admin_snapshot têm prioridade
+      // sobre alterações indevidas em campos bloqueados pelo Admin
+      const scalarMappings: Record<string, string[]> = {
+        operator: ['operator'],
+        date: ['date'],
+        weather: ['weather'],
+        pluviometer: ['pluviometer'],
+        nutrient_done: ['nutrient_done'],
+        nutrient_map_kg: ['nutrient_map_kg'],
+        nutrient_ureia_kg: ['nutrient_ureia_kg'],
+        waste_liquid_qty: ['waste_liquid_qty'],
+        waste_solid_qty: ['waste_solid_qty'],
+        env_5s_check: ['env_5s_check'],
+        env_checklist_monthly: ['env_checklist_monthly'],
+        observations: ['observations'],
+        morning_time: ['morning_time'],
+        afternoon_time: ['afternoon_time'],
+        infiltration_morning_time: ['infiltration_morning_time'],
+        infiltration_afternoon_time: ['infiltration_afternoon_time'],
+      }
+
+      for (const [col, aliases] of Object.entries(scalarMappings)) {
+        let snapVal: any = undefined
+        for (const alias of aliases) {
+          if (snap[alias] !== undefined && snap[alias] !== null) {
+            if (typeof snap[alias] === 'boolean' || String(snap[alias]).trim() !== '') {
+              snapVal = snap[alias]
+              break
+            }
+          }
+          if (ff[alias] !== undefined && ff[alias] !== null) {
+            if (typeof ff[alias] === 'boolean' || String(ff[alias]).trim() !== '') {
+              snapVal = ff[alias]
+              break
+            }
+          }
+        }
+        if (snapVal !== undefined && snapVal !== null) {
+          if (typeof snapVal === 'boolean') {
+            if (snapVal === true) payload[col] = true
+          } else if (String(snapVal).trim() !== '') {
+            payload[col] = snapVal
+          }
+        }
+      }
+
+      // Proteger poços e alturas de bomba em extraction_data
+      if (Array.isArray(snap.wells) && snap.wells.length > 0 && payload.extraction_data) {
+        let curExt: any[] = []
+        try {
+          if (typeof payload.extraction_data === 'string') {
+            curExt = JSON.parse(payload.extraction_data)
+          } else if (Array.isArray(payload.extraction_data)) {
+            curExt = [...payload.extraction_data]
+          }
+        } catch {
+          /* intentionally ignored */
+        }
+
+        if (Array.isArray(curExt) && curExt.length > 0) {
+          const mergedExt = curExt.map((row, idx) => {
+            const snapRow = snap.wells[idx]
+            if (!snapRow) return row
+            const nextRow = { ...row }
+            if (snapRow.well && String(snapRow.well).trim() !== '') {
+              nextRow.well = snapRow.well
+            }
+            if (
+              snapRow.pump !== undefined &&
+              snapRow.pump !== null &&
+              String(snapRow.pump).trim() !== ''
+            ) {
+              nextRow.pump = snapRow.pump
+            }
+            return nextRow
+          })
+          payload.extraction_data = mergedExt
+        }
+      }
+
+      // Proteger objetos estruturais: compressor_data, oil_removal_data, infiltration_data
+      const jsonKeys = ['compressor_data', 'oil_removal_data', 'infiltration_data']
+      for (const jk of jsonKeys) {
+        const snapObj = snap[jk] || ff[jk]
+        if (snapObj && typeof snapObj === 'object' && !Array.isArray(snapObj)) {
+          let curObj: Record<string, any> = {}
+          try {
+            const raw = payload[jk]
+            if (typeof raw === 'string' && raw.trim() !== '') curObj = JSON.parse(raw)
+            else if (raw && typeof raw === 'object' && !Array.isArray(raw)) curObj = { ...raw }
+          } catch {
+            /* intentionally ignored */
+          }
+
+          for (const [subK, subV] of Object.entries(snapObj)) {
+            if (subV !== undefined && subV !== null && String(subV).trim() !== '') {
+              curObj[subK] = subV
+            }
+          }
+          payload[jk] = curObj
+        }
+      }
     } else {
       delete payload.admin_snapshot
     }
