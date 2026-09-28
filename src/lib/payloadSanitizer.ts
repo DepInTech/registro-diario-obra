@@ -74,7 +74,10 @@ export function sanitizeAdminSnapshot(raw: unknown): Record<string, unknown> | u
   const sanitized: Record<string, unknown> = {}
   for (const k of Object.keys(obj)) {
     // Se supervisionado ou operador dentro do snapshot for provisório, sanitiza
-    if ((k === 'supervised_by' || k === 'operator' || k === 'performed_by') && isProvisionalId(obj[k])) {
+    if (
+      (k === 'supervised_by' || k === 'operator' || k === 'performed_by') &&
+      isProvisionalId(obj[k])
+    ) {
       sanitized[k] = ''
     } else {
       sanitized[k] = obj[k]

@@ -8,6 +8,11 @@ import {
 } from '@/services/offlineStorage'
 import { useToast } from '@/hooks/use-toast'
 import { brDateToIso } from '@/lib/dateMask'
+import {
+  sanitizeRdoPayload,
+  sanitizeFieldSpreadsheetPayload,
+  sanitizeWellCompletionDate,
+} from '@/lib/payloadSanitizer'
 
 export const SYNC_BROADCAST_EVENT = 'epa_sync_complete'
 export const REALTIME_RECORD_UPDATE = 'epa_realtime_record_update'
@@ -630,7 +635,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
             // Submissão com adoção atômica do ID do servidor
             const oldRdoId = rdo.id
-            const record = await pb.collection('reports_rdo').create(payload)
+            const sanitizedCreatePayload = sanitizeRdoPayload(payload)
+            const record = await pb.collection('reports_rdo').create(sanitizedCreatePayload)
 
             // Imediatamente adota o ID oficial do servidor na ficha local, eliminando o ID provisório
             await offlineStorage.deleteRdo(oldRdoId)
@@ -651,15 +657,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               if (!wellIdClean) continue
 
               // Sanitização: completion_date vazio -> null ou ISO válido (YYYY-MM-DD), nunca undefined
-              let sanitizedDate: string | null = null
-              if (well.completion_date && String(well.completion_date).trim() !== '') {
-                const isoDate = brDateToIso(String(well.completion_date).trim())
-                sanitizedDate = isoDate
-                  ? isoDate.includes('T')
-                    ? isoDate
-                    : `${isoDate}T12:00:00.000Z`
-                  : null
-              }
+              const sanitizedDate = sanitizeWellCompletionDate(well.completion_date)
 
               try {
                 const createdWellRec = await pb.collection('report_wells').create({
@@ -894,7 +892,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               payload.project = rdo.projectId
             }
 
-            const updated = await pb.collection('reports_rdo').update(rdo.id, payload)
+            const sanitizedUpdatePayload = sanitizeRdoPayload(payload)
+            const updated = await pb
+              .collection('reports_rdo')
+              .update(rdo.id, sanitizedUpdatePayload)
             if (updated.number) rdo.number = updated.number
             if (updated.submitted_at) rdo.submittedAt = updated.submitted_at
             if (updated.approved_at) rdo.approvedAt = updated.approved_at
@@ -916,15 +917,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                 if (!wellIdClean) continue
 
                 // Sanitização: completion_date vazio -> null ou ISO válido (YYYY-MM-DD), nunca undefined
-                let sanitizedDate: string | null = null
-                if (well.completion_date && String(well.completion_date).trim() !== '') {
-                  const isoDate = brDateToIso(String(well.completion_date).trim())
-                  sanitizedDate = isoDate
-                    ? isoDate.includes('T')
-                      ? isoDate
-                      : `${isoDate}T12:00:00.000Z`
-                    : null
-                }
+                const sanitizedDate = sanitizeWellCompletionDate(well.completion_date)
 
                 const wellPayload = {
                   report: rdo.id,
@@ -938,7 +931,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
                   completion_date: sanitizedDate,
                   diameter: well.diameter ? String(well.diameter).trim() : undefined,
                 }
-
                 // Se possui id persistido no servidor que bate com a lista remota
                 const matchedServerWell = well.id
                   ? existingServerWells.find((sw) => sw.id === well.id)
@@ -1201,7 +1193,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
             // Submissão com adoção atômica do ID do servidor
             const oldSheetId = sheet.id
-            const created = await pb.collection('field_spreadsheets').create(payload)
+            const sanitizedCreateSheetPayload = sanitizeFieldSpreadsheetPayload(payload)
+            const created = await pb
+              .collection('field_spreadsheets')
+              .create(sanitizedCreateSheetPayload)
 
             // Imediatamente adota o ID oficial do servidor na ficha local, eliminando o ID provisório
             await offlineStorage.deleteFieldSheet(oldSheetId)
@@ -1357,7 +1352,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               payload.project = sheet.projectId
             }
 
-            const updated = await pb.collection('field_spreadsheets').update(sheet.id, payload)
+            const sanitizedUpdateSheetPayload = sanitizeFieldSpreadsheetPayload(payload)
+            const updated = await pb
+              .collection('field_spreadsheets')
+              .update(sheet.id, sanitizedUpdateSheetPayload)
             if (updated.number) sheet.number = updated.number
             if (updated.submitted_at) sheet.submittedAt = updated.submitted_at
             if (updated.approved_at) sheet.approvedAt = updated.approved_at
@@ -1470,11 +1468,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         // If the ID has a provisional prefix, requeue as 'pending_create'; only real PocketBase 15-char IDs may be 'pending_update'.
         r.syncStatus = isProvisionalId(r.id) ? 'pending_create' : 'pending_update'
         delete r.syncError
+        // Sanitização de admin_snapshot se for array
+        if (Array.isArray(r.admin_snapshot)) {
+          r.admin_snapshot = undefined
+        }
         await offlineStorage.saveRdo(r)
       }
       for (const f of fields.filter((i) => i.syncStatus === 'failed')) {
         f.syncStatus = isProvisionalId(f.id) ? 'pending_create' : 'pending_update'
         delete f.syncError
+        // Sanitização de admin_snapshot se for array
+        if (Array.isArray(f.admin_snapshot)) {
+          f.admin_snapshot = undefined
+        }
         await offlineStorage.saveFieldSheet(f)
       }
       for (const p of projects.filter((i) => i.syncStatus === 'failed')) {

@@ -640,12 +640,13 @@ export function RdosPage({ query }: { query: string }) {
       // Sync to PocketBase backend first if online to validate permissions and real server persistence
       if (navigator.onLine && pb.authStore.isValid) {
         try {
-          await pb.collection('reports_rdo').update(rdoToDelete.id, {
+          const deletePayload: Record<string, unknown> = {
             deleted: true,
             deleted_reason: trimmedReason,
-            deleted_by: user?.id || null,
+            deleted_by: user?.id && !user.id.startsWith('user_') ? user.id : null,
             deleted_at: nowIso,
-          })
+          }
+          await pb.collection('reports_rdo').update(rdoToDelete.id, deletePayload)
           updatedItem.syncStatus = 'synced'
         } catch (pbErr: any) {
           console.error('Backend soft delete error:', pbErr)
@@ -1283,6 +1284,78 @@ function RdoFullPageEditor({
   const { isOnline, syncNow } = useSync()
   const { toast } = useToast()
 
+  // Sincronização em tempo real do editor com o IndexedDB e eventos do servidor
+  const currentRdoIdRef = useRef(formData.id)
+  useEffect(() => {
+    currentRdoIdRef.current = formData.id
+  }, [formData.id])
+
+  useEffect(() => {
+    const handleSyncComplete = async () => {
+      try {
+        const idToCheck = currentRdoIdRef.current
+        // 1. Tenta carregar pelo ID atual
+        let persisted = await offlineStorage.getRdo(idToCheck)
+        // 2. Se o ID for provisório e não achou, procura se foi migrado para ID do servidor
+        if (!persisted && isProvisionalId(idToCheck)) {
+          const allRdos = await offlineStorage.getAllRdos()
+          persisted = allRdos.find(
+            (r) =>
+              r.client_token === idToCheck ||
+              r.lastModified === formData.lastModified ||
+              (r.activityTitle === formData.activityTitle && r.reportDate === formData.reportDate),
+          )
+        }
+        if (persisted) {
+          setFormData((prev) => ({
+            ...prev,
+            id: persisted.id,
+            number: persisted.number !== undefined ? persisted.number : prev.number,
+            syncStatus: persisted.syncStatus || 'synced',
+            serverCreatedAt: persisted.serverCreatedAt || prev.serverCreatedAt,
+            serverUpdatedAt: persisted.serverUpdatedAt || prev.serverUpdatedAt,
+            submittedAt: persisted.submittedAt || prev.submittedAt,
+            approvedAt: persisted.approvedAt || prev.approvedAt,
+            returnedAt: persisted.returnedAt || prev.returnedAt,
+            status: persisted.status || prev.status,
+          }))
+        }
+      } catch (err) {
+        console.warn('Erro ao atualizar RdoFullPageEditor pós-sync:', err)
+      }
+    }
+
+    const handleRealtimeUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
+      const detail = customEvent.detail
+      if (!detail) return
+      if (detail.collection === 'reports_rdo') {
+        const rec = detail.record as any
+        const currentId = currentRdoIdRef.current
+        if (rec && (detail.id === currentId || (rec.number && rec.number === formData.number))) {
+          setFormData((prev) => ({
+            ...prev,
+            id: rec.id || prev.id,
+            number: rec.number !== undefined ? rec.number : prev.number,
+            syncStatus: 'synced',
+            status: rec.status || prev.status,
+            serverCreatedAt: rec.created || prev.serverCreatedAt,
+            serverUpdatedAt: rec.updated || prev.serverUpdatedAt,
+          }))
+        } else {
+          handleSyncComplete()
+        }
+      }
+    }
+
+    window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    window.addEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
+    return () => {
+      window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+      window.removeEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
+    }
+  }, [formData.activityTitle, formData.reportDate, formData.lastModified, formData.number])
+
   const isAdmin = user?.role === 'admin'
   const isTechnician = user?.role === 'technician'
   const isDeleted = Boolean(formData.deleted)
@@ -1636,11 +1709,34 @@ function RdoFullPageEditor({
       }
     }
 
+    // Sanitização de relations locais caso formData contenha IDs provisórios
+    const safePerformedBy =
+      formData.performedBy &&
+      !formData.performedBy.startsWith('user_') &&
+      !formData.performedBy.startsWith('rdo_')
+        ? formData.performedBy
+        : user?.id && !user.id.startsWith('user_')
+          ? user.id
+          : formData.performedBy
+    const safeSupervisedBy =
+      formData.supervisedBy &&
+      !formData.supervisedBy.startsWith('user_') &&
+      !formData.supervisedBy.startsWith('rdo_')
+        ? formData.supervisedBy
+        : undefined
+
     const updatedItem: OfflineRdoItem = {
       ...formData,
+      performedBy: safePerformedBy,
+      supervisedBy: safeSupervisedBy,
       status: effectiveStatus,
       change_history: updatedHistory,
-      admin_snapshot: currentAdminSnapshot,
+      admin_snapshot:
+        currentAdminSnapshot &&
+        typeof currentAdminSnapshot === 'object' &&
+        !Array.isArray(currentAdminSnapshot)
+          ? currentAdminSnapshot
+          : undefined,
       syncStatus: isNew || isProvisionalId(formData.id) ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1727,6 +1823,24 @@ function RdoFullPageEditor({
 
       if (isOnline) {
         await syncNow()
+        // Após o sync online imediato, recarrega a versão persistida atualizada com number e ID do servidor
+        try {
+          let syncedRdo = await offlineStorage.getRdo(updatedItem.id)
+          if (!syncedRdo && isProvisionalId(updatedItem.id)) {
+            const allRdos = await offlineStorage.getAllRdos()
+            syncedRdo = allRdos.find(
+              (r) =>
+                r.lastModified === updatedItem.lastModified ||
+                (r.activityTitle === updatedItem.activityTitle &&
+                  r.reportDate === updatedItem.reportDate),
+            )
+          }
+          if (syncedRdo) {
+            setFormData(syncedRdo)
+          }
+        } catch {
+          // ignore
+        }
       }
 
       toast({

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useRef } from 'react'
 import { applyDateMask, isValidBrDate, INVALID_BR_DATE_MESSAGE } from '@/lib/dateMask'
 import {
   isValidDeletionJustification,
@@ -353,12 +353,13 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       // Sync to PocketBase backend first if online to validate permissions and real server persistence
       if (navigator.onLine && pb.authStore.isValid) {
         try {
-          await pb.collection('field_spreadsheets').update(sheetToDelete.id, {
+          const deletePayload: Record<string, unknown> = {
             deleted: true,
             deleted_reason: trimmedReason,
-            deleted_by: user?.id || null,
+            deleted_by: user?.id && !user.id.startsWith('user_') ? user.id : null,
             deleted_at: nowIso,
-          })
+          }
+          await pb.collection('field_spreadsheets').update(sheetToDelete.id, deletePayload)
           updatedItem.syncStatus = 'synced'
         } catch (pbErr: any) {
           console.error('Backend soft delete error:', pbErr)
@@ -1157,6 +1158,76 @@ function FieldFullEditor({
   const { isOnline, syncNow } = useSync()
   const { toast } = useToast()
 
+  // Sincronização em tempo real do editor com o IndexedDB e eventos do servidor
+  const currentSheetIdRef = useRef(formData.id)
+  useEffect(() => {
+    currentSheetIdRef.current = formData.id
+  }, [formData.id])
+
+  useEffect(() => {
+    const handleSyncComplete = async () => {
+      try {
+        const idToCheck = currentSheetIdRef.current
+        let persisted = await offlineStorage.getFieldSheet(idToCheck)
+        if (!persisted && isProvisionalId(idToCheck)) {
+          const allSheets = await offlineStorage.getAllFieldSheets()
+          persisted = allSheets.find(
+            (s) =>
+              s.client_token === idToCheck ||
+              s.lastModified === formData.lastModified ||
+              (s.date === formData.date && s.projectId === formData.projectId),
+          )
+        }
+        if (persisted) {
+          setFormData((prev) => ({
+            ...prev,
+            id: persisted.id,
+            number: persisted.number !== undefined ? persisted.number : prev.number,
+            syncStatus: persisted.syncStatus || 'synced',
+            serverCreatedAt: persisted.serverCreatedAt || prev.serverCreatedAt,
+            serverUpdatedAt: persisted.serverUpdatedAt || prev.serverUpdatedAt,
+            submittedAt: persisted.submittedAt || prev.submittedAt,
+            approvedAt: persisted.approvedAt || prev.approvedAt,
+            returnedAt: persisted.returnedAt || prev.returnedAt,
+            status: persisted.status || prev.status,
+          }))
+        }
+      } catch (err) {
+        console.warn('Erro ao atualizar FieldFullEditor pós-sync:', err)
+      }
+    }
+
+    const handleRealtimeUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<RealtimeRecordUpdateDetail>
+      const detail = customEvent.detail
+      if (!detail) return
+      if (detail.collection === 'field_spreadsheets') {
+        const rec = detail.record as any
+        const currentId = currentSheetIdRef.current
+        if (rec && (detail.id === currentId || (rec.number && rec.number === formData.number))) {
+          setFormData((prev) => ({
+            ...prev,
+            id: rec.id || prev.id,
+            number: rec.number !== undefined ? rec.number : prev.number,
+            syncStatus: 'synced',
+            status: rec.status || prev.status,
+            serverCreatedAt: rec.created || prev.serverCreatedAt,
+            serverUpdatedAt: rec.updated || prev.serverUpdatedAt,
+          }))
+        } else {
+          handleSyncComplete()
+        }
+      }
+    }
+
+    window.addEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+    window.addEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
+    return () => {
+      window.removeEventListener(SYNC_BROADCAST_EVENT, handleSyncComplete)
+      window.removeEventListener(REALTIME_RECORD_UPDATE, handleRealtimeUpdate)
+    }
+  }, [formData.date, formData.projectId, formData.lastModified, formData.number])
+
   const isAdmin = user?.role === 'admin'
   const isTechnician = user?.role === 'technician'
   const isDeleted = Boolean(formData.deleted)
@@ -1614,11 +1685,27 @@ function FieldFullEditor({
       }
     }
 
+    // Sanitização de relations locais caso formData contenha IDs provisórios
+    const safeOperator =
+      formData.operator &&
+      !formData.operator.startsWith('user_') &&
+      !formData.operator.startsWith('field_')
+        ? formData.operator
+        : user?.id && !user.id.startsWith('user_')
+          ? user.id
+          : formData.operator
+
     const updatedItem: OfflineFieldSheetItem = {
       ...formData,
+      operator: safeOperator,
       status: effectiveStatus,
       change_history: updatedHistory,
-      admin_snapshot: currentAdminSnapshot,
+      admin_snapshot:
+        currentAdminSnapshot &&
+        typeof currentAdminSnapshot === 'object' &&
+        !Array.isArray(currentAdminSnapshot)
+          ? currentAdminSnapshot
+          : undefined,
       syncStatus: isProvisional ? 'pending_create' : 'pending_update',
       lastModified: Date.now(),
     }
@@ -1694,6 +1781,23 @@ function FieldFullEditor({
 
       if (isOnline) {
         await syncNow()
+        // Após o sync online direto, recarrega a versão persistida atualizada com number e ID do servidor
+        try {
+          let syncedSheet = await offlineStorage.getFieldSheet(updatedItem.id)
+          if (!syncedSheet && isProvisionalId(updatedItem.id)) {
+            const allSheets = await offlineStorage.getAllFieldSheets()
+            syncedSheet = allSheets.find(
+              (s) =>
+                s.lastModified === updatedItem.lastModified ||
+                (s.date === updatedItem.date && s.projectId === updatedItem.projectId),
+            )
+          }
+          if (syncedSheet) {
+            setFormData(syncedSheet)
+          }
+        } catch {
+          // ignore
+        }
       }
 
       toast({
@@ -1913,7 +2017,9 @@ function FieldFullEditor({
           </button>
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold tracking-tight">
-              Planilha de Campo · {formData.date}
+              {typeof formData.number === 'number' && formData.number > 0
+                ? `Planilha Nº ${formData.number} · ${formData.date}`
+                : `Planilha de Campo (Rascunho Offline) · ${formData.date}`}
             </h2>
             <StatusBadge status={formData.status} />
             <SheetSyncBadge
@@ -2162,7 +2268,20 @@ function FieldFullEditor({
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div>
+            <label className="epa-label">Número da Planilha (Sequencial do Servidor)</label>
+            <Input
+              readOnly
+              disabled
+              value={
+                typeof formData.number === 'number' && formData.number > 0
+                  ? `Planilha Nº ${formData.number}`
+                  : 'Planilha Offline'
+              }
+              className="mt-1 font-mono min-h-[42px] bg-slate-100 cursor-not-allowed text-slate-700 font-semibold dark:bg-slate-800 dark:text-slate-300"
+            />
+          </div>
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
             {(() => {
