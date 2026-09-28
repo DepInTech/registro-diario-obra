@@ -11,9 +11,11 @@ onRecordCreateRequest(
           e.collection?.name || (e.record.collection ? e.record.collection().name : '')
         let existingSnapshot = null
         try {
-          existingSnapshot = e.record.get('admin_snapshot')
-          if (typeof existingSnapshot === 'string' && existingSnapshot.trim() !== '') {
-            existingSnapshot = JSON.parse(existingSnapshot)
+          const rawSnap = e.record.get('admin_snapshot')
+          if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
+            existingSnapshot = JSON.parse(rawSnap)
+          } else if (rawSnap && typeof rawSnap === 'object') {
+            existingSnapshot = JSON.parse(JSON.stringify(rawSnap))
           }
         } catch (_) {}
 
@@ -35,7 +37,11 @@ onRecordCreateRequest(
 
             if (supName) {
               const snapshotToSave =
-                existingSnapshot && typeof existingSnapshot === 'object' ? existingSnapshot : {}
+                existingSnapshot &&
+                typeof existingSnapshot === 'object' &&
+                !Array.isArray(existingSnapshot)
+                  ? Object.assign({}, existingSnapshot)
+                  : {}
               snapshotToSave.supervised_by = supId
               snapshotToSave.supervised_by_name = supName
               if (!snapshotToSave.empresa_executora) {
@@ -65,7 +71,11 @@ onRecordCreateRequest(
 
             if (opName) {
               const snapshotToSave =
-                existingSnapshot && typeof existingSnapshot === 'object' ? existingSnapshot : {}
+                existingSnapshot &&
+                typeof existingSnapshot === 'object' &&
+                !Array.isArray(existingSnapshot)
+                  ? Object.assign({}, existingSnapshot)
+                  : {}
               snapshotToSave.operator = opId
               snapshotToSave.technician_name = opName
               if (!snapshotToSave.captured_at) {
@@ -103,15 +113,19 @@ onRecordUpdateRequest(
         if (!isAuthAdmin && e.record.original()) {
           let snapshot = null
           try {
-            snapshot = e.record.original().get('admin_snapshot')
-            if (typeof snapshot === 'string' && snapshot.trim() !== '') {
-              snapshot = JSON.parse(snapshot)
+            const rawSnap = e.record.original().get('admin_snapshot')
+            if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
+              snapshot = JSON.parse(rawSnap)
+            } else if (rawSnap && typeof rawSnap === 'object') {
+              snapshot = JSON.parse(JSON.stringify(rawSnap))
             }
           } catch (_) {}
 
-          if (snapshot && typeof snapshot === 'object') {
+          if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
             const filledFields =
-              snapshot.filled_fields && typeof snapshot.filled_fields === 'object'
+              snapshot.filled_fields &&
+              typeof snapshot.filled_fields === 'object' &&
+              !Array.isArray(snapshot.filled_fields)
                 ? snapshot.filled_fields
                 : {}
 
@@ -244,9 +258,11 @@ onRecordUpdateRequest(
         // 2. Se for Admin ou snapshot sem supervisor/operator names, auto-preenche nomes faltantes
         let existingSnapshot = null
         try {
-          existingSnapshot = e.record.get('admin_snapshot')
-          if (typeof existingSnapshot === 'string' && existingSnapshot.trim() !== '') {
-            existingSnapshot = JSON.parse(existingSnapshot)
+          const rawSnap = e.record.get('admin_snapshot')
+          if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
+            existingSnapshot = JSON.parse(rawSnap)
+          } else if (rawSnap && typeof rawSnap === 'object') {
+            existingSnapshot = JSON.parse(JSON.stringify(rawSnap))
           }
         } catch (_) {}
 
@@ -268,7 +284,11 @@ onRecordUpdateRequest(
 
             if (supName) {
               const snapshotToSave =
-                existingSnapshot && typeof existingSnapshot === 'object' ? existingSnapshot : {}
+                existingSnapshot &&
+                typeof existingSnapshot === 'object' &&
+                !Array.isArray(existingSnapshot)
+                  ? Object.assign({}, existingSnapshot)
+                  : {}
               snapshotToSave.supervised_by = supId
               snapshotToSave.supervised_by_name = supName
               if (!snapshotToSave.empresa_executora) {
@@ -298,7 +318,11 @@ onRecordUpdateRequest(
 
             if (opName) {
               const snapshotToSave =
-                existingSnapshot && typeof existingSnapshot === 'object' ? existingSnapshot : {}
+                existingSnapshot &&
+                typeof existingSnapshot === 'object' &&
+                !Array.isArray(existingSnapshot)
+                  ? Object.assign({}, existingSnapshot)
+                  : {}
               snapshotToSave.operator = opId
               snapshotToSave.technician_name = opName
               if (!snapshotToSave.captured_at) {
