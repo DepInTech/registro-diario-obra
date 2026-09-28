@@ -1875,6 +1875,27 @@ function FieldFullEditor({
     // Se quem está salvando é o Admin, gera e atualiza o admin_snapshot contendo
     // technician_name (texto puro), operator, poços PR configurados (com well e pump)
     // e o dicionário filled_fields com todos os campos estruturais preenchidos pelo Admin.
+    const excludedKeys = new Set([
+      'id',
+      'status',
+      'syncStatus',
+      'lastModified',
+      'extraction_data',
+      'change_history',
+      'admin_snapshot',
+      'created',
+      'updated',
+      'projectId',
+      'projectName',
+    ])
+    const filledFieldsMap: Record<string, any> = {}
+    Object.entries(formData).forEach(([key, value]) => {
+      if (excludedKeys.has(key)) return
+      if (value === undefined || value === null) return
+      if (typeof value === 'string' && value.trim() === '') return
+      filledFieldsMap[key] = value
+    })
+
     let currentAdminSnapshot =
       parseAdminSnapshot(formData.admin_snapshot) ||
       parseAdminSnapshot(initialSheet.admin_snapshot) ||
@@ -1885,27 +1906,6 @@ function FieldFullEditor({
         well: String(row.well || '').trim(),
         pump: row.pump !== undefined && row.pump !== null ? String(row.pump).trim() : '',
       }))
-
-      const excludedKeys = new Set([
-        'id',
-        'status',
-        'syncStatus',
-        'lastModified',
-        'extraction_data',
-        'change_history',
-        'admin_snapshot',
-        'created',
-        'updated',
-        'projectId',
-        'projectName',
-      ])
-      const filledFieldsMap: Record<string, any> = {}
-      Object.entries(formData).forEach(([key, value]) => {
-        if (excludedKeys.has(key)) return
-        if (value === undefined || value === null) return
-        if (typeof value === 'string' && value.trim() === '') return
-        filledFieldsMap[key] = value
-      })
 
       const effectiveOpName = (formData.operatorName || user?.name || '').trim()
 

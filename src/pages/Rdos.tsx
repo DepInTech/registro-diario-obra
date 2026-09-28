@@ -640,67 +640,6 @@ export function RdosPage({ query }: { query: string }) {
         : baseSheetRdo?.performed_by_name || user?.name || ''
     ).trim()
 
-    const baseRdoFilled =
-      baseSheetRdo?.filled_fields && typeof baseSheetRdo.filled_fields === 'object'
-        ? baseSheetRdo.filled_fields
-        : {}
-
-    const inheritedReportDate =
-      baseSheetRdo?.reportDate ||
-      baseSheetRdo?.report_date ||
-      baseRdoFilled.reportDate ||
-      baseRdoFilled.report_date ||
-      nowIso.slice(0, 10)
-
-    const inheritedWeather =
-      baseSheetRdo?.weather ||
-      baseRdoFilled.weather ||
-      'Ensolarado'
-
-    const inheritedTimeDisplacement =
-      baseSheetRdo?.timeDisplacement ||
-      baseSheetRdo?.time_displacement ||
-      baseRdoFilled.timeDisplacement ||
-      baseRdoFilled.time_displacement ||
-      ''
-
-    const inheritedTimeWaiting =
-      baseSheetRdo?.timeWaiting ||
-      baseSheetRdo?.time_waiting ||
-      baseRdoFilled.timeWaiting ||
-      baseRdoFilled.time_waiting ||
-      ''
-
-    const inheritedInterferences =
-      baseSheetRdo?.interferences ||
-      baseRdoFilled.interferences ||
-      ''
-
-    const inheritedPlanChanges =
-      baseSheetRdo?.planChanges ||
-      baseSheetRdo?.plan_changes ||
-      baseRdoFilled.planChanges ||
-      baseRdoFilled.plan_changes ||
-      ''
-
-    const inheritedAccidents =
-      baseSheetRdo?.accidents ||
-      baseRdoFilled.accidents ||
-      ''
-
-    if (baseSheetRdo && initialSnapshot) {
-      initialSnapshot.filled_fields = {
-        ...initialSnapshot.filled_fields,
-        ...(inheritedReportDate ? { reportDate: inheritedReportDate } : {}),
-        ...(baseSheetRdo.weather || baseRdoFilled.weather ? { weather: inheritedWeather } : {}),
-        ...(inheritedTimeDisplacement ? { timeDisplacement: inheritedTimeDisplacement } : {}),
-        ...(inheritedTimeWaiting ? { timeWaiting: inheritedTimeWaiting } : {}),
-        ...(inheritedInterferences ? { interferences: inheritedInterferences } : {}),
-        ...(inheritedPlanChanges ? { planChanges: inheritedPlanChanges } : {}),
-        ...(inheritedAccidents ? { accidents: inheritedAccidents } : {}),
-      }
-    }
-
     const newReport: OfflineRdoItem = {
       id: 'rdo_' + Date.now(),
       number: undefined,
@@ -730,7 +669,8 @@ export function RdosPage({ query }: { query: string }) {
       admin_snapshot: initialSnapshot,
       syncStatus: 'pending_create',
       lastModified: Date.now(),
-    }    setIsNew(true)
+    }
+    setIsNew(true)
     setEditing(newReport)
   }
 
@@ -1828,6 +1768,33 @@ function RdoFullPageEditor({
       }
     }
 
+    // Mapeia genericamente todos os campos do formulário preenchidos
+    const excludedKeys = new Set([
+      'id',
+      'status',
+      'syncStatus',
+      'lastModified',
+      'photos',
+      'fieldPhoto',
+      'wells',
+      'change_history',
+      'admin_snapshot',
+      'created',
+      'updated',
+      'projectId',
+      'projectName',
+    ])
+    const filledFieldsMap: Record<string, any> = {}
+    Object.entries(formData).forEach(([key, value]) => {
+      if (excludedKeys.has(key)) return
+      if (value === undefined || value === null) return
+      if (typeof value === 'string' && value.trim() === '') return
+      filledFieldsMap[key] = value
+    })
+    if (formData.companyName && String(formData.companyName).trim()) {
+      filledFieldsMap.empresa_executora = String(formData.companyName).trim()
+    }
+
     // Se quem está salvando é o Admin, gera e atualiza o admin_snapshot contendo
     // supervised_by_name (texto puro), performed_by/performed_by_name, empresa_executora,
     // wells completos com valores preenchidos e o dicionário completo filled_fields.
@@ -1848,33 +1815,6 @@ function RdoFullPageEditor({
         completion_date: w.completion_date ? String(w.completion_date).trim() : '',
         diameter: w.diameter ? String(w.diameter).trim() : '',
       }))
-
-      // Mapeia genericamente todos os campos do formulário preenchidos pelo Administrador
-      const excludedKeys = new Set([
-        'id',
-        'status',
-        'syncStatus',
-        'lastModified',
-        'photos',
-        'fieldPhoto',
-        'wells',
-        'change_history',
-        'admin_snapshot',
-        'created',
-        'updated',
-        'projectId',
-        'projectName',
-      ])
-      const filledFieldsMap: Record<string, any> = {}
-      Object.entries(formData).forEach(([key, value]) => {
-        if (excludedKeys.has(key)) return
-        if (value === undefined || value === null) return
-        if (typeof value === 'string' && value.trim() === '') return
-        filledFieldsMap[key] = value
-      })
-      if (formData.companyName && String(formData.companyName).trim()) {
-        filledFieldsMap.empresa_executora = String(formData.companyName).trim()
-      }
 
       const effectiveSupName = (formData.supervisedByName || user?.name || '').trim()
 
@@ -3388,7 +3328,8 @@ function RdoFullPageEditor({
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
               />
-            )}          </div>
+            )}{' '}
+          </div>
           <div>
             <div className="flex items-center justify-between">
               <label className="epa-label">Mudanças no Plano de Trabalho</label>
@@ -3477,7 +3418,8 @@ function RdoFullPageEditor({
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
               />
-            )}          </div>
+            )}{' '}
+          </div>
         </div>
       </section>
 
