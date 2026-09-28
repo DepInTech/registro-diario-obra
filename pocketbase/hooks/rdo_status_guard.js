@@ -1,5 +1,84 @@
 // Interceptador e guardião de integridade para RDOs e Planilhas de Campo (RBAC e Status)
 
+// 0. CREATE request guard para normalização prévia
+onRecordCreateRequest(
+  (e) => {
+    try {
+      if (e.record) {
+        const col = e.collection?.name || (e.record.collection ? e.record.collection().name : '')
+        if (col === 'reports_rdo' || col === 'field_spreadsheets') {
+          const sanitizeDate = (raw) => {
+            if (!raw || typeof raw !== 'string') return raw
+            const s = raw.trim()
+            const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+            if (br) return `${br[3]}-${br[2]}-${br[1]}`
+            return s
+          }
+
+          const dateKeys = [
+            'date',
+            'report_date',
+            'submitted_at',
+            'approved_at',
+            'returned_at',
+            'deleted_at',
+          ]
+          for (let i = 0; i < dateKeys.length; i++) {
+            const k = dateKeys[i]
+            try {
+              const v = e.record.get(k)
+              if (v && typeof v === 'string') {
+                const sv = sanitizeDate(v)
+                if (sv !== v) e.record.set(k, sv)
+              }
+            } catch (_) {}
+          }
+
+          // Sanitização de relations obrigatórias
+          if (col === 'field_spreadsheets') {
+            // operator deve ser ID de usuário válido
+            try {
+              const op = e.record.getString('operator')
+              if (!op || op.trim() === '' || op.startsWith('user_') || op.startsWith('field_')) {
+                const curAuthId = e.auth ? e.auth.id : ''
+                if (curAuthId) e.record.set('operator', curAuthId)
+              }
+            } catch (_) {}
+
+            // project deve ser ID de projeto válido
+            try {
+              const pr = e.record.getString('project')
+              if (!pr || pr.trim() === '' || pr.startsWith('proj_') || pr.startsWith('p_')) {
+                const activeProjs = $app.findRecordsByFilter(
+                  'projects',
+                  'deleted = false && archived = false && status = "active"',
+                  '-created',
+                  1,
+                  0,
+                )
+                if (activeProjs && activeProjs.length > 0) {
+                  e.record.set('project', activeProjs[0].id)
+                }
+              }
+            } catch (_) {}
+
+            // area não pode ser vazia
+            try {
+              const ar = e.record.getString('area')
+              if (!ar || ar.trim() === '') e.record.set('area', 'Geral')
+            } catch (_) {}
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Aviso: falha defensiva na normalização inicial de rdo_status_guard:', err)
+    }
+    e.next()
+  },
+  'reports_rdo',
+  'field_spreadsheets',
+)
+
 // 1. reports_rdo UPDATE guard
 onRecordUpdateRequest((e) => {
   const auth = e.auth

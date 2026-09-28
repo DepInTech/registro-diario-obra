@@ -9,18 +9,123 @@ onRecordCreateRequest(
       if (e.record) {
         const collectionName =
           e.collection?.name || (e.record.collection ? e.record.collection().name : '')
+
+        // Sanitização universal prévia no servidor:
+        // 1. Data brasileira (DD/MM/AAAA) -> ISO YYYY-MM-DD
+        const sanitizeDateStr = (raw) => {
+          if (!raw || typeof raw !== 'string') return raw
+          const s = raw.trim()
+          const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+          if (brMatch) {
+            return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`
+          }
+          return s
+        }
+
+        try {
+          const d = e.record.get('date')
+          if (d && typeof d === 'string') {
+            const sd = sanitizeDateStr(d)
+            if (sd !== d) e.record.set('date', sd)
+          }
+        } catch (_) {}
+
+        try {
+          const rd = e.record.get('report_date')
+          if (rd && typeof rd === 'string') {
+            const srd = sanitizeDateStr(rd)
+            if (srd !== rd) e.record.set('report_date', srd)
+          }
+        } catch (_) {}
+
+        try {
+          const sub = e.record.get('submitted_at')
+          if (sub && typeof sub === 'string') {
+            const sSub = sanitizeDateStr(sub)
+            if (sSub !== sub) e.record.set('submitted_at', sSub)
+          }
+        } catch (_) {}
+
+        try {
+          const app = e.record.get('approved_at')
+          if (app && typeof app === 'string') {
+            const sApp = sanitizeDateStr(app)
+            if (sApp !== app) e.record.set('approved_at', sApp)
+          }
+        } catch (_) {}
+
+        try {
+          const ret = e.record.get('returned_at')
+          if (ret && typeof ret === 'string') {
+            const sRet = sanitizeDateStr(ret)
+            if (sRet !== ret) e.record.set('returned_at', sRet)
+          }
+        } catch (_) {}
+
+        try {
+          const del = e.record.get('deleted_at')
+          if (del && typeof del === 'string') {
+            const sDel = sanitizeDateStr(del)
+            if (sDel !== del) e.record.set('deleted_at', sDel)
+          }
+        } catch (_) {}
+
+        // Normalização de campos de texto livre da planilha de campo (se vierem como número ou objeto)
+        if (collectionName === 'field_spreadsheets') {
+          const textFields = [
+            'waste_liquid_qty',
+            'waste_solid_qty',
+            'pluviometer',
+            'nutrient_map_kg',
+            'nutrient_ureia_kg',
+          ]
+          for (let ti = 0; ti < textFields.length; ti++) {
+            const tf = textFields[ti]
+            try {
+              const val = e.record.get(tf)
+              if (val !== undefined && val !== null && typeof val !== 'string') {
+                e.record.set(tf, String(val))
+              }
+            } catch (_) {}
+          }
+        }
+
+        // Inspeção robusta de admin_snapshot (NUNCA pode ser Go slice / array)
         let existingSnapshot = null
         try {
           const rawSnap = e.record.get('admin_snapshot')
           if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
-            const parsed = JSON.parse(rawSnap)
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-              existingSnapshot = parsed
-            }
+            try {
+              const parsed = JSON.parse(rawSnap)
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                existingSnapshot = parsed
+              }
+            } catch (_) {}
           } else if (rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap)) {
-            existingSnapshot = JSON.parse(JSON.stringify(rawSnap))
+            // Em Goja, se for Go slice ou map, tentar JSON roundtrip
+            try {
+              const jsonStr = JSON.stringify(rawSnap)
+              const parsed = JSON.parse(jsonStr)
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                existingSnapshot = parsed
+              }
+            } catch (_) {}
           }
         } catch (_) {}
+
+        // Se o admin_snapshot for um array ou inválido no record, normaliza para objeto vazio ou snapshot válido
+        if (!existingSnapshot) {
+          try {
+            const curVal = e.record.get('admin_snapshot')
+            if (
+              curVal !== undefined &&
+              curVal !== null &&
+              (Array.isArray(curVal) || typeof curVal !== 'object')
+            ) {
+              e.record.set('admin_snapshot', {})
+            }
+          } catch (_) {}
+        }
 
         if (collectionName === 'reports_rdo') {
           const supId = e.record.getString('supervised_by')
@@ -39,12 +144,18 @@ onRecordCreateRequest(
             } catch (_) {}
 
             if (supName) {
-              const snapshotToSave =
+              const snapshotToSave = {}
+              if (
                 existingSnapshot &&
                 typeof existingSnapshot === 'object' &&
                 !Array.isArray(existingSnapshot)
-                  ? Object.assign({}, existingSnapshot)
-                  : {}
+              ) {
+                for (const k in existingSnapshot) {
+                  if (Object.prototype.hasOwnProperty.call(existingSnapshot, k)) {
+                    snapshotToSave[k] = existingSnapshot[k]
+                  }
+                }
+              }
               snapshotToSave.supervised_by = supId
               snapshotToSave.supervised_by_name = supName
               if (!snapshotToSave.empresa_executora) {
@@ -73,12 +184,18 @@ onRecordCreateRequest(
             } catch (_) {}
 
             if (opName) {
-              const snapshotToSave =
+              const snapshotToSave = {}
+              if (
                 existingSnapshot &&
                 typeof existingSnapshot === 'object' &&
                 !Array.isArray(existingSnapshot)
-                  ? Object.assign({}, existingSnapshot)
-                  : {}
+              ) {
+                for (const k in existingSnapshot) {
+                  if (Object.prototype.hasOwnProperty.call(existingSnapshot, k)) {
+                    snapshotToSave[k] = existingSnapshot[k]
+                  }
+                }
+              }
               snapshotToSave.operator = opId
               snapshotToSave.technician_name = opName
               if (!snapshotToSave.captured_at) {
@@ -261,17 +378,88 @@ onRecordUpdateRequest(
           }
         }
 
+        // Sanitização de datas no update
+        const sanitizeDateStr = (raw) => {
+          if (!raw || typeof raw !== 'string') return raw
+          const s = raw.trim()
+          const brMatch = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+          if (brMatch) {
+            return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`
+          }
+          return s
+        }
+
+        try {
+          const d = e.record.get('date')
+          if (d && typeof d === 'string') {
+            const sd = sanitizeDateStr(d)
+            if (sd !== d) e.record.set('date', sd)
+          }
+        } catch (_) {}
+
+        try {
+          const rd = e.record.get('report_date')
+          if (rd && typeof rd === 'string') {
+            const srd = sanitizeDateStr(rd)
+            if (srd !== rd) e.record.set('report_date', srd)
+          }
+        } catch (_) {}
+
+        try {
+          const sub = e.record.get('submitted_at')
+          if (sub && typeof sub === 'string') {
+            const sSub = sanitizeDateStr(sub)
+            if (sSub !== sub) e.record.set('submitted_at', sSub)
+          }
+        } catch (_) {}
+
+        try {
+          const del = e.record.get('deleted_at')
+          if (del && typeof del === 'string') {
+            const sDel = sanitizeDateStr(del)
+            if (sDel !== del) e.record.set('deleted_at', sDel)
+          }
+        } catch (_) {}
+
+        // Normalização de campos de texto livre da planilha de campo no update
+        if (collectionName === 'field_spreadsheets') {
+          const textFields = [
+            'waste_liquid_qty',
+            'waste_solid_qty',
+            'pluviometer',
+            'nutrient_map_kg',
+            'nutrient_ureia_kg',
+          ]
+          for (let ti = 0; ti < textFields.length; ti++) {
+            const tf = textFields[ti]
+            try {
+              const val = e.record.get(tf)
+              if (val !== undefined && val !== null && typeof val !== 'string') {
+                e.record.set(tf, String(val))
+              }
+            } catch (_) {}
+          }
+        }
+
         // 2. Se for Admin ou snapshot sem supervisor/operator names, auto-preenche nomes faltantes
         let existingSnapshot = null
         try {
           const rawSnap = e.record.get('admin_snapshot')
           if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
-            const parsed = JSON.parse(rawSnap)
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-              existingSnapshot = parsed
-            }
+            try {
+              const parsed = JSON.parse(rawSnap)
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                existingSnapshot = parsed
+              }
+            } catch (_) {}
           } else if (rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap)) {
-            existingSnapshot = JSON.parse(JSON.stringify(rawSnap))
+            try {
+              const jsonStr = JSON.stringify(rawSnap)
+              const parsed = JSON.parse(jsonStr)
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                existingSnapshot = parsed
+              }
+            } catch (_) {}
           }
         } catch (_) {}
 
@@ -292,12 +480,18 @@ onRecordUpdateRequest(
             } catch (_) {}
 
             if (supName) {
-              const snapshotToSave =
+              const snapshotToSave = {}
+              if (
                 existingSnapshot &&
                 typeof existingSnapshot === 'object' &&
                 !Array.isArray(existingSnapshot)
-                  ? Object.assign({}, existingSnapshot)
-                  : {}
+              ) {
+                for (const k in existingSnapshot) {
+                  if (Object.prototype.hasOwnProperty.call(existingSnapshot, k)) {
+                    snapshotToSave[k] = existingSnapshot[k]
+                  }
+                }
+              }
               snapshotToSave.supervised_by = supId
               snapshotToSave.supervised_by_name = supName
               if (!snapshotToSave.empresa_executora) {
@@ -326,12 +520,18 @@ onRecordUpdateRequest(
             } catch (_) {}
 
             if (opName) {
-              const snapshotToSave =
+              const snapshotToSave = {}
+              if (
                 existingSnapshot &&
                 typeof existingSnapshot === 'object' &&
                 !Array.isArray(existingSnapshot)
-                  ? Object.assign({}, existingSnapshot)
-                  : {}
+              ) {
+                for (const k in existingSnapshot) {
+                  if (Object.prototype.hasOwnProperty.call(existingSnapshot, k)) {
+                    snapshotToSave[k] = existingSnapshot[k]
+                  }
+                }
+              }
               snapshotToSave.operator = opId
               snapshotToSave.technician_name = opName
               if (!snapshotToSave.captured_at) {
