@@ -6,7 +6,7 @@ import { brDateToIso } from './dateMask'
 export function isProvisionalId(id?: string | null): boolean {
   if (!id) return false
   const s = String(id).trim()
-  return (
+  if (
     s.startsWith('rdo_') ||
     s.startsWith('field_') ||
     s.startsWith('proj_') ||
@@ -15,7 +15,19 @@ export function isProvisionalId(id?: string | null): boolean {
     s.startsWith('temp_') ||
     s.startsWith('p_') ||
     s.startsWith('well_')
-  )
+  ) {
+    return true
+  }
+  // PocketBase record IDs must be exactly 15 lowercase alphanumeric characters: [a-z0-9]{15}
+  return !/^[a-z0-9]{15}$/.test(s)
+}
+
+/**
+ * Retorna true se e somente se o ID for um ID de servidor válido PocketBase ([a-z0-9]{15})
+ */
+export function isValidPocketBaseId(id?: string | null): boolean {
+  if (!id) return false
+  return /^[a-z0-9]{15}$/.test(String(id).trim())
 }
 
 /**
@@ -129,6 +141,11 @@ export function sanitizeWellCompletionDate(dateVal: unknown): string | null {
 export function sanitizeRdoPayload(raw: Record<string, any>): Record<string, unknown> {
   const payload: Record<string, unknown> = { ...raw }
 
+  // 0. Remove id provisório se passado no payload (PocketBase DEVE gerar o ID no create)
+  if ('id' in payload && isProvisionalId(payload.id as string)) {
+    delete payload.id
+  }
+
   // 1. Datas
   if ('report_date' in payload && payload.report_date) {
     payload.report_date = sanitizeDateToIso(payload.report_date)
@@ -188,6 +205,11 @@ export function sanitizeRdoPayload(raw: Record<string, any>): Record<string, unk
  */
 export function sanitizeFieldSpreadsheetPayload(raw: Record<string, any>): Record<string, unknown> {
   const payload: Record<string, unknown> = { ...raw }
+
+  // 0. Remove id provisório se passado no payload (PocketBase DEVE gerar o ID no create)
+  if ('id' in payload && isProvisionalId(payload.id as string)) {
+    delete payload.id
+  }
 
   // 1. Datas
   if ('date' in payload && payload.date) {

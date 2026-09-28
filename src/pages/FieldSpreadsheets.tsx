@@ -126,6 +126,9 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         console.warn('Erro ao consultar data da zeragem em Planilhas:', err)
       }
 
+      // Descarte preventivo de rascunhos inválidos/travados
+      await offlineStorage.purgeInvalidOrStuckDrafts()
+
       let localSheets = await offlineStorage.getAllFieldSheets()
 
       if (navigator.onLine && pb.authStore.isValid) {

@@ -174,6 +174,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
   const checkPending = useCallback(async () => {
     try {
+      // Limpeza preventiva de rascunhos inválidos ou travados
+      await offlineStorage.purgeInvalidOrStuckDrafts()
+
       const [rdos, fields, projects] = await Promise.all([
         offlineStorage.getAllRdos(),
         offlineStorage.getAllFieldSheets(),
@@ -535,9 +538,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const rdos = await offlineStorage.getAllRdos()
       for (const rdo of rdos) {
         // Defensive check: if item has a provisional ID but syncStatus is pending_update, treat as pending_create
-        if (rdo.syncStatus === 'pending_update' && isProvisionalId(rdo.id)) {
-          rdo.syncStatus = 'pending_create'
-          await offlineStorage.saveRdo(rdo)
+        if (isProvisionalId(rdo.id)) {
+          if (rdo.syncStatus === 'pending_update') {
+            rdo.syncStatus = 'pending_create'
+            await offlineStorage.saveRdo(rdo)
+          }
+        }
+
+        // Limite de 3 tentativas para itens que falharam com erro 400 ou fatal
+        if (rdo.syncStatus === 'failed' && (rdo.syncAttempts || 0) >= 3) {
+          continue
         }
 
         if (rdo.syncStatus === 'pending_create') {
@@ -636,6 +646,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             // Submissão com adoção atômica do ID do servidor
             const oldRdoId = rdo.id
             const sanitizedCreatePayload = sanitizeRdoPayload(payload)
+            // Garante que nenhum id provisório seja passado no create
+            delete (sanitizedCreatePayload as any).id
             const record = await pb.collection('reports_rdo').create(sanitizedCreatePayload)
 
             // Imediatamente adota o ID oficial do servidor na ficha local, eliminando o ID provisório
@@ -769,12 +781,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Error syncing offline RDO create:', err)
             totalErrors++
+            const is400 = err?.status === 400 || err?.statusCode === 400
             const friendly = translateServerErrorMessage(err, 'rdo')
             const errMsg = friendly || err?.message || 'Falha ao sincronizar criação de RDO'
             errorsList.push(errMsg)
             rdo.syncStatus = 'failed'
             rdo.syncError = errMsg
             rdo.syncAttempts = (rdo.syncAttempts || 0) + 1
+            // Se for erro 400 de validação fatal ou atingiu 3 tentativas, interrompe retentativas automáticas em loop
+            if (is400 && rdo.syncAttempts >= 3) {
+              rdo.syncError = `${errMsg} (Limite de tentativas atingido. Edite e salve o registro para corrigir).`
+            }
             await offlineStorage.saveRdo(rdo)
           }
         } else if (rdo.syncStatus === 'pending_update') {
@@ -1065,12 +1082,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Error syncing offline RDO update:', err)
             totalErrors++
+            const is400 = err?.status === 400 || err?.statusCode === 400
             const friendly = translateServerErrorMessage(err, 'rdo')
             const errMsg = friendly || err?.message || 'Falha ao sincronizar atualização de RDO'
             errorsList.push(errMsg)
             rdo.syncStatus = 'failed'
             rdo.syncError = errMsg
             rdo.syncAttempts = (rdo.syncAttempts || 0) + 1
+            if (is400 && rdo.syncAttempts >= 3) {
+              rdo.syncError = `${errMsg} (Limite de tentativas atingido. Edite e salve o registro para corrigir).`
+            }
             await offlineStorage.saveRdo(rdo)
           }
         }
@@ -1082,9 +1103,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const fields = await offlineStorage.getAllFieldSheets()
       for (const sheet of fields) {
         // Defensive check: if item has a provisional ID but syncStatus is pending_update, treat as pending_create
-        if (sheet.syncStatus === 'pending_update' && isProvisionalId(sheet.id)) {
-          sheet.syncStatus = 'pending_create'
-          await offlineStorage.saveFieldSheet(sheet)
+        if (isProvisionalId(sheet.id)) {
+          if (sheet.syncStatus === 'pending_update') {
+            sheet.syncStatus = 'pending_create'
+            await offlineStorage.saveFieldSheet(sheet)
+          }
+        }
+
+        // Limite de 3 tentativas para itens que falharam com erro 400 ou fatal
+        if (sheet.syncStatus === 'failed' && (sheet.syncAttempts || 0) >= 3) {
+          continue
         }
 
         if (sheet.syncStatus === 'pending_create') {
@@ -1194,6 +1222,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             // Submissão com adoção atômica do ID do servidor
             const oldSheetId = sheet.id
             const sanitizedCreateSheetPayload = sanitizeFieldSpreadsheetPayload(payload)
+            // Garante que nenhum id provisório seja passado no create
+            delete (sanitizedCreateSheetPayload as any).id
             const created = await pb
               .collection('field_spreadsheets')
               .create(sanitizedCreateSheetPayload)
@@ -1218,12 +1248,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Error syncing offline FieldSheet create:', err)
             totalErrors++
+            const is400 = err?.status === 400 || err?.statusCode === 400
             const friendly = translateServerErrorMessage(err, 'field')
             const errMsg = friendly || err?.message || 'Falha ao sincronizar planilha de campo'
             errorsList.push(errMsg)
             sheet.syncStatus = 'failed'
             sheet.syncError = errMsg
             sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+            if (is400 && sheet.syncAttempts >= 3) {
+              sheet.syncError = `${errMsg} (Limite de tentativas atingido. Edite e salve o registro para corrigir).`
+            }
             await offlineStorage.saveFieldSheet(sheet)
           }
         } else if (sheet.syncStatus === 'pending_update') {
@@ -1370,6 +1404,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           } catch (err: any) {
             console.error('Error syncing offline FieldSheet update:', err)
             totalErrors++
+            const is400 = err?.status === 400 || err?.statusCode === 400
             const friendly = translateServerErrorMessage(err, 'field')
             const errMsg =
               friendly || err?.message || 'Falha ao sincronizar atualização de planilha'
@@ -1377,6 +1412,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             sheet.syncStatus = 'failed'
             sheet.syncError = errMsg
             sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+            if (is400 && sheet.syncAttempts >= 3) {
+              sheet.syncError = `${errMsg} (Limite de tentativas atingido. Edite e salve o registro para corrigir).`
+            }
             await offlineStorage.saveFieldSheet(sheet)
           }
         }
@@ -1405,11 +1443,14 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
       if (totalErrors > 0) {
         setSyncError(`${totalErrors} item(ns) falharam ao sincronizar.`)
-        // Exponential backoff capped at 60s
-        backoffDelayRef.current = Math.min(
-          backoffDelayRef.current ? backoffDelayRef.current * 2 : 5000,
-          60000,
-        )
+        // Exponential backoff (5s -> 10s -> 30s -> máx 60s)
+        const currentBackoff = backoffDelayRef.current || 0
+        let nextBackoff = 5000
+        if (currentBackoff === 0) nextBackoff = 5000
+        else if (currentBackoff < 10000) nextBackoff = 10000
+        else if (currentBackoff < 30000) nextBackoff = 30000
+        else nextBackoff = 60000
+        backoffDelayRef.current = nextBackoff
       }
     } catch (err: any) {
       console.error('Sync error:', err)
@@ -2259,6 +2300,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('offline', handleOffline)
     window.addEventListener('focus', handleWindowFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Descarte inicial de rascunhos inválidos / travados e purga pré-zeragem
+    offlineStorage.purgeInvalidOrStuckDrafts().then(() => checkPending())
 
     // Anti-ressincronização inicial no carregamento se online
     if (navigator.onLine && pb.authStore.isValid) {

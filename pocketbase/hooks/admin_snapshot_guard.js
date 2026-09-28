@@ -90,47 +90,30 @@ onRecordCreateRequest(
           }
         }
 
-        // Inspeção robusta de admin_snapshot (NUNCA pode ser Go slice / array)
-        let existingSnapshot = null
-        try {
-          const rawSnap = e.record.get('admin_snapshot')
-          if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
-            try {
-              const parsed = JSON.parse(rawSnap)
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                existingSnapshot = parsed
-              }
-            } catch (_) {}
-          } else if (rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap)) {
-            // Em Goja, se for Go slice ou map, tentar JSON roundtrip
-            try {
-              const jsonStr = JSON.stringify(rawSnap)
-              const parsed = JSON.parse(jsonStr)
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                existingSnapshot = parsed
-              }
-            } catch (_) {}
-          }
-        } catch (_) {}
-
-        // Se o admin_snapshot for um array ou inválido no record, normaliza para objeto vazio ou snapshot válido
-        if (!existingSnapshot) {
+        // Helper seguro para obter um JS Object plano a partir de qualquer valor retornado pelo PocketBase/Goja
+        const parseSnapshotObj = (val) => {
+          if (!val) return {}
           try {
-            const curVal = e.record.get('admin_snapshot')
-            if (
-              curVal !== undefined &&
-              curVal !== null &&
-              (Array.isArray(curVal) || typeof curVal !== 'object')
-            ) {
-              e.record.set('admin_snapshot', {})
+            if (typeof val === 'string') {
+              const trimmed = val.trim()
+              if (!trimmed) return {}
+              const p = JSON.parse(trimmed)
+              return p && typeof p === 'object' && !Array.isArray(p) ? p : {}
             }
-          } catch (_) {}
+            // Se for Go map ou Go slice ou objeto, JSON roundtrip cria um Object puro JS
+            const str = JSON.stringify(val)
+            const p = JSON.parse(str)
+            return p && typeof p === 'object' && !Array.isArray(p) ? p : {}
+          } catch (_) {
+            return {}
+          }
         }
+
+        let existingSnapshot = parseSnapshotObj(e.record.get('admin_snapshot'))
 
         if (collectionName === 'reports_rdo') {
           const supId = e.record.getString('supervised_by')
           const needsSupName =
-            !existingSnapshot ||
             !existingSnapshot.supervised_by_name ||
             String(existingSnapshot.supervised_by_name).trim() === ''
 
@@ -144,18 +127,7 @@ onRecordCreateRequest(
             } catch (_) {}
 
             if (supName) {
-              const snapshotToSave = {}
-              if (
-                existingSnapshot &&
-                typeof existingSnapshot === 'object' &&
-                !Array.isArray(existingSnapshot)
-              ) {
-                for (const k in existingSnapshot) {
-                  if (Object.prototype.hasOwnProperty.call(existingSnapshot, k)) {
-                    snapshotToSave[k] = existingSnapshot[k]
-                  }
-                }
-              }
+              const snapshotToSave = Object.assign({}, existingSnapshot)
               snapshotToSave.supervised_by = supId
               snapshotToSave.supervised_by_name = supName
               if (!snapshotToSave.empresa_executora) {
@@ -170,7 +142,6 @@ onRecordCreateRequest(
         } else if (collectionName === 'field_spreadsheets') {
           const opId = e.record.getString('operator')
           const needsOpName =
-            !existingSnapshot ||
             !existingSnapshot.technician_name ||
             String(existingSnapshot.technician_name).trim() === ''
 
@@ -184,18 +155,7 @@ onRecordCreateRequest(
             } catch (_) {}
 
             if (opName) {
-              const snapshotToSave = {}
-              if (
-                existingSnapshot &&
-                typeof existingSnapshot === 'object' &&
-                !Array.isArray(existingSnapshot)
-              ) {
-                for (const k in existingSnapshot) {
-                  if (Object.prototype.hasOwnProperty.call(existingSnapshot, k)) {
-                    snapshotToSave[k] = existingSnapshot[k]
-                  }
-                }
-              }
+              const snapshotToSave = Object.assign({}, existingSnapshot)
               snapshotToSave.operator = opId
               snapshotToSave.technician_name = opName
               if (!snapshotToSave.captured_at) {
@@ -442,31 +402,28 @@ onRecordUpdateRequest(
         }
 
         // 2. Se for Admin ou snapshot sem supervisor/operator names, auto-preenche nomes faltantes
-        let existingSnapshot = null
-        try {
-          const rawSnap = e.record.get('admin_snapshot')
-          if (typeof rawSnap === 'string' && rawSnap.trim() !== '') {
-            try {
-              const parsed = JSON.parse(rawSnap)
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                existingSnapshot = parsed
-              }
-            } catch (_) {}
-          } else if (rawSnap && typeof rawSnap === 'object' && !Array.isArray(rawSnap)) {
-            try {
-              const jsonStr = JSON.stringify(rawSnap)
-              const parsed = JSON.parse(jsonStr)
-              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-                existingSnapshot = parsed
-              }
-            } catch (_) {}
+        const parseSnapshotObjUpdate = (val) => {
+          if (!val) return {}
+          try {
+            if (typeof val === 'string') {
+              const trimmed = val.trim()
+              if (!trimmed) return {}
+              const p = JSON.parse(trimmed)
+              return p && typeof p === 'object' && !Array.isArray(p) ? p : {}
+            }
+            const str = JSON.stringify(val)
+            const p = JSON.parse(str)
+            return p && typeof p === 'object' && !Array.isArray(p) ? p : {}
+          } catch (_) {
+            return {}
           }
-        } catch (_) {}
+        }
+
+        let existingSnapshot = parseSnapshotObjUpdate(e.record.get('admin_snapshot'))
 
         if (collectionName === 'reports_rdo') {
           const supId = e.record.getString('supervised_by')
           const needsSupName =
-            !existingSnapshot ||
             !existingSnapshot.supervised_by_name ||
             String(existingSnapshot.supervised_by_name).trim() === ''
 
@@ -480,18 +437,7 @@ onRecordUpdateRequest(
             } catch (_) {}
 
             if (supName) {
-              const snapshotToSave = {}
-              if (
-                existingSnapshot &&
-                typeof existingSnapshot === 'object' &&
-                !Array.isArray(existingSnapshot)
-              ) {
-                for (const k in existingSnapshot) {
-                  if (Object.prototype.hasOwnProperty.call(existingSnapshot, k)) {
-                    snapshotToSave[k] = existingSnapshot[k]
-                  }
-                }
-              }
+              const snapshotToSave = Object.assign({}, existingSnapshot)
               snapshotToSave.supervised_by = supId
               snapshotToSave.supervised_by_name = supName
               if (!snapshotToSave.empresa_executora) {
@@ -506,7 +452,6 @@ onRecordUpdateRequest(
         } else if (collectionName === 'field_spreadsheets') {
           const opId = e.record.getString('operator')
           const needsOpName =
-            !existingSnapshot ||
             !existingSnapshot.technician_name ||
             String(existingSnapshot.technician_name).trim() === ''
 
@@ -520,18 +465,7 @@ onRecordUpdateRequest(
             } catch (_) {}
 
             if (opName) {
-              const snapshotToSave = {}
-              if (
-                existingSnapshot &&
-                typeof existingSnapshot === 'object' &&
-                !Array.isArray(existingSnapshot)
-              ) {
-                for (const k in existingSnapshot) {
-                  if (Object.prototype.hasOwnProperty.call(existingSnapshot, k)) {
-                    snapshotToSave[k] = existingSnapshot[k]
-                  }
-                }
-              }
+              const snapshotToSave = Object.assign({}, existingSnapshot)
               snapshotToSave.operator = opId
               snapshotToSave.technician_name = opName
               if (!snapshotToSave.captured_at) {

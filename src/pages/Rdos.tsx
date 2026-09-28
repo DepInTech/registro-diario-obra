@@ -125,6 +125,9 @@ export function RdosPage({ query }: { query: string }) {
         console.warn('Erro ao consultar data da zeragem em RDOs:', err)
       }
 
+      // Descarte preventivo de rascunhos inválidos/travados
+      await offlineStorage.purgeInvalidOrStuckDrafts()
+
       let localRdos = await offlineStorage.getAllRdos()
 
       // 2. Se online e PocketBase disponível, sincroniza cache com os IDs reais do servidor

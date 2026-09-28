@@ -488,6 +488,37 @@ export const offlineStorage = {
    *    DEPOIS da data de zeragem.
    * 4. Remove artefatos dependentes de registros descartados (report_wells, report_photos, etc.).
    */
+  /**
+   * Remove registros com IDs provisórios inválidos / órfãos e limpa rascunhos travados.
+   */
+  async purgeInvalidOrStuckDrafts(): Promise<{ purgedRdos: number; purgedSheets: number }> {
+    const isPbId = (id: string) => /^[a-z0-9]{15}$/.test(id)
+    const [rdos, sheets] = await Promise.all([this.getAllRdos(), this.getAllFieldSheets()])
+    let purgedRdos = 0
+    let purgedSheets = 0
+
+    for (const r of rdos) {
+      // Se não for ID válido PocketBase e estiver falhado com tentativas esgotadas ou marcado como corrupto/órfão
+      if (!isPbId(r.id) && (r.syncStatus === 'failed' || (r.syncAttempts || 0) >= 3)) {
+        await this.deleteRdo(r.id)
+        purgedRdos++
+      }
+    }
+
+    for (const s of sheets) {
+      // Inclui expressamente o órfão travado field_1790364259892 e qualquer rascunho com ID não-PB com falha persistente
+      if (
+        s.id === 'field_1790364259892' ||
+        (!isPbId(s.id) && (s.syncStatus === 'failed' || (s.syncAttempts || 0) >= 3))
+      ) {
+        await this.deleteFieldSheet(s.id)
+        purgedSheets++
+      }
+    }
+
+    return { purgedRdos, purgedSheets }
+  },
+
   async purgePreWipeOperationalData(
     wipeTimestamp: number,
     options?: {
