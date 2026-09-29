@@ -58,6 +58,12 @@ import pb from '@/lib/pocketbase/client'
 import { parseAdminSnapshot, isValidPocketBaseId } from '@/lib/payloadSanitizer'
 import { type Status } from '@/data/epa'
 import {
+  parseHydrometerValue,
+  normalizeWellKey,
+  validateHydrometerReadings,
+  HYDROMETER_ERROR_MESSAGE,
+} from '@/lib/hydrometerValidator'
+import {
   FIELD_SHEET_RETURN_OPTIONS,
   createFieldSheetSnapshot,
   diffFieldSheet,
@@ -1615,6 +1621,24 @@ function FieldFullEditor({
     const updated = [...(formData.extraction_data || [])]
     updated[index] = { ...updated[index], [col]: val }
     handleFieldChange('extraction_data', updated)
+
+    // Feedback imediato caso o Técnico informe uma leitura menor
+    if (col === 'morning' || col === 'afternoon') {
+      const enteredNum = parseHydrometerValue(val)
+      if (enteredNum !== null) {
+        // Se preenchendo a tarde e já há manhã na mesma linha: afternoon não pode ser menor que morning
+        if (col === 'afternoon') {
+          const morningNum = parseHydrometerValue(updated[index].morning)
+          if (morningNum !== null && enteredNum < morningNum) {
+            toast({
+              title: '⚠️ Leitura inválida',
+              description: HYDROMETER_ERROR_MESSAGE,
+              variant: 'destructive',
+            })
+          }
+        }
+      }
+    }
   }
 
   // Save logic
@@ -1654,166 +1678,88 @@ function FieldFullEditor({
     }
 
     // 2. Validação do hidrômetro (intra-ficha e inter-fichas)
-    // Suporta formato brasileiro ("1.250,5") e internacional ("1250.5")
-    const parseHydrometerNumber = (val: unknown): number | null => {
-      if (val === null || val === undefined || val === '') return null
-      let s = String(val).trim()
-      if (s === '') return null
-      // Se contiver vírgula e ponto (ex: 1.250,5 ou 1,250.5)
-      if (s.includes(',') && s.includes('.')) {
-        if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
-          // Formato brasileiro: 1.250,50 -> 1250.50
-          s = s.replace(/\./g, '').replace(',', '.')
-        } else {
-          // Formato americano com vírgulas de milhar: 1,250.50 -> 1250.50
-          s = s.replace(/,/g, '')
-        }
-      } else if (s.includes(',')) {
-        // Apenas vírgula decimal: 1250,5 -> 1250.5
-        s = s.replace(',', '.')
-      }
-      const n = parseFloat(s)
-      return isNaN(n) ? null : n
-    }
-
-    const normWellKey = (w: unknown) =>
-      String(w || '')
-        .trim()
-        .toUpperCase()
-
-    const HYDROMETER_ERROR_MSG =
-      '⚠️ Leitura inválida. O valor informado não pode ser menor que a leitura anterior deste hidrômetro.'
-
+    // Regra obrigatória: A nova leitura do hidrômetro nunca poderá ser menor que a leitura anterior.
+    // Igual é permitido.
     const extractionRows = formData.extraction_data || []
-
-    // 2a. Intra-ficha: afternoon >= morning no mesmo poço
-    for (const row of extractionRows) {
-      if (!row) continue
-      const mVal = parseHydrometerNumber(row.morning)
-      const aVal = parseHydrometerNumber(row.afternoon)
-      if (mVal !== null && aVal !== null && aVal < mVal) {
-        toast({
-          title: 'Leitura de hidrômetro inválida',
-          description: HYDROMETER_ERROR_MSG,
-          variant: 'destructive',
-        })
-        return
-      }
-    }
-
-    // 2b. Inter-fichas: comparar leituras do dia contra a última leitura registrada do mesmo poço no mesmo projeto
     const currentProjectId = formData.projectId
     const currentSheetId = formData.id || ''
 
-    if (currentProjectId && extractionRows.length > 0) {
+    if (extractionRows.length > 0) {
       let candidateSheets: OfflineFieldSheetItem[] = []
 
-      // Tenta buscar no servidor se online
-      if (navigator.onLine && pb.authStore.isValid) {
-        try {
-          let filterStr = `project = "${currentProjectId}" && deleted = false`
-          if (currentSheetId && !isProvisionalId(currentSheetId)) {
-            filterStr += ` && id != "${currentSheetId}"`
-          }
-          const serverRecs = await pb.collection('field_spreadsheets').getList(1, 15, {
-            filter: filterStr,
-            sort: '-date,-created',
-          })
-          candidateSheets = serverRecs.items.map((r: any) => {
-            let ext = r.extraction_data
-            if (typeof ext === 'string' && ext.trim() !== '') {
-              try {
-                ext = JSON.parse(ext)
-              } catch {
-                ext = []
+      if (currentProjectId) {
+        // Tenta buscar no servidor se online
+        if (navigator.onLine && pb.authStore.isValid) {
+          try {
+            let filterStr = `project = "${currentProjectId}" && deleted = false`
+            if (currentSheetId && !isProvisionalId(currentSheetId)) {
+              filterStr += ` && id != "${currentSheetId}"`
+            }
+            const serverRecs = await pb.collection('field_spreadsheets').getList(1, 25, {
+              filter: filterStr,
+              sort: '-date,-created',
+            })
+            candidateSheets = serverRecs.items.map((r: any) => {
+              let ext = r.extraction_data
+              if (typeof ext === 'string' && ext.trim() !== '') {
+                try {
+                  ext = JSON.parse(ext)
+                } catch {
+                  ext = []
+                }
               }
-            }
-            return {
-              id: r.id,
-              projectId: r.project,
-              projectName: '',
-              date: r.date,
-              area: r.area,
-              operator: r.operator,
-              extraction_data: Array.isArray(ext) ? ext : [],
-              status: r.status,
-              syncStatus: 'synced',
-              lastModified: new Date(r.updated || 0).getTime(),
-            } as OfflineFieldSheetItem
-          })
-        } catch (serverErr) {
-          console.warn('Fallback para cache offline ao validar hidrômetro:', serverErr)
-          candidateSheets = []
+              return {
+                id: r.id,
+                projectId: r.project,
+                projectName: '',
+                date: r.date,
+                area: r.area,
+                operator: r.operator,
+                extraction_data: Array.isArray(ext) ? ext : [],
+                status: r.status,
+                syncStatus: 'synced',
+                lastModified: new Date(r.updated || 0).getTime(),
+              } as OfflineFieldSheetItem
+            })
+          } catch (serverErr) {
+            console.warn('Fallback para cache offline ao validar hidrômetro:', serverErr)
+            candidateSheets = []
+          }
+        }
+
+        // Se offline ou falha no servidor, busca do cache IndexedDB
+        if (candidateSheets.length === 0) {
+          try {
+            const allLocal = await offlineStorage.getAllFieldSheets()
+            candidateSheets = allLocal
+              .filter(
+                (s) => s.projectId === currentProjectId && !s.deleted && s.id !== currentSheetId,
+              )
+              .sort((a, b) => {
+                const dateA = a.date ? new Date(a.date).getTime() : a.lastModified || 0
+                const dateB = b.date ? new Date(b.date).getTime() : b.lastModified || 0
+                return dateB - dateA
+              })
+              .slice(0, 25)
+          } catch (cacheErr) {
+            console.warn('Erro ao ler cache IndexedDB para hidrômetro:', cacheErr)
+          }
         }
       }
 
-      // Se offline ou falha no servidor, busca do cache IndexedDB
-      if (candidateSheets.length === 0) {
-        try {
-          const allLocal = await offlineStorage.getAllFieldSheets()
-          candidateSheets = allLocal
-            .filter(
-              (s) => s.projectId === currentProjectId && !s.deleted && s.id !== currentSheetId,
-            )
-            .sort((a, b) => {
-              const dateA = a.date ? new Date(a.date).getTime() : a.lastModified || 0
-              const dateB = b.date ? new Date(b.date).getTime() : b.lastModified || 0
-              return dateB - dateA
-            })
-            .slice(0, 15)
-        } catch (cacheErr) {
-          console.warn('Erro ao ler cache IndexedDB para hidrômetro:', cacheErr)
-        }
-      }
+      const hydrometerCheck = validateHydrometerReadings(
+        extractionRows,
+        candidateSheets,
+        currentSheetId,
+      )
 
-      if (candidateSheets.length > 0) {
-        const lastReadingsByWell: Record<string, number> = {}
-
-        for (const pastSheet of candidateSheets) {
-          const pastExt = pastSheet.extraction_data || []
-          for (const pRow of pastExt) {
-            if (!pRow) continue
-            const wKey = normWellKey(pRow.well)
-            if (!wKey) continue
-            if (lastReadingsByWell[wKey] !== undefined) continue
-
-            const pA = parseHydrometerNumber(pRow.afternoon)
-            const pM = parseHydrometerNumber(pRow.morning)
-            const highestPast = pA !== null ? pA : pM !== null ? pM : null
-            if (highestPast !== null) {
-              lastReadingsByWell[wKey] = highestPast
-            }
-          }
-        }
-
-        for (const curRow of extractionRows) {
-          if (!curRow) continue
-          const curKey = normWellKey(curRow.well)
-          if (!curKey) continue
-
-          const baseline = lastReadingsByWell[curKey]
-          if (baseline === undefined || baseline === null) continue
-
-          const curM = parseHydrometerNumber(curRow.morning)
-          const curA = parseHydrometerNumber(curRow.afternoon)
-
-          if (curM !== null && curM < baseline) {
-            toast({
-              title: 'Leitura de hidrômetro inválida',
-              description: HYDROMETER_ERROR_MSG,
-              variant: 'destructive',
-            })
-            return
-          }
-          if (curA !== null && curA < baseline) {
-            toast({
-              title: 'Leitura de hidrômetro inválida',
-              description: HYDROMETER_ERROR_MSG,
-              variant: 'destructive',
-            })
-            return
-          }
-        }
+      if (!hydrometerCheck.valid) {
+        toast({
+          title: '⚠️ Leitura inválida',
+          description: HYDROMETER_ERROR_MESSAGE,
+          variant: 'destructive',
+        })
+        return
       }
     }
 

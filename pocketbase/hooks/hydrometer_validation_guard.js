@@ -1,6 +1,7 @@
 // Hook para validação do hidrômetro em field_spreadsheets
 // Garante que a leitura do hidrômetro (manhã/tarde) não seja menor que a leitura anterior registrada
 // para o mesmo poço no mesmo projeto, e que afternoon >= morning no mesmo poço.
+// Suporta separadores brasileiros de milhar ("1.250" -> 1250) e decimais ("1.250,5" -> 1250.5).
 // Lança BadRequestError com a mensagem EXATA:
 // "⚠️ Leitura inválida. O valor informado não pode ser menor que a leitura anterior deste hidrômetro."
 
@@ -22,7 +23,29 @@ onRecordCreateRequest((e) => {
         if (Array.isArray(rawExt) && rawExt.length > 0) {
           const parseNum = (val) => {
             if (val === null || val === undefined || val === '') return null
-            const s = String(val).trim().replace(',', '.')
+            let s = String(val).trim()
+            if (s === '') return null
+
+            if (s.indexOf(',') !== -1 && s.indexOf('.') !== -1) {
+              if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+                // PT-BR: 1.250,50 -> 1250.50
+                s = s.replace(/\./g, '').replace(',', '.')
+              } else {
+                // EN-US: 1,250.50 -> 1250.50
+                s = s.replace(/,/g, '')
+              }
+            } else if (s.indexOf(',') !== -1) {
+              s = s.replace(',', '.')
+            } else if (s.indexOf('.') !== -1) {
+              const parts = s.split('.')
+              if (parts.length > 2) {
+                s = s.replace(/\./g, '')
+              } else if (parts.length === 2 && parts[1].length === 3) {
+                // Ex: 1.250 -> 1250
+                s = s.replace(/\./g, '')
+              }
+            }
+
             const n = parseFloat(s)
             return isNaN(n) ? null : n
           }
@@ -58,7 +81,7 @@ onRecordCreateRequest((e) => {
               'field_spreadsheets',
               filter,
               '-date,-created',
-              15,
+              25,
               0,
             )
           } catch (_) {
@@ -150,7 +173,29 @@ onRecordUpdateRequest((e) => {
         if (Array.isArray(rawExt) && rawExt.length > 0) {
           const parseNum = (val) => {
             if (val === null || val === undefined || val === '') return null
-            const s = String(val).trim().replace(',', '.')
+            let s = String(val).trim()
+            if (s === '') return null
+
+            if (s.indexOf(',') !== -1 && s.indexOf('.') !== -1) {
+              if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+                // PT-BR: 1.250,50 -> 1250.50
+                s = s.replace(/\./g, '').replace(',', '.')
+              } else {
+                // EN-US: 1,250.50 -> 1250.50
+                s = s.replace(/,/g, '')
+              }
+            } else if (s.indexOf(',') !== -1) {
+              s = s.replace(',', '.')
+            } else if (s.indexOf('.') !== -1) {
+              const parts = s.split('.')
+              if (parts.length > 2) {
+                s = s.replace(/\./g, '')
+              } else if (parts.length === 2 && parts[1].length === 3) {
+                // Ex: 1.250 -> 1250
+                s = s.replace(/\./g, '')
+              }
+            }
+
             const n = parseFloat(s)
             return isNaN(n) ? null : n
           }
@@ -186,7 +231,7 @@ onRecordUpdateRequest((e) => {
               'field_spreadsheets',
               filter,
               '-date,-created',
-              15,
+              25,
               0,
             )
           } catch (_) {

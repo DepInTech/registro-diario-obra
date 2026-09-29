@@ -6,6 +6,7 @@ import {
   OfflineFieldSheetItem,
   OfflineProjectItem,
 } from '@/services/offlineStorage'
+import { validateHydrometerReadings, HYDROMETER_ERROR_MESSAGE } from '@/lib/hydrometerValidator'
 import { useToast } from '@/hooks/use-toast'
 import { brDateToIso } from '@/lib/dateMask'
 import {
@@ -119,6 +120,14 @@ function translateServerErrorMessage(err: unknown, entity: 'rdo' | 'field' | 'pr
       return 'Falha ao registrar Planilha de Campo. Verifique os dados operacionais e o projeto.'
     }
     return 'Falha na validação dos campos obrigatórios no servidor.'
+  }
+
+  if (
+    rawMsg.includes('Leitura inválida') ||
+    rawMsg.includes('leitura anterior') ||
+    rawMsg.includes('hidrômetro')
+  ) {
+    return '⚠️ Leitura inválida. O valor informado não pode ser menor que a leitura anterior deste hidrômetro.'
   }
 
   if (rawMsg.includes("The requested resource wasn't found") || rawMsg.includes('404')) {
@@ -1115,6 +1124,23 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           continue
         }
 
+        // Validação preventiva do hidrômetro antes de qualquer chamada ao servidor
+        const allCurrentSheets = fields
+        const hydrometerCheck = validateHydrometerReadings(
+          sheet.extraction_data,
+          allCurrentSheets,
+          sheet.id,
+        )
+        if (!hydrometerCheck.valid) {
+          sheet.syncStatus = 'failed'
+          sheet.syncError = HYDROMETER_ERROR_MESSAGE
+          sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+          await offlineStorage.saveFieldSheet(sheet)
+          totalErrors++
+          errorsList.push(HYDROMETER_ERROR_MESSAGE)
+          continue
+        }
+
         if (sheet.syncStatus === 'pending_create') {
           try {
             // Atribui token de idempotência estável para a Planilha offline
@@ -1265,6 +1291,22 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           if (isProvisionalId(sheet.id)) {
             sheet.syncStatus = 'pending_create'
             await offlineStorage.saveFieldSheet(sheet)
+            continue
+          }
+
+          // Validação preventiva do hidrômetro para updates
+          const hydrometerCheckUpdate = validateHydrometerReadings(
+            sheet.extraction_data,
+            fields,
+            sheet.id,
+          )
+          if (!hydrometerCheckUpdate.valid) {
+            sheet.syncStatus = 'failed'
+            sheet.syncError = HYDROMETER_ERROR_MESSAGE
+            sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+            await offlineStorage.saveFieldSheet(sheet)
+            totalErrors++
+            errorsList.push(HYDROMETER_ERROR_MESSAGE)
             continue
           }
 
