@@ -6,7 +6,11 @@ import {
   OfflineFieldSheetItem,
   OfflineProjectItem,
 } from '@/services/offlineStorage'
-import { validateHydrometerReadings, HYDROMETER_ERROR_MESSAGE } from '@/lib/hydrometerValidator'
+import {
+  validateHydrometerReadings,
+  HYDROMETER_ERROR_MESSAGE,
+  type SheetWithExtraction,
+} from '@/lib/hydrometerValidator'
 import { useToast } from '@/hooks/use-toast'
 import { brDateToIso } from '@/lib/dateMask'
 import {
