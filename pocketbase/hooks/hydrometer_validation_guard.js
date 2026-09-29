@@ -81,17 +81,42 @@ onRecordCreateRequest((e) => {
               'field_spreadsheets',
               filter,
               '-date,-created',
-              25,
+              100,
               0,
             )
           } catch (_) {
-            candidateSheets = []
+            try {
+              candidateSheets = $app.findRecordsByFilter(
+                'field_spreadsheets',
+                filter,
+                '-date',
+                100,
+                0,
+              )
+            } catch (__2) {
+              candidateSheets = []
+            }
           }
 
           if (Array.isArray(candidateSheets) && candidateSheets.length > 0) {
+            // Ordenação complementar rigorosa por data/criação mais recente
+            const sortedCandidates = [...candidateSheets].sort((a, b) => {
+              const tA = Math.max(
+                a.getString('created') ? new Date(a.getString('created')).getTime() : 0,
+                a.getString('date') ? new Date(a.getString('date')).getTime() : 0,
+                a.getString('updated') ? new Date(a.getString('updated')).getTime() : 0,
+              )
+              const tB = Math.max(
+                b.getString('created') ? new Date(b.getString('created')).getTime() : 0,
+                b.getString('date') ? new Date(b.getString('date')).getTime() : 0,
+                b.getString('updated') ? new Date(b.getString('updated')).getTime() : 0,
+              )
+              return tB - tA
+            })
+
             const lastReadingsByWell = {}
-            for (let sIdx = 0; sIdx < candidateSheets.length; sIdx++) {
-              const pastSheet = candidateSheets[sIdx]
+            for (let sIdx = 0; sIdx < sortedCandidates.length; sIdx++) {
+              const pastSheet = sortedCandidates[sIdx]
               let pastExt = pastSheet.get('extraction_data')
               if (typeof pastExt === 'string' && pastExt.trim() !== '') {
                 try {
@@ -231,17 +256,42 @@ onRecordUpdateRequest((e) => {
               'field_spreadsheets',
               filter,
               '-date,-created',
-              25,
+              100,
               0,
             )
           } catch (_) {
-            candidateSheets = []
+            try {
+              candidateSheets = $app.findRecordsByFilter(
+                'field_spreadsheets',
+                filter,
+                '-date',
+                100,
+                0,
+              )
+            } catch (__2) {
+              candidateSheets = []
+            }
           }
 
           if (Array.isArray(candidateSheets) && candidateSheets.length > 0) {
+            // Ordenação complementar rigorosa por data/criação mais recente
+            const sortedCandidates = [...candidateSheets].sort((a, b) => {
+              const tA = Math.max(
+                a.getString('created') ? new Date(a.getString('created')).getTime() : 0,
+                a.getString('date') ? new Date(a.getString('date')).getTime() : 0,
+                a.getString('updated') ? new Date(a.getString('updated')).getTime() : 0,
+              )
+              const tB = Math.max(
+                b.getString('created') ? new Date(b.getString('created')).getTime() : 0,
+                b.getString('date') ? new Date(b.getString('date')).getTime() : 0,
+                b.getString('updated') ? new Date(b.getString('updated')).getTime() : 0,
+              )
+              return tB - tA
+            })
+
             const lastReadingsByWell = {}
-            for (let sIdx = 0; sIdx < candidateSheets.length; sIdx++) {
-              const pastSheet = candidateSheets[sIdx]
+            for (let sIdx = 0; sIdx < sortedCandidates.length; sIdx++) {
+              const pastSheet = sortedCandidates[sIdx]
               let pastExt = pastSheet.get('extraction_data')
               if (typeof pastExt === 'string' && pastExt.trim() !== '') {
                 try {

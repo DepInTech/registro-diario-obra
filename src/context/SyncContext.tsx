@@ -1124,11 +1124,38 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           continue
         }
 
-        // Validação preventiva do hidrômetro antes de qualquer chamada ao servidor
-        const allCurrentSheets = fields
+        // Validação preventiva do hidrômetro antes de qualquer chamada ao servidor.
+        // Inclui fichas locais + servidor (se online) ordenadas por cronologia.
+        let syncCandidateSheets = [...fields]
+        if (navigator.onLine && pb.authStore.isValid && sheet.projectId) {
+          try {
+            const serverSheets = await pb.collection('field_spreadsheets').getList(1, 50, {
+              filter: `deleted = false && id != "${sheet.id}"`,
+              sort: '-date,-created',
+            })
+            const mappedServer: SheetWithExtraction[] = serverSheets.items.map((r: any) => ({
+              id: r.id,
+              date: r.date,
+              created: r.created,
+              extraction_data: r.extraction_data,
+              deleted: r.deleted,
+            }))
+            // Une locais e servidor evitando duplicidade por ID
+            const seen = new Set(syncCandidateSheets.map((s) => s.id))
+            for (const s of mappedServer) {
+              if (!seen.has(s.id)) {
+                syncCandidateSheets.push(s as any)
+                seen.add(s.id)
+              }
+            }
+          } catch {
+            // mantém syncCandidateSheets locais se falhar
+          }
+        }
+
         const hydrometerCheck = validateHydrometerReadings(
           sheet.extraction_data,
-          allCurrentSheets,
+          syncCandidateSheets,
           sheet.id,
         )
         if (!hydrometerCheck.valid) {
@@ -1297,7 +1324,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           // Validação preventiva do hidrômetro para updates
           const hydrometerCheckUpdate = validateHydrometerReadings(
             sheet.extraction_data,
-            fields,
+            syncCandidateSheets,
             sheet.id,
           )
           if (!hydrometerCheckUpdate.valid) {

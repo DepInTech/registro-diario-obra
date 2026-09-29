@@ -121,46 +121,12 @@ export function validateHydrometerReadings(
     }
   }
 
-  // 2. Validação Inter-fichas
+  // 2. Validação Inter-fichas: extrai leituras mais recentes ordenadas por timestamp
   if (!previousSheets || !Array.isArray(previousSheets) || previousSheets.length === 0) {
     return { valid: true }
   }
 
-  // Mapeia o valor mais recente registrado para cada poço nas fichas anteriores
-  const lastReadingsByWell: Record<string, number> = {}
-
-  for (const sheet of previousSheets) {
-    if (!sheet || sheet.deleted) continue
-    if (currentSheetId && sheet.id === currentSheetId) continue
-
-    let ext: ExtractionRowLike[] = []
-    if (typeof sheet.extraction_data === 'string' && sheet.extraction_data.trim() !== '') {
-      try {
-        ext = JSON.parse(sheet.extraction_data)
-      } catch {
-        ext = []
-      }
-    } else if (Array.isArray(sheet.extraction_data)) {
-      ext = sheet.extraction_data
-    }
-
-    if (!Array.isArray(ext)) continue
-
-    for (const pRow of ext) {
-      if (!pRow) continue
-      const wKey = normalizeWellKey(pRow.well)
-      if (!wKey) continue
-      // Se já temos a leitura mais recente deste poço registrada, ignora fichas mais antigas
-      if (lastReadingsByWell[wKey] !== undefined) continue
-
-      const pA = parseHydrometerValue(pRow.afternoon)
-      const pM = parseHydrometerValue(pRow.morning)
-      const highestPast = pA !== null ? pA : pM !== null ? pM : null
-      if (highestPast !== null) {
-        lastReadingsByWell[wKey] = highestPast
-      }
-    }
-  }
+  const lastReadingsByWell = getLatestReadingsMap(previousSheets, currentSheetId)
 
   // Compara os valores informados na ficha atual com a leitura anterior do poço
   for (const curRow of currentRows) {
@@ -196,4 +162,73 @@ export function validateHydrometerReadings(
   }
 
   return { valid: true }
+}
+
+/**
+ * Retorna um mapa { [wellKey]: latestReadingNumber } ordenado cronologicamente
+ * (mais recente primeiro) de todas as fichas conhecidas (servidor + locais).
+ */
+export function getLatestReadingsMap(
+  previousSheets: SheetWithExtraction[] | undefined | null,
+  excludeSheetId?: string,
+): Record<string, number> {
+  const map: Record<string, number> = {}
+  if (!previousSheets || !Array.isArray(previousSheets) || previousSheets.length === 0) {
+    return map
+  }
+
+  // Ordena cópia das fichas da mais recente para a mais antiga
+  const sorted = [...previousSheets].sort((a, b) => {
+    const tA = getSheetTimestamp(a)
+    const tB = getSheetTimestamp(b)
+    return tB - tA
+  })
+
+  for (const sheet of sorted) {
+    if (!sheet || sheet.deleted) continue
+    if (excludeSheetId && sheet.id === excludeSheetId) continue
+
+    let ext: ExtractionRowLike[] = []
+    if (typeof sheet.extraction_data === 'string' && sheet.extraction_data.trim() !== '') {
+      try {
+        ext = JSON.parse(sheet.extraction_data)
+      } catch {
+        ext = []
+      }
+    } else if (Array.isArray(sheet.extraction_data)) {
+      ext = sheet.extraction_data
+    }
+
+    if (!Array.isArray(ext)) continue
+
+    for (const row of ext) {
+      if (!row) continue
+      const wKey = normalizeWellKey(row.well)
+      if (!wKey) continue
+      if (map[wKey] !== undefined) continue
+
+      const pA = parseHydrometerValue(row.afternoon)
+      const pM = parseHydrometerValue(row.morning)
+      const highestPast = pA !== null ? pA : pM !== null ? pM : null
+      if (highestPast !== null) {
+        map[wKey] = highestPast
+      }
+    }
+  }
+
+  return map
+}
+
+function getSheetTimestamp(sheet: SheetWithExtraction | undefined | null): number {
+  if (!sheet) return 0
+  if (sheet.lastModified) return sheet.lastModified
+  if (sheet.created) {
+    const t = new Date(sheet.created).getTime()
+    if (!isNaN(t) && t > 0) return t
+  }
+  if (sheet.date) {
+    const t = new Date(sheet.date).getTime()
+    if (!isNaN(t) && t > 0) return t
+  }
+  return 0
 }

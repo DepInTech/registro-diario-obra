@@ -61,6 +61,7 @@ import {
   parseHydrometerValue,
   normalizeWellKey,
   validateHydrometerReadings,
+  getLatestReadingsMap,
   HYDROMETER_ERROR_MESSAGE,
 } from '@/lib/hydrometerValidator'
 import {
@@ -1622,11 +1623,11 @@ function FieldFullEditor({
     updated[index] = { ...updated[index], [col]: val }
     handleFieldChange('extraction_data', updated)
 
-    // Feedback imediato caso o Técnico informe uma leitura menor
+    // Feedback imediato caso o Técnico informe uma leitura menor (intra-ficha e inter-fichas)
     if (col === 'morning' || col === 'afternoon') {
       const enteredNum = parseHydrometerValue(val)
       if (enteredNum !== null) {
-        // Se preenchendo a tarde e já há manhã na mesma linha: afternoon não pode ser menor que morning
+        // Validação intra-ficha: se preenchendo a tarde e já há manhã na mesma linha
         if (col === 'afternoon') {
           const morningNum = parseHydrometerValue(updated[index].morning)
           if (morningNum !== null && enteredNum < morningNum) {
@@ -1636,6 +1637,28 @@ function FieldFullEditor({
               variant: 'destructive',
             })
           }
+        }
+
+        // Validação inter-fichas assíncrona ao digitar:
+        // Checa se o valor digitado é menor que a última leitura registrada para este poço em outras fichas
+        const wellKey = normalizeWellKey(updated[index]?.well)
+        if (wellKey) {
+          ;(async () => {
+            try {
+              const allLocal = await offlineStorage.getAllFieldSheets()
+              const map = getLatestReadingsMap(allLocal, formData.id)
+              const baseline = map[wellKey]
+              if (baseline !== undefined && enteredNum < baseline) {
+                toast({
+                  title: '⚠️ Leitura inválida',
+                  description: HYDROMETER_ERROR_MESSAGE,
+                  variant: 'destructive',
+                })
+              }
+            } catch (err) {
+              console.warn('Erro ao verificar leitura anterior do hidrômetro ao digitar:', err)
+            }
+          })()
         }
       }
     }
@@ -1685,71 +1708,73 @@ function FieldFullEditor({
     const currentSheetId = formData.id || ''
 
     if (extractionRows.length > 0) {
-      let candidateSheets: OfflineFieldSheetItem[] = []
+      // Coleta completa e mesclada de fichas candidatas (servidor + local)
+      const mergedMap = new Map<string, OfflineFieldSheetItem>()
 
-      if (currentProjectId) {
-        // Tenta buscar no servidor se online
-        if (navigator.onLine && pb.authStore.isValid) {
-          try {
-            let filterStr = `project = "${currentProjectId}" && deleted = false`
-            if (currentSheetId && !isProvisionalId(currentSheetId)) {
-              filterStr += ` && id != "${currentSheetId}"`
-            }
-            const serverRecs = await pb.collection('field_spreadsheets').getList(1, 25, {
-              filter: filterStr,
-              sort: '-date,-created',
-            })
-            candidateSheets = serverRecs.items.map((r: any) => {
-              let ext = r.extraction_data
-              if (typeof ext === 'string' && ext.trim() !== '') {
-                try {
-                  ext = JSON.parse(ext)
-                } catch {
-                  ext = []
-                }
-              }
-              return {
-                id: r.id,
-                projectId: r.project,
-                projectName: '',
-                date: r.date,
-                area: r.area,
-                operator: r.operator,
-                extraction_data: Array.isArray(ext) ? ext : [],
-                status: r.status,
-                syncStatus: 'synced',
-                lastModified: new Date(r.updated || 0).getTime(),
-              } as OfflineFieldSheetItem
-            })
-          } catch (serverErr) {
-            console.warn('Fallback para cache offline ao validar hidrômetro:', serverErr)
-            candidateSheets = []
-          }
+      // 1. Carrega todas as fichas locais do dispositivo
+      try {
+        const allLocal = await offlineStorage.getAllFieldSheets()
+        for (const loc of allLocal) {
+          if (!loc || loc.deleted) continue
+          if (currentProjectId && loc.projectId && loc.projectId !== currentProjectId) continue
+          if (currentSheetId && loc.id === currentSheetId) continue
+          mergedMap.set(loc.id, loc)
         }
+      } catch (cacheErr) {
+        console.warn('Erro ao ler fichas locais para validação do hidrômetro:', cacheErr)
+      }
 
-        // Se offline ou falha no servidor, busca do cache IndexedDB
-        if (candidateSheets.length === 0) {
-          try {
-            const allLocal = await offlineStorage.getAllFieldSheets()
-            candidateSheets = allLocal
-              .filter(
-                (s) => s.projectId === currentProjectId && !s.deleted && s.id !== currentSheetId,
-              )
-              .sort((a, b) => {
-                const dateA = a.date ? new Date(a.date).getTime() : a.lastModified || 0
-                const dateB = b.date ? new Date(b.date).getTime() : b.lastModified || 0
-                return dateB - dateA
-              })
-              .slice(0, 25)
-          } catch (cacheErr) {
-            console.warn('Erro ao ler cache IndexedDB para hidrômetro:', cacheErr)
+      // 2. Se online, consulta o servidor para garantir fichas salvas por outros técnicos
+      if (navigator.onLine && pb.authStore.isValid) {
+        try {
+          let filterStr = `deleted = false`
+          if (currentProjectId && !isProvisionalId(currentProjectId)) {
+            filterStr += ` && project = "${currentProjectId}"`
           }
+          if (currentSheetId && !isProvisionalId(currentSheetId)) {
+            filterStr += ` && id != "${currentSheetId}"`
+          }
+          const serverRecs = await pb.collection('field_spreadsheets').getList(1, 100, {
+            filter: filterStr,
+            sort: '-date,-created',
+          })
+          for (const r of serverRecs.items) {
+            let ext = (r as any).extraction_data
+            if (typeof ext === 'string' && ext.trim() !== '') {
+              try {
+                ext = JSON.parse(ext)
+              } catch {
+                ext = []
+              }
+            }
+            const sItem: OfflineFieldSheetItem = {
+              id: r.id,
+              projectId: (r as any).project,
+              projectName: '',
+              date: (r as any).date,
+              created: (r as any).created,
+              area: (r as any).area,
+              operator: (r as any).operator,
+              extraction_data: Array.isArray(ext) ? ext : [],
+              status: (r as any).status,
+              syncStatus: 'synced',
+              lastModified: new Date((r as any).updated || 0).getTime(),
+            } as OfflineFieldSheetItem
+            // Se já tínhamos rascunho local pendente para esse id, mantém o local mais recente
+            if (!mergedMap.has(r.id) || mergedMap.get(r.id)?.syncStatus === 'synced') {
+              mergedMap.set(r.id, sItem)
+            }
+          }
+        } catch (serverErr) {
+          console.warn('Falha ao buscar fichas do servidor para hidrômetro:', serverErr)
         }
       }
 
+      const allCandidateSheets = Array.from(mergedMap.values())
+
       const hydrometerCheck = validateHydrometerReadings(
         extractionRows,
-        candidateSheets,
+        allCandidateSheets,
         currentSheetId,
       )
 
