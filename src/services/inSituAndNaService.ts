@@ -39,6 +39,7 @@ export const inSituService = {
       active_number: sheet.active_number || '',
       measurement_point: sheet.measurement_point || '',
       records: sheet.records || [],
+      nutrient_rows: sheet.nutrient_rows || [],
       status: sheet.status || 'draft',
       responsible_name: sheet.responsible_name || '',
       notes: sheet.notes || '',

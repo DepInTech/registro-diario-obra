@@ -1,12 +1,80 @@
 import { EPA_LOGO_BASE64 } from '@/assets/epaLogoBase64'
-import { InSituSheet, InSituMeasurementRow } from '@/types/inSituAndNa'
+import { InSituSheet, InSituMeasurementRow, InSituNutrientRowData } from '@/types/inSituAndNa'
+
+export const NUTRIENT_ROW_TYPES: Array<'ENTRADA' | 'SAÍDA' | 'T. NUTRIENTES'> = [
+  'ENTRADA',
+  'SAÍDA',
+  'T. NUTRIENTES',
+]
 
 /**
- * Retorna as medições preenchendo até pelo menos 14 linhas (como no modelo físico REV 02 da imagem)
+ * Cria ou sincroniza as 12 linhas da seção de nutrientes conforme a sequência do papel:
+ * ENTRADA / SAÍDA / T. NUTRIENTES repetidos 4 vezes (sistemas 0 a 3).
+ * Garante compatibilidade caso já existam dados ou dados legados.
+ */
+export function buildDefaultNutrientRows(
+  existing?: InSituNutrientRowData[],
+  legacyRecords?: InSituMeasurementRow[],
+): InSituNutrientRowData[] {
+  const rows: InSituNutrientRowData[] = []
+  let index = 0
+
+  for (let s = 0; s < 4; s++) {
+    for (const type of NUTRIENT_ROW_TYPES) {
+      const rowId = `nutr_sys${s}_${type.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`
+      const found = existing?.find(
+        (r) =>
+          r.id === rowId ||
+          (r.system_index === s && r.type === type) ||
+          (existing.indexOf(r) === index && r.type === type),
+      )
+
+      // Verificação de fallback legado: se não havia nutrient_rows, tentar extrair de records legados
+      let fallbackPh = ''
+      let fallbackConductivity = ''
+      let fallbackOd = ''
+      if (!found && legacyRecords && legacyRecords.length > 0) {
+        const firstRecord = legacyRecords[0]
+        const pair = firstRecord.nutrients?.[s]
+        if (pair) {
+          if (type === 'ENTRADA' && pair.entry) fallbackPh = pair.entry
+          if (type === 'SAÍDA' && pair.exit) fallbackPh = pair.exit
+        } else if (s === 0) {
+          if (type === 'ENTRADA' && firstRecord.nutrients_in) fallbackPh = firstRecord.nutrients_in
+          if (type === 'SAÍDA' && firstRecord.nutrients_out) fallbackPh = firstRecord.nutrients_out
+        }
+      }
+
+      rows.push({
+        id: rowId,
+        type,
+        system_index: s,
+        date: found?.date || '',
+        time: found?.time || '',
+        ph: found?.ph ?? fallbackPh,
+        conductivity: found?.conductivity ?? fallbackConductivity,
+        conductivity_unit: found?.conductivity_unit || 'µS/cm',
+        od_mg_l: found?.od_mg_l ?? fallbackOd,
+        temperature_c: found?.temperature_c || '',
+        orp: found?.orp || '',
+        turbidity: found?.turbidity || '',
+        weather: found?.weather || '',
+        responsible: found?.responsible || '',
+        notes: found?.notes || '',
+      })
+      index++
+    }
+  }
+
+  return rows
+}
+
+/**
+ * Retorna as medições preenchendo até pelo menos minRows linhas (como no modelo físico)
  */
 export function padInSituRows(
   records: InSituMeasurementRow[],
-  minRows = 14,
+  minRows = 6,
 ): Array<InSituMeasurementRow | null> {
   const list: Array<InSituMeasurementRow | null> = [...records]
   while (list.length < minRows) {
@@ -16,7 +84,7 @@ export function padInSituRows(
 }
 
 /**
- * Obtém entrada e saída para um dos 4 blocos de sistemas (índices 0, 1, 2, 3)
+ * Obtém entrada e saída para um dos 4 blocos de sistemas (legado)
  */
 export function getNutrientPair(
   row: InSituMeasurementRow | null,
@@ -29,7 +97,6 @@ export function getNutrientPair(
       out: row.nutrients[systemIndex].exit || '',
     }
   }
-  // Compatibilidade com colunas antigas simples se for o sistema 0
   if (systemIndex === 0) {
     return {
       in: row.nutrients_in || '',
@@ -51,6 +118,23 @@ export function getNutrientPair(
  *   "ATENÇÃO AS UNIDADES DE MEDIDAS: OD SEMPRE DEVE SER MEDIDO EM MG/L NUNCA EM %"
  *   "CONDUTIVIDADE A UNIDADE ALTERA-SE AUTOMATICAMENTE, ANOTE SEMPRE A UNIDADE QUE ESTÁ NO VISOR!"
  */
+/**
+ * Gera o documento de impressão/PDF da Planilha de Medições In-Situ (REV 02)
+ * Fiel ao layout do papel oficial de referência:
+ * - Cabeçalho: Logo EPA, Título "MEDIÇÕES IN-SITU", identificação "Planilha in-situ / REV 02. 15/07/26"
+ * - Faixa de identificação: PROJETO: | SISTEMA: | NÚMERO ATIVO:
+ * - Tabela com colunas:
+ *   PONTO DE MEDIÇÃO | DATA | HORA | pH | Cond. | OD (mg/L) | Temp. (ºC) | ORP | TURVA (sim/não) | CLIMA | RESPONSÁVEL PELAS MEDIÇÕES
+ * - Seção de Medições regulares
+ * - Seção final de Nutrientes idêntica ao papel:
+ *   Primeira coluna com a sequência repetida 4 vezes em letras maiúsculas azuis:
+ *     ENTRADA
+ *     SAÍDA
+ *     T. NUTRIENTES
+ *     (repetido 4x)
+ *   Demais colunas são células de preenchimento alinhadas com as colunas de medição.
+ * - Notas de rodapé com destaque obrigatório de calibração/unidades.
+ */
 export function printInSituSheet(sheet: InSituSheet): void {
   const win = window.open('', '_blank', 'width=1200,height=800')
   if (!win) {
@@ -58,11 +142,15 @@ export function printInSituSheet(sheet: InSituSheet): void {
     return
   }
 
-  const paddedRows = padInSituRows(sheet.records || [], 12)
+  const paddedRows = padInSituRows(sheet.records || [], 5)
+  const nutrientRows = buildDefaultNutrientRows(sheet.nutrient_rows, sheet.records)
 
-  const rowsHtml = paddedRows
-    .map((row) => {
-      const ponto = row?.point || sheet.measurement_point || '&nbsp;'
+  // Linhas combinadas: medições principais (11 colunas) + 4 blocos de T. Nutrientes
+  // Cada bloco possui 2 subcolunas (Rótulo da linha: ENTRADA / SAÍDA | Célula de valor)
+  // Conforme o documento físico: a célula da esquerda é rotulada "ENTRADA" na 1ª linha e "SAÍDA" na 2ª linha.
+  const combinedRowsHtml = paddedRows
+    .map((row, rowIdx) => {
+      const ponto = row?.point || (row ? sheet.measurement_point || '' : '')
       const data = row?.date || '&nbsp;'
       const hora = row?.time || '&nbsp;'
       const ph = row?.ph || '&nbsp;'
@@ -74,17 +162,41 @@ export function printInSituSheet(sheet: InSituSheet): void {
       const orp = row?.orp || '&nbsp;'
       const turva = row?.turbidity || '&nbsp;'
       const clima = row?.weather || '&nbsp;'
-      const resp = row?.responsible || sheet.responsible_name || '&nbsp;'
+      const resp = row?.responsible || (row ? sheet.responsible_name || '' : '')
 
-      // 4 blocos de Nutrientes (Entrada / Saída)
       const n0 = getNutrientPair(row, 0)
       const n1 = getNutrientPair(row, 1)
       const n2 = getNutrientPair(row, 2)
       const n3 = getNutrientPair(row, 3)
 
+      // Células dos 4 blocos de nutrientes com disposição em linhas:
+      // Na linha do registro, renderiza a sub-tabela com linha ENTRADA e linha SAÍDA
+      const nutrColsHtml = [n0, n1, n2, n3]
+        .map((pair) => {
+          const entryVal = pair.in || '&nbsp;'
+          const exitVal = pair.out || '&nbsp;'
+          return `
+            <td colspan="2" class="td-nutr-block">
+              <table class="nutr-subtable">
+                <tbody>
+                  <tr class="nutr-subtr">
+                    <td class="nutr-sublbl">ENTRADA</td>
+                    <td class="nutr-subval">${entryVal}</td>
+                  </tr>
+                  <tr class="nutr-subtr">
+                    <td class="nutr-sublbl">SAÍDA</td>
+                    <td class="nutr-subval">${exitVal}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </td>
+          `
+        })
+        .join('')
+
       return `
         <tr>
-          <td class="col-center fw-bold">${ponto}</td>
+          <td class="col-center fw-bold">${ponto || '&nbsp;'}</td>
           <td class="col-center">${data}</td>
           <td class="col-center">${hora}</td>
           <td class="col-center">${ph}</td>
@@ -94,19 +206,8 @@ export function printInSituSheet(sheet: InSituSheet): void {
           <td class="col-center">${orp}</td>
           <td class="col-center">${turva}</td>
           <td class="col-center">${clima}</td>
-          <td class="col-center font-sm">${resp}</td>
-
-          <td class="col-center">${n0.in || '&nbsp;'}</td>
-          <td class="col-center">${n0.out || '&nbsp;'}</td>
-
-          <td class="col-center">${n1.in || '&nbsp;'}</td>
-          <td class="col-center">${n1.out || '&nbsp;'}</td>
-
-          <td class="col-center">${n2.in || '&nbsp;'}</td>
-          <td class="col-center">${n2.out || '&nbsp;'}</td>
-
-          <td class="col-center">${n3.in || '&nbsp;'}</td>
-          <td class="col-center">${n3.out || '&nbsp;'}</td>
+          <td class="col-center font-sm">${resp || '&nbsp;'}</td>
+          ${nutrColsHtml}
         </tr>
       `
     })
@@ -168,7 +269,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
       margin: 0;
       font-size: 17pt;
       font-weight: 800;
-      color: #1e293b;
+      color: #0c4a6e;
       letter-spacing: 0.5px;
       text-transform: uppercase;
     }
@@ -193,7 +294,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
       display: flex;
       border: 1.5px solid #000;
       background-color: #fff;
-      margin-bottom: 5px;
+      margin-bottom: 6px;
       font-size: 9pt;
       font-weight: bold;
     }
@@ -229,7 +330,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
     }
     table.insitu-table th, table.insitu-table td {
       border: 1px solid #000;
-      padding: 3px 2px;
+      padding: 3px 4px;
       height: 20px;
       vertical-align: middle;
       font-size: 7.5pt;
@@ -242,20 +343,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
       color: #0369a1;
       font-weight: bold;
       text-align: center;
-      line-height: 1.1;
-    }
-    .th-nutrientes {
-      background-color: #e0f2fe !important;
-      color: #075985 !important;
-      font-size: 7pt;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-    .th-subcol {
-      background-color: #f0f9ff !important;
-      color: #0369a1 !important;
-      font-size: 6.5pt;
-      font-weight: 700;
+      line-height: 1.15;
     }
     .col-center {
       text-align: center;
@@ -265,6 +353,66 @@ export function printInSituSheet(sheet: InSituSheet): void {
     }
     .font-sm {
       font-size: 7pt;
+    }
+
+    /* Cabeçalhos e sub-tabela dos 4 Blocos de T. Nutrientes (Disposição em Linhas) */
+    .th-nutr-hdr {
+      background-color: #dbeafe !important;
+      color: #1e3a8a !important;
+      font-weight: 800 !important;
+      text-align: center;
+      font-size: 7.5pt;
+    }
+    .th-nutr-label {
+      background-color: #eff6ff !important;
+      color: #1e40af !important;
+      font-weight: 700;
+      text-align: center;
+      font-size: 6.5pt;
+      width: 48%;
+    }
+    .th-nutr-val {
+      background-color: #eff6ff !important;
+      color: #1e40af !important;
+      font-weight: 700;
+      text-align: center;
+      font-size: 6.5pt;
+      width: 52%;
+    }
+    .td-nutr-block {
+      padding: 0 !important;
+      vertical-align: middle;
+    }
+    table.nutr-subtable {
+      width: 100%;
+      height: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    table.nutr-subtable td {
+      border: none !important;
+      padding: 1.5px 3px !important;
+      font-size: 7pt !important;
+      height: 12px;
+    }
+    .nutr-subtr:first-child td {
+      border-bottom: 1px dotted #94a3b8 !important;
+    }
+    .nutr-sublbl {
+      width: 48%;
+      font-weight: 800;
+      color: #0369a1;
+      text-align: center;
+      background-color: #f8fafc;
+      border-right: 1px solid #cbd5e1 !important;
+      letter-spacing: 0.3px;
+    }
+    .nutr-subval {
+      width: 52%;
+      text-align: center;
+      font-family: monospace;
+      font-weight: 600;
+      color: #0f172a;
     }
 
     /* Avisos de Rodapé em Destaque */
@@ -371,43 +519,43 @@ export function printInSituSheet(sheet: InSituSheet): void {
       </div>
     </div>
 
-    <!-- Tabela Principal com os 4 Blocos T. Nutrientes -->
+    <!-- Tabela Principal Fiel ao Layout Físico com Bloco Lateral de T. Nutrientes -->
     <table class="insitu-table">
       <thead>
         <tr>
-          <th rowspan="2" style="width: 7.5%;">PONTO DE<br>MEDIÇÃO</th>
-          <th rowspan="2" style="width: 6%;">DATA</th>
-          <th rowspan="2" style="width: 4%;">HORA</th>
-          <th rowspan="2" style="width: 4%;">pH</th>
-          <th rowspan="2" style="width: 6.5%;">Cond.</th>
-          <th rowspan="2" style="width: 5%;">OD<br>(mg/L)</th>
-          <th rowspan="2" style="width: 4.5%;">Temp.<br>(ºC)</th>
-          <th rowspan="2" style="width: 4.5%;">ORP</th>
-          <th rowspan="2" style="width: 5.5%;">TURVA<br>(sim/não)</th>
-          <th rowspan="2" style="width: 6%;">CLIMA</th>
-          <th rowspan="2" style="width: 8.5%;">RESPONSÁVEL PELAS<br>MEDIÇÕES</th>
-          <th colspan="2" class="th-nutrientes" style="width: 10.5%;">T. NUTRIENTES (1)</th>
-          <th colspan="2" class="th-nutrientes" style="width: 10.5%;">T. NUTRIENTES (2)</th>
-          <th colspan="2" class="th-nutrientes" style="width: 10.5%;">T. NUTRIENTES (3)</th>
-          <th colspan="2" class="th-nutrientes" style="width: 10.5%;">T. NUTRIENTES (4)</th>
+          <th rowspan="2" style="width: 11%;">PONTO DE<br>MEDIÇÃO</th>
+          <th rowspan="2" style="width: 7%;">DATA</th>
+          <th rowspan="2" style="width: 5.5%;">HORA</th>
+          <th rowspan="2" style="width: 5%;">pH</th>
+          <th rowspan="2" style="width: 7.5%;">Cond.</th>
+          <th rowspan="2" style="width: 6.5%;">OD<br>(mg/L)</th>
+          <th rowspan="2" style="width: 5.5%;">Temp.<br>(ºC)</th>
+          <th rowspan="2" style="width: 5%;">ORP</th>
+          <th rowspan="2" style="width: 6.5%;">TURVA<br>(sim/não)</th>
+          <th rowspan="2" style="width: 8.5%;">CLIMA</th>
+          <th rowspan="2" style="width: 10.5%;">RESPONSÁVEL PELAS<br>MEDIÇÕES</th>
+          <th colspan="2" class="th-nutr-hdr" style="width: 8%;">SISTEMA 01</th>
+          <th colspan="2" class="th-nutr-hdr" style="width: 8%;">SISTEMA 02</th>
+          <th colspan="2" class="th-nutr-hdr" style="width: 8%;">SISTEMA 03</th>
+          <th colspan="2" class="th-nutr-hdr" style="width: 8%;">SISTEMA 04</th>
         </tr>
         <tr>
-          <!-- 1 -->
-          <th class="th-subcol" style="width: 5.25%;">ENTRADA</th>
-          <th class="th-subcol" style="width: 5.25%;">SAÍDA</th>
-          <!-- 2 -->
-          <th class="th-subcol" style="width: 5.25%;">ENTRADA</th>
-          <th class="th-subcol" style="width: 5.25%;">SAÍDA</th>
-          <!-- 3 -->
-          <th class="th-subcol" style="width: 5.25%;">ENTRADA</th>
-          <th class="th-subcol" style="width: 5.25%;">SAÍDA</th>
-          <!-- 4 -->
-          <th class="th-subcol" style="width: 5.25%;">ENTRADA</th>
-          <th class="th-subcol" style="width: 5.25%;">SAÍDA</th>
+          <!-- Sist 1 -->
+          <th class="th-nutr-label">T. NUTRIENTES</th>
+          <th class="th-nutr-val">VALOR</th>
+          <!-- Sist 2 -->
+          <th class="th-nutr-label">T. NUTRIENTES</th>
+          <th class="th-nutr-val">VALOR</th>
+          <!-- Sist 3 -->
+          <th class="th-nutr-label">T. NUTRIENTES</th>
+          <th class="th-nutr-val">VALOR</th>
+          <!-- Sist 4 -->
+          <th class="th-nutr-label">T. NUTRIENTES</th>
+          <th class="th-nutr-val">VALOR</th>
         </tr>
       </thead>
       <tbody>
-        ${rowsHtml}
+        ${combinedRowsHtml}
       </tbody>
     </table>
 

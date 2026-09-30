@@ -738,65 +738,65 @@ export function InSituPage({ query = '' }: { query?: string }) {
                   >
                     RESPONSÁVEL PELAS MEDIÇÕES
                   </th>
-                  {/* 4 Blocos de T. Nutrientes */}
+                  {/* 4 Blocos de T. Nutrientes (Disposição em Linhas como no papel REV 02) */}
                   <th
                     colSpan={2}
-                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px]"
+                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px] min-w-[170px]"
                   >
-                    T. NUTRIENTES (SISTEMA 1)
+                    SISTEMA 01
                   </th>
                   <th
                     colSpan={2}
-                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px]"
+                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px] min-w-[170px]"
                   >
-                    T. NUTRIENTES (SISTEMA 2)
+                    SISTEMA 02
                   </th>
                   <th
                     colSpan={2}
-                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px]"
+                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px] min-w-[170px]"
                   >
-                    T. NUTRIENTES (SISTEMA 3)
+                    SISTEMA 03
                   </th>
                   <th
                     colSpan={2}
-                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px]"
+                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px] min-w-[170px]"
                   >
-                    T. NUTRIENTES (SISTEMA 4)
+                    SISTEMA 04
                   </th>
                   <th
                     rowSpan={2}
                     className="p-2 border border-sky-300 dark:border-sky-800 w-10 text-center"
                   ></th>
                 </tr>
-                {/* Linha 2 de Cabeçalho: Subcolunas ENTRADA / SAÍDA dos 4 blocos */}
+                {/* Linha 2 de Cabeçalho: Célula T. NUTRIENTES ao lado do campo de preenchimento */}
                 <tr className="bg-sky-100 text-sky-900 dark:bg-sky-900/70 dark:text-sky-200 text-[10px] font-bold">
                   {/* Bloco 1 */}
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    ENTRADA
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-24 bg-sky-50 dark:bg-sky-950/60">
+                    T. NUTRIENTES
                   </th>
                   <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    SAÍDA
+                    VALOR
                   </th>
                   {/* Bloco 2 */}
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    ENTRADA
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-24 bg-sky-50 dark:bg-sky-950/60">
+                    T. NUTRIENTES
                   </th>
                   <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    SAÍDA
+                    VALOR
                   </th>
                   {/* Bloco 3 */}
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    ENTRADA
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-24 bg-sky-50 dark:bg-sky-950/60">
+                    T. NUTRIENTES
                   </th>
                   <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    SAÍDA
+                    VALOR
                   </th>
                   {/* Bloco 4 */}
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    ENTRADA
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-24 bg-sky-50 dark:bg-sky-950/60">
+                    T. NUTRIENTES
                   </th>
                   <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    SAÍDA
+                    VALOR
                   </th>
                 </tr>
               </thead>
@@ -1005,93 +1005,59 @@ export function InSituPage({ query = '' }: { query?: string }) {
                           />
                         </td>
 
-                        {/* 12. T. NUTRIENTES - BLOCO 1 (Entrada / Saída) */}
-                        <td className="p-1 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={n0.in}
-                            onChange={(e) =>
-                              handleUpdateNutrientCell(row.id, 0, 'entry', e.target.value)
-                            }
-                            placeholder="Entrada"
-                            className="h-7 text-xs font-mono text-center px-1"
-                          />
-                        </td>
-                        <td className="p-1 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={n0.out}
-                            onChange={(e) =>
-                              handleUpdateNutrientCell(row.id, 0, 'exit', e.target.value)
-                            }
-                            placeholder="Saída"
-                            className="h-7 text-xs font-mono text-center px-1"
-                          />
-                        </td>
-
-                        {/* 13. T. NUTRIENTES - BLOCO 2 (Entrada / Saída) */}
-                        <td className="p-1 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={n1.in}
-                            onChange={(e) =>
-                              handleUpdateNutrientCell(row.id, 1, 'entry', e.target.value)
-                            }
-                            placeholder="Entrada"
-                            className="h-7 text-xs font-mono text-center px-1"
-                          />
-                        </td>
-                        <td className="p-1 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={n1.out}
-                            onChange={(e) =>
-                              handleUpdateNutrientCell(row.id, 1, 'exit', e.target.value)
-                            }
-                            placeholder="Saída"
-                            className="h-7 text-xs font-mono text-center px-1"
-                          />
-                        </td>
-
-                        {/* 14. T. NUTRIENTES - BLOCO 3 (Entrada / Saída) */}
-                        <td className="p-1 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={n2.in}
-                            onChange={(e) =>
-                              handleUpdateNutrientCell(row.id, 2, 'entry', e.target.value)
-                            }
-                            placeholder="Entrada"
-                            className="h-7 text-xs font-mono text-center px-1"
-                          />
-                        </td>
-                        <td className="p-1 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={n2.out}
-                            onChange={(e) =>
-                              handleUpdateNutrientCell(row.id, 2, 'exit', e.target.value)
-                            }
-                            placeholder="Saída"
-                            className="h-7 text-xs font-mono text-center px-1"
-                          />
-                        </td>
-
-                        {/* 15. T. NUTRIENTES - BLOCO 4 (Entrada / Saída) */}
-                        <td className="p-1 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={n3.in}
-                            onChange={(e) =>
-                              handleUpdateNutrientCell(row.id, 3, 'entry', e.target.value)
-                            }
-                            placeholder="Entrada"
-                            className="h-7 text-xs font-mono text-center px-1"
-                          />
-                        </td>
-                        <td className="p-1 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={n3.out}
-                            onChange={(e) =>
-                              handleUpdateNutrientCell(row.id, 3, 'exit', e.target.value)
-                            }
-                            placeholder="Saída"
-                            className="h-7 text-xs font-mono text-center px-1"
-                          />
-                        </td>
+                        {/* 12 a 15. T. NUTRIENTES: 4 BLOCOS (SISTEMAS 1 A 4) EM LINHAS (ENTRADA / SAÍDA) */}
+                        {[
+                          { idx: 0, pair: n0 },
+                          { idx: 1, pair: n1 },
+                          { idx: 2, pair: n2 },
+                          { idx: 3, pair: n3 },
+                        ].map(({ idx: sIdx, pair }) => (
+                          <td
+                            key={sIdx}
+                            colSpan={2}
+                            className="p-0 border border-slate-200 dark:border-slate-800 align-middle bg-slate-50/40 dark:bg-slate-900/30"
+                          >
+                            <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-800">
+                              {/* Linha ENTRADA */}
+                              <div className="flex items-center">
+                                <span className="w-24 px-1.5 py-1 text-[10px] font-extrabold text-sky-800 dark:text-sky-300 text-center bg-sky-50/70 dark:bg-sky-950/40 border-r border-slate-200 dark:border-slate-800 select-none">
+                                  ENTRADA
+                                </span>
+                                <div className="flex-1 p-0.5">
+                                  <Input
+                                    value={pair.in}
+                                    onChange={(e) =>
+                                      handleUpdateNutrientCell(
+                                        row.id,
+                                        sIdx,
+                                        'entry',
+                                        e.target.value,
+                                      )
+                                    }
+                                    placeholder="Valor"
+                                    className="h-6 text-[11px] font-mono text-center px-1 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950"
+                                  />
+                                </div>
+                              </div>
+                              {/* Linha SAÍDA */}
+                              <div className="flex items-center">
+                                <span className="w-24 px-1.5 py-1 text-[10px] font-extrabold text-sky-800 dark:text-sky-300 text-center bg-sky-50/70 dark:bg-sky-950/40 border-r border-slate-200 dark:border-slate-800 select-none">
+                                  SAÍDA
+                                </span>
+                                <div className="flex-1 p-0.5">
+                                  <Input
+                                    value={pair.out}
+                                    onChange={(e) =>
+                                      handleUpdateNutrientCell(row.id, sIdx, 'exit', e.target.value)
+                                    }
+                                    placeholder="Valor"
+                                    className="h-6 text-[11px] font-mono text-center px-1 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        ))}
 
                         {/* Excluir linha */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
