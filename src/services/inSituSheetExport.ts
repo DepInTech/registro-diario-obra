@@ -145,11 +145,9 @@ export function printInSituSheet(sheet: InSituSheet): void {
   const paddedRows = padInSituRows(sheet.records || [], 5)
   const nutrientRows = buildDefaultNutrientRows(sheet.nutrient_rows, sheet.records)
 
-  // Linhas combinadas: medições principais (11 colunas) + 4 blocos de T. Nutrientes
-  // Cada bloco possui 2 subcolunas (Rótulo da linha: ENTRADA / SAÍDA | Célula de valor)
-  // Conforme o documento físico: a célula da esquerda é rotulada "ENTRADA" na 1ª linha e "SAÍDA" na 2ª linha.
-  const combinedRowsHtml = paddedRows
-    .map((row, rowIdx) => {
+  // Tabela de Medições principais (10 colunas de dados além do ponto de medição)
+  const measurementsRowsHtml = paddedRows
+    .map((row) => {
       const ponto = row?.point || (row ? sheet.measurement_point || '' : '')
       const data = row?.date || '&nbsp;'
       const hora = row?.time || '&nbsp;'
@@ -164,36 +162,6 @@ export function printInSituSheet(sheet: InSituSheet): void {
       const clima = row?.weather || '&nbsp;'
       const resp = row?.responsible || (row ? sheet.responsible_name || '' : '')
 
-      const n0 = getNutrientPair(row, 0)
-      const n1 = getNutrientPair(row, 1)
-      const n2 = getNutrientPair(row, 2)
-      const n3 = getNutrientPair(row, 3)
-
-      // Células dos 4 blocos de nutrientes com disposição em linhas:
-      // Na linha do registro, renderiza a sub-tabela com linha ENTRADA e linha SAÍDA
-      const nutrColsHtml = [n0, n1, n2, n3]
-        .map((pair) => {
-          const entryVal = pair.in || '&nbsp;'
-          const exitVal = pair.out || '&nbsp;'
-          return `
-            <td colspan="2" class="td-nutr-block">
-              <table class="nutr-subtable">
-                <tbody>
-                  <tr class="nutr-subtr">
-                    <td class="nutr-sublbl">ENTRADA</td>
-                    <td class="nutr-subval">${entryVal}</td>
-                  </tr>
-                  <tr class="nutr-subtr">
-                    <td class="nutr-sublbl">SAÍDA</td>
-                    <td class="nutr-subval">${exitVal}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </td>
-          `
-        })
-        .join('')
-
       return `
         <tr>
           <td class="col-center fw-bold">${ponto || '&nbsp;'}</td>
@@ -207,12 +175,38 @@ export function printInSituSheet(sheet: InSituSheet): void {
           <td class="col-center">${turva}</td>
           <td class="col-center">${clima}</td>
           <td class="col-center font-sm">${resp || '&nbsp;'}</td>
-          ${nutrColsHtml}
         </tr>
       `
     })
     .join('')
 
+  // Tabela de Nutrientes In-Situ exatamente como no modelo oficial da EPA (anexo):
+  // Tabela única contínua, sem botões nem colunas empilhadas:
+  // Primeira coluna estreita com rótulo em AZUL e NEGRITO (ENTRADA, SAÍDA, T. NUTRIENTES repetidos 4 vezes = 12 linhas)
+  // À direita, grade de 10 colunas de células de largura igual com bordas finas
+  const nutrientTableRowsHtml = nutrientRows
+    .map((row) => {
+      const condVal = row.conductivity || ''
+      const condUnit = row.conductivity_unit ? ` <small>${row.conductivity_unit}</small>` : ''
+      const cond = condVal ? `${condVal}${condUnit}` : '&nbsp;'
+
+      return `
+        <tr>
+          <td class="nutr-label-cell">${row.type}</td>
+          <td class="nutr-data-cell">${row.date || '&nbsp;'}</td>
+          <td class="nutr-data-cell">${row.time || '&nbsp;'}</td>
+          <td class="nutr-data-cell">${row.ph || '&nbsp;'}</td>
+          <td class="nutr-data-cell">${cond}</td>
+          <td class="nutr-data-cell">${row.od_mg_l || '&nbsp;'}</td>
+          <td class="nutr-data-cell">${row.temperature_c || '&nbsp;'}</td>
+          <td class="nutr-data-cell">${row.orp || '&nbsp;'}</td>
+          <td class="nutr-data-cell">${row.turbidity || '&nbsp;'}</td>
+          <td class="nutr-data-cell">${row.weather || '&nbsp;'}</td>
+          <td class="nutr-data-cell font-sm">${row.responsible || '&nbsp;'}</td>
+        </tr>
+      `
+    })
+    .join('')
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -355,64 +349,37 @@ export function printInSituSheet(sheet: InSituSheet): void {
       font-size: 7pt;
     }
 
-    /* Cabeçalhos e sub-tabela dos 4 Blocos de T. Nutrientes (Disposição em Linhas) */
-    .th-nutr-hdr {
-      background-color: #dbeafe !important;
-      color: #1e3a8a !important;
-      font-weight: 800 !important;
-      text-align: center;
-      font-size: 7.5pt;
-    }
-    .th-nutr-label {
-      background-color: #eff6ff !important;
-      color: #1e40af !important;
-      font-weight: 700;
-      text-align: center;
-      font-size: 6.5pt;
-      width: 48%;
-    }
-    .th-nutr-val {
-      background-color: #eff6ff !important;
-      color: #1e40af !important;
-      font-weight: 700;
-      text-align: center;
-      font-size: 6.5pt;
-      width: 52%;
-    }
-    .td-nutr-block {
-      padding: 0 !important;
-      vertical-align: middle;
-    }
-    table.nutr-subtable {
+    /* Tabela de Nutrientes In-Situ oficial EPA (única grade contínua) */
+    table.nutrient-grid-table {
       width: 100%;
-      height: 100%;
       border-collapse: collapse;
+      border: 1.5px solid #000;
+      margin-top: -1px;
+      margin-bottom: 6px;
       table-layout: fixed;
     }
-    table.nutr-subtable td {
-      border: none !important;
-      padding: 1.5px 3px !important;
-      font-size: 7pt !important;
-      height: 12px;
+    table.nutrient-grid-table td {
+      border: 1px solid #000;
+      padding: 3px 4px;
+      height: 20px;
+      vertical-align: middle;
+      font-size: 7.5pt;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .nutr-subtr:first-child td {
-      border-bottom: 1px dotted #94a3b8 !important;
+    .nutr-label-cell {
+      width: 11%;
+      font-weight: bold;
+      color: #004b87; /* Azul EPA oficial */
+      text-align: left;
+      padding-left: 6px !important;
+      font-size: 7.5pt;
+      letter-spacing: 0.2px;
     }
-    .nutr-sublbl {
-      width: 48%;
-      font-weight: 800;
-      color: #0369a1;
+    .nutr-data-cell {
       text-align: center;
-      background-color: #f8fafc;
-      border-right: 1px solid #cbd5e1 !important;
-      letter-spacing: 0.3px;
-    }
-    .nutr-subval {
-      width: 52%;
-      text-align: center;
-      font-family: monospace;
-      font-weight: 600;
-      color: #0f172a;
+      background-color: #fff;
     }
 
     /* Avisos de Rodapé em Destaque */
@@ -519,43 +486,45 @@ export function printInSituSheet(sheet: InSituSheet): void {
       </div>
     </div>
 
-    <!-- Tabela Principal Fiel ao Layout Físico com Bloco Lateral de T. Nutrientes -->
+    <!-- Tabela Principal de Medições -->
     <table class="insitu-table">
       <thead>
         <tr>
-          <th rowspan="2" style="width: 11%;">PONTO DE<br>MEDIÇÃO</th>
-          <th rowspan="2" style="width: 7%;">DATA</th>
-          <th rowspan="2" style="width: 5.5%;">HORA</th>
-          <th rowspan="2" style="width: 5%;">pH</th>
-          <th rowspan="2" style="width: 7.5%;">Cond.</th>
-          <th rowspan="2" style="width: 6.5%;">OD<br>(mg/L)</th>
-          <th rowspan="2" style="width: 5.5%;">Temp.<br>(ºC)</th>
-          <th rowspan="2" style="width: 5%;">ORP</th>
-          <th rowspan="2" style="width: 6.5%;">TURVA<br>(sim/não)</th>
-          <th rowspan="2" style="width: 8.5%;">CLIMA</th>
-          <th rowspan="2" style="width: 10.5%;">RESPONSÁVEL PELAS<br>MEDIÇÕES</th>
-          <th colspan="2" class="th-nutr-hdr" style="width: 8%;">SISTEMA 01</th>
-          <th colspan="2" class="th-nutr-hdr" style="width: 8%;">SISTEMA 02</th>
-          <th colspan="2" class="th-nutr-hdr" style="width: 8%;">SISTEMA 03</th>
-          <th colspan="2" class="th-nutr-hdr" style="width: 8%;">SISTEMA 04</th>
-        </tr>
-        <tr>
-          <!-- Sist 1 -->
-          <th class="th-nutr-label">T. NUTRIENTES</th>
-          <th class="th-nutr-val">VALOR</th>
-          <!-- Sist 2 -->
-          <th class="th-nutr-label">T. NUTRIENTES</th>
-          <th class="th-nutr-val">VALOR</th>
-          <!-- Sist 3 -->
-          <th class="th-nutr-label">T. NUTRIENTES</th>
-          <th class="th-nutr-val">VALOR</th>
-          <!-- Sist 4 -->
-          <th class="th-nutr-label">T. NUTRIENTES</th>
-          <th class="th-nutr-val">VALOR</th>
+          <th style="width: 11%;">PONTO DE<br>MEDIÇÃO</th>
+          <th style="width: 8.9%;">DATA</th>
+          <th style="width: 8.9%;">HORA</th>
+          <th style="width: 8.9%;">pH</th>
+          <th style="width: 8.9%;">Cond.</th>
+          <th style="width: 8.9%;">OD<br>(mg/L)</th>
+          <th style="width: 8.9%;">Temp.<br>(ºC)</th>
+          <th style="width: 8.9%;">ORP</th>
+          <th style="width: 8.9%;">TURVA<br>(sim/não)</th>
+          <th style="width: 8.9%;">CLIMA</th>
+          <th style="width: 8.9%;">RESPONSÁVEL PELAS<br>MEDIÇÕES</th>
         </tr>
       </thead>
       <tbody>
-        ${combinedRowsHtml}
+        ${measurementsRowsHtml}
+      </tbody>
+    </table>
+
+    <!-- Tabela de Nutrientes In-Situ (Tabela Única Contínua conforme Modelo Oficial EPA do Anexo) -->
+    <table class="nutrient-grid-table">
+      <colgroup>
+        <col style="width: 11%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+        <col style="width: 8.9%;" />
+      </colgroup>
+      <tbody>
+        ${nutrientTableRowsHtml}
       </tbody>
     </table>
 

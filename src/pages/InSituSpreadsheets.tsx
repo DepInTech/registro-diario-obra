@@ -14,7 +14,7 @@ import {
   AlertCircle,
   FileSpreadsheet,
 } from 'lucide-react'
-import { printInSituSheet, getNutrientPair } from '@/services/inSituSheetExport'
+import { printInSituSheet, buildDefaultNutrientRows } from '@/services/inSituSheetExport'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -34,7 +34,7 @@ import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { applyDateMask, isValidBrDate } from '@/lib/dateMask'
 import { inSituService } from '@/services/inSituAndNaService'
-import type { InSituSheet, InSituMeasurementRow } from '@/types/inSituAndNa'
+import type { InSituSheet, InSituMeasurementRow, InSituNutrientRowData } from '@/types/inSituAndNa'
 
 const SYSTEM_OPTIONS = [
   'Sistema 1 — Extração / Tratamento',
@@ -134,6 +134,8 @@ export function InSituPage({ query = '' }: { query?: string }) {
       notes: '',
     }
 
+    const initialNutrientRows = buildDefaultNutrientRows()
+
     setFormData({
       project_name: '',
       system_name: SYSTEM_OPTIONS[0],
@@ -143,6 +145,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
       status: 'draft',
       notes: '',
       records: [initialRow],
+      nutrient_rows: initialNutrientRows,
     })
     setSelectedSheet(null)
     setIsEditing(true)
@@ -150,9 +153,11 @@ export function InSituPage({ query = '' }: { query?: string }) {
 
   const handleOpenSheet = (sheet: InSituSheet) => {
     setSelectedSheet(sheet)
+    const nutrientRows = buildDefaultNutrientRows(sheet.nutrient_rows, sheet.records)
     setFormData({
       ...sheet,
       records: sheet.records || [],
+      nutrient_rows: nutrientRows,
     })
     setIsEditing(true)
   }
@@ -220,39 +225,69 @@ export function InSituPage({ query = '' }: { query?: string }) {
     }))
   }
 
-  const handleUpdateNutrientCell = (
+  const handleUpdateNutrientRowCell = (
     rowId: string,
-    systemIndex: number,
-    subfield: 'entry' | 'exit',
+    field: keyof InSituNutrientRowData,
     value: string,
   ) => {
-    setFormData((prev) => ({
-      ...prev,
-      records: (prev.records || []).map((r) => {
+    setFormData((prev) => {
+      const currentRows =
+        prev.nutrient_rows && prev.nutrient_rows.length === 12
+          ? prev.nutrient_rows
+          : buildDefaultNutrientRows(prev.nutrient_rows, prev.records)
+
+      const updatedNutrientRows = currentRows.map((r) => {
         if (r.id !== rowId) return r
-        const currentNutrients = [
-          ...(r.nutrients || [
-            { entry: r.nutrients_in || '', exit: r.nutrients_out || '' },
-            { entry: '', exit: '' },
-            { entry: '', exit: '' },
-            { entry: '', exit: '' },
-          ]),
-        ]
-        while (currentNutrients.length < 4) {
-          currentNutrients.push({ entry: '', exit: '' })
-        }
-        currentNutrients[systemIndex] = {
-          ...currentNutrients[systemIndex],
-          [subfield]: value,
-        }
         return {
           ...r,
-          nutrients: currentNutrients,
-          nutrients_in: systemIndex === 0 && subfield === 'entry' ? value : r.nutrients_in,
-          nutrients_out: systemIndex === 0 && subfield === 'exit' ? value : r.nutrients_out,
+          [field]: field === 'date' ? applyDateMask(value) : value,
         }
-      }),
-    }))
+      })
+
+      // Sincroniza retrocompatibilidade nos records legados (records[0].nutrients)
+      const targetRow = updatedNutrientRows.find((r) => r.id === rowId)
+      let updatedRecords = prev.records || []
+      if (targetRow && updatedRecords.length > 0) {
+        const sysIdx = targetRow.system_index
+        const isEntry = targetRow.type === 'ENTRADA'
+        const isExit = targetRow.type === 'SAÍDA'
+        const isValField = field === 'ph' || field === 'conductivity' || field === 'od_mg_l'
+
+        if ((isEntry || isExit) && isValField) {
+          updatedRecords = updatedRecords.map((rec, idx) => {
+            if (idx !== 0) return rec
+            const existingNutr = [
+              ...(rec.nutrients || [
+                { entry: rec.nutrients_in || '', exit: rec.nutrients_out || '' },
+                { entry: '', exit: '' },
+                { entry: '', exit: '' },
+                { entry: '', exit: '' },
+              ]),
+            ]
+            while (existingNutr.length < 4) {
+              existingNutr.push({ entry: '', exit: '' })
+            }
+            if (isEntry) {
+              existingNutr[sysIdx] = { ...existingNutr[sysIdx], entry: value }
+            } else if (isExit) {
+              existingNutr[sysIdx] = { ...existingNutr[sysIdx], exit: value }
+            }
+            return {
+              ...rec,
+              nutrients: existingNutr,
+              nutrients_in: sysIdx === 0 && isEntry ? value : rec.nutrients_in,
+              nutrients_out: sysIdx === 0 && isExit ? value : rec.nutrients_out,
+            }
+          })
+        }
+      }
+
+      return {
+        ...prev,
+        nutrient_rows: updatedNutrientRows,
+        records: updatedRecords,
+      }
+    })
   }
 
   const handleSave = async (newStatus?: 'draft' | 'submitted' | 'approved') => {
@@ -285,9 +320,26 @@ export function InSituPage({ query = '' }: { query?: string }) {
       }
     }
 
+    const currentNutrientRows =
+      formData.nutrient_rows && formData.nutrient_rows.length === 12
+        ? formData.nutrient_rows
+        : buildDefaultNutrientRows(formData.nutrient_rows, formData.records)
+
+    for (const nr of currentNutrientRows) {
+      if (nr.date && !isValidBrDate(nr.date)) {
+        toast({
+          title: 'Data inválida na seção de nutrientes',
+          description: `A data "${nr.date}" na linha ${nr.type} não é válida. Utilize o formato DD/MM/AAAA.`,
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
     try {
       const payload: Partial<InSituSheet> = {
         ...formData,
+        nutrient_rows: currentNutrientRows,
         id: selectedSheet?.id,
         status: newStatus || formData.status || 'draft',
       }
@@ -666,144 +718,51 @@ export function InSituPage({ query = '' }: { query?: string }) {
           </p>
 
           <div className="overflow-x-auto rounded-none sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
-            <table className="w-full min-w-[1850px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[1200px] border-collapse text-left text-xs">
               <thead>
-                {/* Linha 1 de Cabeçalho: Colunas Principais + 4 Blocos de T. Nutrientes */}
                 <tr className="bg-sky-200 text-sky-950 dark:bg-sky-950 dark:text-sky-100 text-[11px] font-bold">
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-32"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center w-36">
                     PONTO DE MEDIÇÃO
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-28"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center w-28">
                     DATA
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-20"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center w-24">
                     HORA
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-20"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center w-24">
                     pH
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[155px]"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[150px]">
                     Cond.
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[110px] bg-sky-300/60 dark:bg-sky-900/80"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[120px] bg-sky-300/60 dark:bg-sky-900/80">
                     OD (mg/L)
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-24"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center w-24">
                     Temp. (ºC)
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-24"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center w-24">
                     ORP
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-28"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center w-28">
                     TURVA
                     <br />
                     (sim/não)
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[150px]"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[150px]">
                     CLIMA
                   </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[140px]"
-                  >
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[160px]">
                     RESPONSÁVEL PELAS MEDIÇÕES
                   </th>
-                  {/* 4 Blocos de T. Nutrientes (Disposição em Linhas como no papel REV 02) */}
-                  <th
-                    colSpan={2}
-                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px] min-w-[170px]"
-                  >
-                    SISTEMA 01
-                  </th>
-                  <th
-                    colSpan={2}
-                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px] min-w-[170px]"
-                  >
-                    SISTEMA 02
-                  </th>
-                  <th
-                    colSpan={2}
-                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px] min-w-[170px]"
-                  >
-                    SISTEMA 03
-                  </th>
-                  <th
-                    colSpan={2}
-                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px] min-w-[170px]"
-                  >
-                    SISTEMA 04
-                  </th>
-                  <th
-                    rowSpan={2}
-                    className="p-2 border border-sky-300 dark:border-sky-800 w-10 text-center"
-                  ></th>
-                </tr>
-                {/* Linha 2 de Cabeçalho: Célula T. NUTRIENTES ao lado do campo de preenchimento */}
-                <tr className="bg-sky-100 text-sky-900 dark:bg-sky-900/70 dark:text-sky-200 text-[10px] font-bold">
-                  {/* Bloco 1 */}
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-24 bg-sky-50 dark:bg-sky-950/60">
-                    T. NUTRIENTES
-                  </th>
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    VALOR
-                  </th>
-                  {/* Bloco 2 */}
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-24 bg-sky-50 dark:bg-sky-950/60">
-                    T. NUTRIENTES
-                  </th>
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    VALOR
-                  </th>
-                  {/* Bloco 3 */}
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-24 bg-sky-50 dark:bg-sky-950/60">
-                    T. NUTRIENTES
-                  </th>
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    VALOR
-                  </th>
-                  {/* Bloco 4 */}
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-24 bg-sky-50 dark:bg-sky-950/60">
-                    T. NUTRIENTES
-                  </th>
-                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
-                    VALOR
-                  </th>
+                  <th className="p-2 border border-sky-300 dark:border-sky-800 w-10 text-center"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {records.length === 0 ? (
                   <tr>
-                    <td colSpan={20} className="py-8 text-center text-slate-400">
+                    <td colSpan={12} className="py-8 text-center text-slate-400">
                       Nenhum registro de medição adicionado. Clique em "Adicionar Registro / Dia"
                       acima.
                     </td>
@@ -815,11 +774,6 @@ export function InSituPage({ query = '' }: { query?: string }) {
                       rawWeather === 'Outros' ||
                       (rawWeather !== '' && !FIXED_WEATHER_CHOICES.includes(rawWeather))
                     const displayWeather = rawWeather === 'Outros' ? '' : rawWeather
-
-                    const n0 = getNutrientPair(row, 0)
-                    const n1 = getNutrientPair(row, 1)
-                    const n2 = getNutrientPair(row, 2)
-                    const n3 = getNutrientPair(row, 3)
 
                     return (
                       <tr
@@ -1005,60 +959,6 @@ export function InSituPage({ query = '' }: { query?: string }) {
                           />
                         </td>
 
-                        {/* 12 a 15. T. NUTRIENTES: 4 BLOCOS (SISTEMAS 1 A 4) EM LINHAS (ENTRADA / SAÍDA) */}
-                        {[
-                          { idx: 0, pair: n0 },
-                          { idx: 1, pair: n1 },
-                          { idx: 2, pair: n2 },
-                          { idx: 3, pair: n3 },
-                        ].map(({ idx: sIdx, pair }) => (
-                          <td
-                            key={sIdx}
-                            colSpan={2}
-                            className="p-0 border border-slate-200 dark:border-slate-800 align-middle bg-slate-50/40 dark:bg-slate-900/30"
-                          >
-                            <div className="flex flex-col divide-y divide-slate-200 dark:divide-slate-800">
-                              {/* Linha ENTRADA */}
-                              <div className="flex items-center">
-                                <span className="w-24 px-1.5 py-1 text-[10px] font-extrabold text-sky-800 dark:text-sky-300 text-center bg-sky-50/70 dark:bg-sky-950/40 border-r border-slate-200 dark:border-slate-800 select-none">
-                                  ENTRADA
-                                </span>
-                                <div className="flex-1 p-0.5">
-                                  <Input
-                                    value={pair.in}
-                                    onChange={(e) =>
-                                      handleUpdateNutrientCell(
-                                        row.id,
-                                        sIdx,
-                                        'entry',
-                                        e.target.value,
-                                      )
-                                    }
-                                    placeholder="Valor"
-                                    className="h-6 text-[11px] font-mono text-center px-1 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950"
-                                  />
-                                </div>
-                              </div>
-                              {/* Linha SAÍDA */}
-                              <div className="flex items-center">
-                                <span className="w-24 px-1.5 py-1 text-[10px] font-extrabold text-sky-800 dark:text-sky-300 text-center bg-sky-50/70 dark:bg-sky-950/40 border-r border-slate-200 dark:border-slate-800 select-none">
-                                  SAÍDA
-                                </span>
-                                <div className="flex-1 p-0.5">
-                                  <Input
-                                    value={pair.out}
-                                    onChange={(e) =>
-                                      handleUpdateNutrientCell(row.id, sIdx, 'exit', e.target.value)
-                                    }
-                                    placeholder="Valor"
-                                    className="h-6 text-[11px] font-mono text-center px-1 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                        ))}
-
                         {/* Excluir linha */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
                           <Button
@@ -1075,6 +975,209 @@ export function InSituPage({ query = '' }: { query?: string }) {
                     )
                   })
                 )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Tabela de Nutrientes In-Situ (Tabela Única Contínua conforme Imagem Oficial EPA) */}
+      <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
+        <CardHeader className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+          <div>
+            <CardTitle className="text-sm font-bold uppercase tracking-wide text-sky-900 dark:text-sky-300">
+              Tabela de Nutrientes In-Situ (Sistemas 01 a 04)
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Grade única contínua oficial da EPA: 4 repetições de ENTRADA / SAÍDA / T. NUTRIENTES
+              (12 linhas)
+            </CardDescription>
+          </div>
+          <Badge
+            variant="outline"
+            className="text-[11px] font-bold text-sky-800 border-sky-300 bg-sky-50 dark:bg-sky-950/50"
+          >
+            Layout Oficial EPA
+          </Badge>
+        </CardHeader>
+        <CardContent className="p-0 sm:p-4">
+          <p className="px-4 py-2 text-[11px] text-slate-500 lg:hidden">
+            👉 Deslize horizontalmente para visualizar e preencher todas as colunas
+          </p>
+
+          <div className="overflow-x-auto rounded-none sm:rounded-xl border border-slate-300 dark:border-slate-700 shadow-inner">
+            <table className="w-full min-w-[1200px] border-collapse text-left text-xs bg-white dark:bg-slate-950">
+              <colgroup>
+                <col className="w-36" />
+                <col className="w-28" />
+                <col className="w-24" />
+                <col className="w-24" />
+                <col className="min-w-[150px]" />
+                <col className="min-w-[120px]" />
+                <col className="w-24" />
+                <col className="w-24" />
+                <col className="w-28" />
+                <col className="min-w-[150px]" />
+                <col className="min-w-[160px]" />
+              </colgroup>
+              <tbody>
+                {(formData.nutrient_rows && formData.nutrient_rows.length === 12
+                  ? formData.nutrient_rows
+                  : buildDefaultNutrientRows(formData.nutrient_rows, formData.records)
+                ).map((row) => {
+                  const sysLabel = `Sistema 0${row.system_index + 1}`
+
+                  return (
+                    <tr
+                      key={row.id}
+                      className="border-b border-slate-300 dark:border-slate-700 hover:bg-sky-50/30 dark:hover:bg-sky-950/20"
+                    >
+                      {/* Primeira Coluna: Rótulo Estreito em AZUL e NEGRITO maiúsculo, alinhado à esquerda */}
+                      <td
+                        className="px-3 py-1.5 border-r border-slate-300 dark:border-slate-700 font-extrabold text-[#004b87] dark:text-sky-400 text-xs tracking-tight select-none bg-slate-50/50 dark:bg-slate-900/40"
+                        title={sysLabel}
+                      >
+                        {row.type}
+                      </td>
+
+                      {/* 10 Colunas de Células de Largura Igual com Bordas Finas */}
+                      {/* Col 1: DATA */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <Input
+                          value={row.date || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'date', e.target.value)
+                          }
+                          placeholder=""
+                          maxLength={10}
+                          className="h-7 text-xs text-center font-mono border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                        />
+                      </td>
+
+                      {/* Col 2: HORA */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <Input
+                          type="time"
+                          value={row.time || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'time', e.target.value)
+                          }
+                          className="h-7 text-xs font-mono px-1 text-center border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                        />
+                      </td>
+
+                      {/* Col 3: pH */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <Input
+                          inputMode="decimal"
+                          value={row.ph || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'ph', e.target.value)
+                          }
+                          className="h-7 text-xs font-mono text-center border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                        />
+                      </td>
+
+                      {/* Col 4: Cond. */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <div className="flex items-center gap-1">
+                          <Input
+                            inputMode="decimal"
+                            value={row.conductivity || ''}
+                            onChange={(e) =>
+                              handleUpdateNutrientRowCell(row.id, 'conductivity', e.target.value)
+                            }
+                            className="h-7 text-xs font-mono text-right flex-1 border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                          />
+                          <Input
+                            value={row.conductivity_unit || 'µS/cm'}
+                            onChange={(e) =>
+                              handleUpdateNutrientRowCell(
+                                row.id,
+                                'conductivity_unit',
+                                e.target.value,
+                              )
+                            }
+                            className="h-7 w-14 text-[9px] font-mono px-0.5 text-center border-slate-200 dark:border-slate-700 rounded-none bg-slate-50 dark:bg-slate-900"
+                          />
+                        </div>
+                      </td>
+
+                      {/* Col 5: OD (mg/L) */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <Input
+                          inputMode="decimal"
+                          value={row.od_mg_l || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'od_mg_l', e.target.value)
+                          }
+                          className="h-7 text-xs font-mono text-center border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                        />
+                      </td>
+
+                      {/* Col 6: Temp (ºC) */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <Input
+                          inputMode="decimal"
+                          value={row.temperature_c || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'temperature_c', e.target.value)
+                          }
+                          className="h-7 text-xs font-mono text-center border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                        />
+                      </td>
+
+                      {/* Col 7: ORP */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <Input
+                          inputMode="decimal"
+                          value={row.orp || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'orp', e.target.value)
+                          }
+                          className="h-7 text-xs font-mono text-center border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                        />
+                      </td>
+
+                      {/* Col 8: TURVA */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <select
+                          value={row.turbidity || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'turbidity', e.target.value as any)
+                          }
+                          className="h-7 w-full rounded-none border border-slate-200 bg-transparent px-1 text-xs dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          <option value="">—</option>
+                          <option value="Não">Não</option>
+                          <option value="Sim">Sim</option>
+                        </select>
+                      </td>
+
+                      {/* Col 9: CLIMA */}
+                      <td className="p-1 border-r border-slate-300 dark:border-slate-700">
+                        <Input
+                          value={row.weather || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'weather', e.target.value)
+                          }
+                          className="h-7 text-xs border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                        />
+                      </td>
+
+                      {/* Col 10: RESPONSÁVEL */}
+                      <td className="p-1">
+                        <Input
+                          value={row.responsible || ''}
+                          onChange={(e) =>
+                            handleUpdateNutrientRowCell(row.id, 'responsible', e.target.value)
+                          }
+                          className="h-7 text-xs border-slate-200 dark:border-slate-700 rounded-none bg-transparent"
+                        />
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
