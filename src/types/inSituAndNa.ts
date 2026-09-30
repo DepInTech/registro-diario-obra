@@ -13,7 +13,7 @@ export interface InSituNutrientPair {
 export interface InSituNutrientRowData {
   id: string
   type: 'ENTRADA' | 'SAÍDA' | 'T. NUTRIENTES'
-  system_index: number // 0, 1, 2, 3 (Sistemas 1 a 4)
+  system_index: number // 0, 1, 2, 3, 4 (Repetições 1 a 5 conforme documento físico REV 02)
   date?: string
   time?: string
   ph?: string
@@ -30,21 +30,20 @@ export interface InSituNutrientRowData {
 
 export interface InSituMeasurementRow {
   id: string
-  point?: string // Ponto de medição específico da linha (opcional/legado)
-  date: string // DD/MM/AAAA ou ISO
+  point?: string // PONTO DE MEDIÇÃO (ENTRADA, SAÍDA, T. NUTRIENTES ou personalizado)
+  date: string // DATA (DD/MM/AAAA)
   time: string // HORA (HH:mm)
   ph: string // pH
-  conductivity: string // Cond. (valor numérico no visor)
-  conductivity_unit: string // Ex: µS/cm, mS/cm, etc. Anote sempre a unidade do visor!
+  conductivity: string // Cond. (valor numérico no visor com unidade)
+  conductivity_unit?: string // Ex: µS/cm, mS/cm, etc. Anote sempre a unidade do visor!
   od_mg_l: string // OD (mg/L) obrigatoriamente rotulado e preenchido em mg/L (NUNCA em %)
   temperature_c: string // Temp. (ºC)
   orp: string // ORP (mV)
   turbidity: 'Sim' | 'Não' | '' // TURVA (sim/não) conforme modelo físico
-  weather: string // CLIMA (Ensolarado, Chuvoso, Instável, ou texto livre)
+  weather: string // CLIMA (Ensolarado, Chuvoso, etc.)
   responsible: string // RESPONSÁVEL PELAS MEDIÇÕES
-  // 4 blocos legados de T. NUTRIENTES (ENTRADA / SAÍDA) correspondentes aos 4 sistemas
-  nutrients?: InSituNutrientPair[] // [Sistema 1, Sistema 2, Sistema 3, Sistema 4]
-  // Compatibilidade retroativa
+  // Blocos legados para compatibilidade
+  nutrients?: InSituNutrientPair[]
   nutrients_in?: string
   nutrients_out?: string
   notes?: string
@@ -52,12 +51,12 @@ export interface InSituMeasurementRow {
 
 export interface InSituSheet {
   id: string
-  project_name: string // PROJETO:
+  project_name: string // PROJETO: (Ex: 21-0229)
   system_name: string // SISTEMA:
   active_number: string // NÚMERO ATIVO:
-  measurement_point: string // PONTO DE MEDIÇÃO
+  measurement_point?: string // PONTO DE MEDIÇÃO (opcional legado)
   records: InSituMeasurementRow[]
-  // Seção inferior de Nutrientes em Linhas (12 linhas: ENTRADA/SAÍDA/T. NUTRIENTES x 4 sistemas)
+  // Seção de Nutrientes em Linhas (15 linhas: ENTRADA/SAÍDA/T. NUTRIENTES x 5 repetições)
   nutrient_rows?: InSituNutrientRowData[]
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   responsible_name?: string
