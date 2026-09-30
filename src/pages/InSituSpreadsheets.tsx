@@ -9,10 +9,12 @@ import {
   Clock,
   Send,
   Printer,
+  FileDown,
   Sparkles,
   AlertCircle,
   FileSpreadsheet,
 } from 'lucide-react'
+import { printInSituSheet, getNutrientPair } from '@/services/inSituSheetExport'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -109,6 +111,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
 
     const initialRow: InSituMeasurementRow = {
       id: `row_${Date.now()}_1`,
+      point: 'ENTRADA',
       date: dStr,
       time: hStr,
       ph: '',
@@ -120,16 +123,22 @@ export function InSituPage({ query = '' }: { query?: string }) {
       turbidity: 'Não',
       weather: 'Ensolarado',
       responsible: user?.name || '',
+      nutrients: [
+        { entry: '', exit: '' },
+        { entry: '', exit: '' },
+        { entry: '', exit: '' },
+        { entry: '', exit: '' },
+      ],
       nutrients_in: '',
       nutrients_out: '',
       notes: '',
     }
 
     setFormData({
-      project_name: 'Remediação Ambiental',
+      project_name: '',
       system_name: SYSTEM_OPTIONS[0],
       active_number: '',
-      measurement_point: 'Ponto 01',
+      measurement_point: 'ENTRADA',
       responsible_name: user?.name || '',
       status: 'draft',
       notes: '',
@@ -153,8 +162,13 @@ export function InSituPage({ query = '' }: { query?: string }) {
     const dStr = today.toLocaleDateString('pt-BR')
     const hStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 
+    const prevCount = formData.records?.length || 0
+    const pointSuggestions = ['ENTRADA', 'SAÍDA', 'T. NUTRIENTES']
+    const defaultPoint = pointSuggestions[prevCount % 3]
+
     const newRow: InSituMeasurementRow = {
       id: `row_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      point: defaultPoint,
       date: dStr,
       time: hStr,
       ph: '',
@@ -169,6 +183,12 @@ export function InSituPage({ query = '' }: { query?: string }) {
       turbidity: 'Não',
       weather: 'Ensolarado',
       responsible: user?.name || '',
+      nutrients: [
+        { entry: '', exit: '' },
+        { entry: '', exit: '' },
+        { entry: '', exit: '' },
+        { entry: '', exit: '' },
+      ],
       nutrients_in: '',
       nutrients_out: '',
       notes: '',
@@ -195,6 +215,41 @@ export function InSituPage({ query = '' }: { query?: string }) {
         return {
           ...r,
           [field]: field === 'date' ? applyDateMask(value) : value,
+        }
+      }),
+    }))
+  }
+
+  const handleUpdateNutrientCell = (
+    rowId: string,
+    systemIndex: number,
+    subfield: 'entry' | 'exit',
+    value: string,
+  ) => {
+    setFormData((prev) => ({
+      ...prev,
+      records: (prev.records || []).map((r) => {
+        if (r.id !== rowId) return r
+        const currentNutrients = [
+          ...(r.nutrients || [
+            { entry: r.nutrients_in || '', exit: r.nutrients_out || '' },
+            { entry: '', exit: '' },
+            { entry: '', exit: '' },
+            { entry: '', exit: '' },
+          ]),
+        ]
+        while (currentNutrients.length < 4) {
+          currentNutrients.push({ entry: '', exit: '' })
+        }
+        currentNutrients[systemIndex] = {
+          ...currentNutrients[systemIndex],
+          [subfield]: value,
+        }
+        return {
+          ...r,
+          nutrients: currentNutrients,
+          nutrients_in: systemIndex === 0 && subfield === 'entry' ? value : r.nutrients_in,
+          nutrients_out: systemIndex === 0 && subfield === 'exit' ? value : r.nutrients_out,
         }
       }),
     }))
@@ -491,11 +546,12 @@ export function InSituPage({ query = '' }: { query?: string }) {
           <Button
             variant="outline"
             size="sm"
-            onClick={handlePrint}
-            className="text-xs min-h-[38px]"
+            onClick={() => printInSituSheet(formData as InSituSheet)}
+            className="text-xs min-h-[38px] border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+            title="Exporta o PDF no formato paisagem fiel ao modelo físico REV 02"
           >
-            <Printer className="mr-1.5 h-3.5 w-3.5" />
-            Imprimir
+            <FileDown className="mr-1.5 h-3.5 w-3.5" />
+            Exportar PDF / Imprimir (Paisagem)
           </Button>
 
           {isAdmin && selectedSheet?.id && (
@@ -531,72 +587,58 @@ export function InSituPage({ query = '' }: { query?: string }) {
         </div>
       </div>
 
-      {/* Cabeçalho da Planilha Física: Projeto, Sistema, Número ativo, Ponto de medição */}
-      <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
-        <CardHeader className="bg-slate-50/80 dark:bg-slate-900/50 pb-4 border-b border-slate-200 dark:border-slate-800">
-          <CardTitle className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300 flex items-center gap-2">
-            <FileSpreadsheet className="h-4 w-4" />
-            Identificação da Ficha de Parâmetros In-Situ
-          </CardTitle>
-          <CardDescription className="text-xs">
-            Configuração da folha: selecione o projeto, o sistema padronizado e o ponto de medição
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Projeto *
+      {/* Cabeçalho da Planilha Física: PROJETO: | SISTEMA: | NÚMERO ATIVO: + Versão REV 02 */}
+      <div className="rounded-xl border border-sky-300 bg-sky-50/60 dark:border-sky-900/60 dark:bg-sky-950/30 p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-sky-200 dark:border-sky-800 pb-3 mb-3">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-sky-700 dark:text-sky-400" />
+            <h3 className="text-sm font-black uppercase tracking-wider text-sky-950 dark:text-sky-200">
+              MEDIÇÕES IN-SITU
+            </h3>
+          </div>
+          <div className="inline-block self-start sm:self-auto bg-lime-100 text-lime-900 border border-lime-300 dark:bg-lime-950/60 dark:text-lime-300 dark:border-lime-800 px-3 py-1 rounded text-[11px] font-bold">
+            Planilha in-situ REV 02. 15/07/26
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-sky-200 dark:border-sky-800">
+            <label className="text-[11px] font-extrabold uppercase text-slate-800 dark:text-slate-200">
+              PROJETO: *
             </label>
             <Input
               value={formData.project_name || ''}
               onChange={(e) => setFormData((p) => ({ ...p, project_name: e.target.value }))}
-              placeholder="Ex.: Remediação Ambiental"
-              className="mt-1 h-9 text-xs sm:text-sm font-medium"
+              placeholder="Ex.: 21-0229"
+              className="mt-1 h-8 text-xs font-bold"
             />
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Sistema *
+          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-sky-200 dark:border-sky-800">
+            <label className="text-[11px] font-extrabold uppercase text-slate-800 dark:text-slate-200">
+              SISTEMA: *
             </label>
-            <select
-              value={formData.system_name || SYSTEM_OPTIONS[0]}
+            <Input
+              value={formData.system_name || ''}
               onChange={(e) => setFormData((p) => ({ ...p, system_name: e.target.value }))}
-              className="mt-1 flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-xs sm:text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-            >
-              {SYSTEM_OPTIONS.map((sys) => (
-                <option key={sys} value={sys}>
-                  {sys}
-                </option>
-              ))}
-            </select>
+              placeholder="Ex.: Sistema 1 / Extração"
+              className="mt-1 h-8 text-xs font-semibold"
+            />
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Número ativo
+          <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-sky-200 dark:border-sky-800">
+            <label className="text-[11px] font-extrabold uppercase text-slate-800 dark:text-slate-200">
+              NÚMERO ATIVO:
             </label>
             <Input
               value={formData.active_number || ''}
               onChange={(e) => setFormData((p) => ({ ...p, active_number: e.target.value }))}
-              placeholder="Ex.: AT-04 / EQ-12"
-              className="mt-1 h-9 text-xs sm:text-sm font-mono"
+              placeholder="Ex.: AT-04"
+              className="mt-1 h-8 text-xs font-mono font-semibold"
             />
           </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Ponto de medição *
-            </label>
-            <Input
-              value={formData.measurement_point || ''}
-              onChange={(e) => setFormData((p) => ({ ...p, measurement_point: e.target.value }))}
-              placeholder="Ex.: Ponto 01 / Poço PR-01"
-              className="mt-1 h-9 text-xs sm:text-sm font-semibold"
-            />
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* Tabela de Medições com Suporte a Vários Dias na Mesma Folha */}
       <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
@@ -624,49 +666,144 @@ export function InSituPage({ query = '' }: { query?: string }) {
           </p>
 
           <div className="overflow-x-auto rounded-none sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
-            <table className="w-full min-w-[1300px] border-collapse text-left text-xs">
+            <table className="w-full min-w-[1850px] border-collapse text-left text-xs">
               <thead>
-                <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center w-28">
-                    Data (DD/MM/AAAA)
+                {/* Linha 1 de Cabeçalho: Colunas Principais + 4 Blocos de T. Nutrientes */}
+                <tr className="bg-sky-200 text-sky-950 dark:bg-sky-950 dark:text-sky-100 text-[11px] font-bold">
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-32"
+                  >
+                    PONTO DE MEDIÇÃO
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center w-20">
-                    Hora
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-28"
+                  >
+                    DATA
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center w-20">
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-20"
+                  >
+                    HORA
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-20"
+                  >
                     pH
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[170px]">
-                    Condutividade + Unidade
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[155px]"
+                  >
+                    Cond.
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[110px] bg-emerald-950">
-                    OD (mg/L) *
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[110px] bg-sky-300/60 dark:bg-sky-900/80"
+                  >
+                    OD (mg/L)
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center w-24">
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-24"
+                  >
                     Temp. (ºC)
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center w-24">
-                    ORP (mV)
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-24"
+                  >
+                    ORP
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center w-28">
-                    Turbidez
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center w-28"
+                  >
+                    TURVA
+                    <br />
+                    (sim/não)
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[170px]">
-                    Clima
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[150px]"
+                  >
+                    CLIMA
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[160px]">
-                    T. Nutrientes (Entr. / Saída)
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 text-center min-w-[140px]"
+                  >
+                    RESPONSÁVEL PELAS MEDIÇÕES
                   </th>
-                  <th className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[140px]">
-                    Responsável
+                  {/* 4 Blocos de T. Nutrientes */}
+                  <th
+                    colSpan={2}
+                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px]"
+                  >
+                    T. NUTRIENTES (SISTEMA 1)
                   </th>
-                  <th className="p-2.5 border border-emerald-800 w-10 text-center"></th>
+                  <th
+                    colSpan={2}
+                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px]"
+                  >
+                    T. NUTRIENTES (SISTEMA 2)
+                  </th>
+                  <th
+                    colSpan={2}
+                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px]"
+                  >
+                    T. NUTRIENTES (SISTEMA 3)
+                  </th>
+                  <th
+                    colSpan={2}
+                    className="p-1.5 border border-sky-300 dark:border-sky-800 text-center bg-sky-100 dark:bg-sky-900 text-[10px]"
+                  >
+                    T. NUTRIENTES (SISTEMA 4)
+                  </th>
+                  <th
+                    rowSpan={2}
+                    className="p-2 border border-sky-300 dark:border-sky-800 w-10 text-center"
+                  ></th>
+                </tr>
+                {/* Linha 2 de Cabeçalho: Subcolunas ENTRADA / SAÍDA dos 4 blocos */}
+                <tr className="bg-sky-100 text-sky-900 dark:bg-sky-900/70 dark:text-sky-200 text-[10px] font-bold">
+                  {/* Bloco 1 */}
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
+                    ENTRADA
+                  </th>
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
+                    SAÍDA
+                  </th>
+                  {/* Bloco 2 */}
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
+                    ENTRADA
+                  </th>
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
+                    SAÍDA
+                  </th>
+                  {/* Bloco 3 */}
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
+                    ENTRADA
+                  </th>
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
+                    SAÍDA
+                  </th>
+                  {/* Bloco 4 */}
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
+                    ENTRADA
+                  </th>
+                  <th className="p-1 border border-sky-300 dark:border-sky-800 text-center w-20">
+                    SAÍDA
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                 {records.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="py-8 text-center text-slate-400">
+                    <td colSpan={20} className="py-8 text-center text-slate-400">
                       Nenhum registro de medição adicionado. Clique em "Adicionar Registro / Dia"
                       acima.
                     </td>
@@ -679,12 +816,27 @@ export function InSituPage({ query = '' }: { query?: string }) {
                       (rawWeather !== '' && !FIXED_WEATHER_CHOICES.includes(rawWeather))
                     const displayWeather = rawWeather === 'Outros' ? '' : rawWeather
 
+                    const n0 = getNutrientPair(row, 0)
+                    const n1 = getNutrientPair(row, 1)
+                    const n2 = getNutrientPair(row, 2)
+                    const n3 = getNutrientPair(row, 3)
+
                     return (
                       <tr
                         key={row.id || idx}
                         className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50"
                       >
-                        {/* Data */}
+                        {/* 1. PONTO DE MEDIÇÃO */}
+                        <td className="p-2 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={row.point || ''}
+                            onChange={(e) => handleUpdateRowCell(row.id, 'point', e.target.value)}
+                            placeholder="Ex: ENTRADA"
+                            className="h-8 text-xs font-bold text-center"
+                          />
+                        </td>
+
+                        {/* 2. DATA */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           <Input
                             value={row.date}
@@ -692,34 +844,34 @@ export function InSituPage({ query = '' }: { query?: string }) {
                             placeholder="DD/MM/AAAA"
                             maxLength={10}
                             className={cn(
-                              'h-9 text-xs text-center font-mono',
+                              'h-8 text-xs text-center font-mono',
                               row.date && !isValidBrDate(row.date) && 'border-rose-500 bg-rose-50',
                             )}
                           />
                         </td>
 
-                        {/* Hora */}
+                        {/* 3. HORA */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           <Input
                             type="time"
                             value={row.time}
                             onChange={(e) => handleUpdateRowCell(row.id, 'time', e.target.value)}
-                            className="h-9 text-xs font-mono px-1 text-center"
+                            className="h-8 text-xs font-mono px-1 text-center"
                           />
                         </td>
 
-                        {/* pH */}
+                        {/* 4. pH */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           <Input
                             inputMode="decimal"
                             value={row.ph}
                             onChange={(e) => handleUpdateRowCell(row.id, 'ph', e.target.value)}
                             placeholder="7,0"
-                            className="h-9 text-xs font-mono text-center"
+                            className="h-8 text-xs font-mono text-center"
                           />
                         </td>
 
-                        {/* Condutividade + Unidade configurável conforme visor */}
+                        {/* 5. Cond. + Unidade do visor */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           <div className="flex items-center gap-1">
                             <Input
@@ -729,22 +881,22 @@ export function InSituPage({ query = '' }: { query?: string }) {
                                 handleUpdateRowCell(row.id, 'conductivity', e.target.value)
                               }
                               placeholder="Valor"
-                              className="h-9 text-xs font-mono text-right flex-1"
+                              className="h-8 text-xs font-mono text-right flex-1"
                             />
                             <Input
                               value={row.conductivity_unit}
                               onChange={(e) =>
                                 handleUpdateRowCell(row.id, 'conductivity_unit', e.target.value)
                               }
-                              placeholder="Unidade"
-                              title="Unidade indicada no visor (ex: µS/cm, mS/cm)"
-                              className="h-9 w-20 text-[11px] font-mono px-1 text-center bg-slate-50 dark:bg-slate-900"
+                              placeholder="Unid."
+                              title="Anote a unidade indicada no visor (ex: µS/cm, mS/cm)"
+                              className="h-8 w-16 text-[10px] font-mono px-1 text-center bg-slate-50 dark:bg-slate-900"
                             />
                           </div>
                         </td>
 
-                        {/* OD (mg/L) — rotulado e gravado estritamente em mg/L */}
-                        <td className="p-2 border border-slate-200 dark:border-slate-800 bg-emerald-50/20 dark:bg-emerald-950/20">
+                        {/* 6. OD (mg/L) — rotulado e fixado em mg/L */}
+                        <td className="p-2 border border-slate-200 dark:border-slate-800 bg-sky-50/40 dark:bg-sky-950/20">
                           <div className="relative flex items-center">
                             <Input
                               inputMode="decimal"
@@ -753,15 +905,15 @@ export function InSituPage({ query = '' }: { query?: string }) {
                                 handleUpdateRowCell(row.id, 'od_mg_l', e.target.value)
                               }
                               placeholder="0,00"
-                              className="h-9 text-xs font-mono font-semibold text-right pr-12 text-emerald-950 dark:text-emerald-100"
+                              className="h-8 text-xs font-mono font-semibold text-right pr-11 text-sky-950 dark:text-sky-100"
                             />
-                            <span className="absolute right-2 text-[10px] font-bold text-emerald-700 pointer-events-none select-none">
+                            <span className="absolute right-2 text-[10px] font-bold text-sky-700 pointer-events-none select-none">
                               mg/L
                             </span>
                           </div>
                         </td>
 
-                        {/* Temperatura */}
+                        {/* 7. Temp. (ºC) */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           <Input
                             inputMode="decimal"
@@ -770,36 +922,36 @@ export function InSituPage({ query = '' }: { query?: string }) {
                               handleUpdateRowCell(row.id, 'temperature_c', e.target.value)
                             }
                             placeholder="ºC"
-                            className="h-9 text-xs font-mono text-center"
+                            className="h-8 text-xs font-mono text-center"
                           />
                         </td>
 
-                        {/* ORP */}
+                        {/* 8. ORP */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           <Input
                             inputMode="decimal"
                             value={row.orp}
                             onChange={(e) => handleUpdateRowCell(row.id, 'orp', e.target.value)}
                             placeholder="mV"
-                            className="h-9 text-xs font-mono text-center"
+                            className="h-8 text-xs font-mono text-center"
                           />
                         </td>
 
-                        {/* Turbidez: Sim/Não */}
+                        {/* 9. TURVA (sim/não) */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           <select
                             value={row.turbidity || 'Não'}
                             onChange={(e) =>
                               handleUpdateRowCell(row.id, 'turbidity', e.target.value as any)
                             }
-                            className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-medium dark:border-slate-800 dark:bg-slate-950"
+                            className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-medium dark:border-slate-800 dark:bg-slate-950"
                           >
-                            <option value="Não">Não (Límpida)</option>
-                            <option value="Sim">Sim (Turva)</option>
+                            <option value="Não">Não</option>
+                            <option value="Sim">Sim</option>
                           </select>
                         </td>
 
-                        {/* Clima: Inline existente no sistema (Ensolarado/Chuvoso/Instável/Outros com texto livre) */}
+                        {/* 10. CLIMA */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           {isOtherWeather ? (
                             <div className="flex items-center gap-1">
@@ -808,15 +960,15 @@ export function InSituPage({ query = '' }: { query?: string }) {
                                 onChange={(e) =>
                                   handleUpdateRowCell(row.id, 'weather', e.target.value)
                                 }
-                                placeholder="Descreva o clima..."
-                                className="h-9 text-xs flex-1"
+                                placeholder="Clima..."
+                                className="h-8 text-xs flex-1"
                               />
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleUpdateRowCell(row.id, 'weather', 'Ensolarado')}
-                                className="h-9 px-2 text-[10px] shrink-0"
+                                className="h-8 px-1.5 text-[10px] shrink-0"
                               >
                                 Opções
                               </Button>
@@ -831,7 +983,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                                   e.target.value === 'Outros' ? 'Outros' : e.target.value,
                                 )
                               }
-                              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-800 dark:bg-slate-950"
                             >
                               <option value="Ensolarado">Ensolarado</option>
                               <option value="Chuvoso">Chuvoso</option>
@@ -841,32 +993,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                           )}
                         </td>
 
-                        {/* T. Nutrientes - Entrada / Saída */}
-                        <td className="p-2 border border-slate-200 dark:border-slate-800">
-                          <div className="flex items-center gap-1">
-                            <Input
-                              value={row.nutrients_in || ''}
-                              onChange={(e) =>
-                                handleUpdateRowCell(row.id, 'nutrients_in', e.target.value)
-                              }
-                              placeholder="Entrada"
-                              title="T. Nutrientes — Entrada"
-                              className="h-9 text-xs font-mono text-center flex-1"
-                            />
-                            <span className="text-slate-400">/</span>
-                            <Input
-                              value={row.nutrients_out || ''}
-                              onChange={(e) =>
-                                handleUpdateRowCell(row.id, 'nutrients_out', e.target.value)
-                              }
-                              placeholder="Saída"
-                              title="T. Nutrientes — Saída"
-                              className="h-9 text-xs font-mono text-center flex-1"
-                            />
-                          </div>
-                        </td>
-
-                        {/* Responsável */}
+                        {/* 11. RESPONSÁVEL PELAS MEDIÇÕES */}
                         <td className="p-2 border border-slate-200 dark:border-slate-800">
                           <Input
                             value={row.responsible}
@@ -874,7 +1001,95 @@ export function InSituPage({ query = '' }: { query?: string }) {
                               handleUpdateRowCell(row.id, 'responsible', e.target.value)
                             }
                             placeholder="Nome"
-                            className="h-9 text-xs"
+                            className="h-8 text-xs"
+                          />
+                        </td>
+
+                        {/* 12. T. NUTRIENTES - BLOCO 1 (Entrada / Saída) */}
+                        <td className="p-1 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={n0.in}
+                            onChange={(e) =>
+                              handleUpdateNutrientCell(row.id, 0, 'entry', e.target.value)
+                            }
+                            placeholder="Entrada"
+                            className="h-7 text-xs font-mono text-center px-1"
+                          />
+                        </td>
+                        <td className="p-1 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={n0.out}
+                            onChange={(e) =>
+                              handleUpdateNutrientCell(row.id, 0, 'exit', e.target.value)
+                            }
+                            placeholder="Saída"
+                            className="h-7 text-xs font-mono text-center px-1"
+                          />
+                        </td>
+
+                        {/* 13. T. NUTRIENTES - BLOCO 2 (Entrada / Saída) */}
+                        <td className="p-1 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={n1.in}
+                            onChange={(e) =>
+                              handleUpdateNutrientCell(row.id, 1, 'entry', e.target.value)
+                            }
+                            placeholder="Entrada"
+                            className="h-7 text-xs font-mono text-center px-1"
+                          />
+                        </td>
+                        <td className="p-1 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={n1.out}
+                            onChange={(e) =>
+                              handleUpdateNutrientCell(row.id, 1, 'exit', e.target.value)
+                            }
+                            placeholder="Saída"
+                            className="h-7 text-xs font-mono text-center px-1"
+                          />
+                        </td>
+
+                        {/* 14. T. NUTRIENTES - BLOCO 3 (Entrada / Saída) */}
+                        <td className="p-1 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={n2.in}
+                            onChange={(e) =>
+                              handleUpdateNutrientCell(row.id, 2, 'entry', e.target.value)
+                            }
+                            placeholder="Entrada"
+                            className="h-7 text-xs font-mono text-center px-1"
+                          />
+                        </td>
+                        <td className="p-1 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={n2.out}
+                            onChange={(e) =>
+                              handleUpdateNutrientCell(row.id, 2, 'exit', e.target.value)
+                            }
+                            placeholder="Saída"
+                            className="h-7 text-xs font-mono text-center px-1"
+                          />
+                        </td>
+
+                        {/* 15. T. NUTRIENTES - BLOCO 4 (Entrada / Saída) */}
+                        <td className="p-1 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={n3.in}
+                            onChange={(e) =>
+                              handleUpdateNutrientCell(row.id, 3, 'entry', e.target.value)
+                            }
+                            placeholder="Entrada"
+                            className="h-7 text-xs font-mono text-center px-1"
+                          />
+                        </td>
+                        <td className="p-1 border border-slate-200 dark:border-slate-800">
+                          <Input
+                            value={n3.out}
+                            onChange={(e) =>
+                              handleUpdateNutrientCell(row.id, 3, 'exit', e.target.value)
+                            }
+                            placeholder="Saída"
+                            className="h-7 text-xs font-mono text-center px-1"
                           />
                         </td>
 
@@ -885,9 +1100,9 @@ export function InSituPage({ query = '' }: { query?: string }) {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleRemoveMeasurementRow(row.id)}
-                            className="h-8 w-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            className="h-7 w-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </td>
                       </tr>
@@ -899,6 +1114,22 @@ export function InSituPage({ query = '' }: { query?: string }) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Notas de Rodapé do Modelo Físico (REV 02) com Destaque Obrigatório */}
+      <div className="rounded-xl border-2 border-orange-300 bg-orange-50/90 dark:border-orange-900 dark:bg-orange-950/40 p-4 text-xs text-orange-950 dark:text-orange-200 space-y-1.5 shadow-sm">
+        <div className="font-extrabold uppercase tracking-wide flex items-center gap-1.5 text-orange-900 dark:text-orange-300">
+          <AlertCircle className="h-4 w-4 shrink-0 text-orange-600" />
+          <span>Notas Obrigatórias de Calibração e Unidades do Modelo Original:</span>
+        </div>
+        <p className="font-bold leading-relaxed">
+          ATENÇÃO AS UNIDADES DE MEDIDAS: OD SEMPRE DEVE SER MEDIDO EM MG/L{' '}
+          <span className="underline">NUNCA</span> EM %
+        </p>
+        <p className="font-semibold leading-relaxed">
+          CONDUTIVIDADE A UNIDADE ALTERA-SE AUTOMATICAMENTE, ANOTE SEMPRE A UNIDADE QUE ESTÁ NO
+          VISOR!
+        </p>
+      </div>
 
       {/* Observações Gerais */}
       <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">

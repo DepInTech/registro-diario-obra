@@ -128,6 +128,7 @@ export const naConfigService = {
   async saveConfig(config: Partial<NaAreaConfig>): Promise<NaAreaConfig> {
     const payload = {
       area_name: config.area_name || '',
+      contract_number: config.contract_number || '',
       description: config.description || '',
       wells: config.wells || [],
       active: config.active ?? true,
@@ -215,6 +216,7 @@ export const naSheetService = {
 
   async saveSheet(sheet: Partial<NaSheet>): Promise<NaSheet> {
     const payload = {
+      contract_number: sheet.contract_number || '',
       area_name: sheet.area_name || '',
       date: sheet.date || '',
       weather: sheet.weather || '',

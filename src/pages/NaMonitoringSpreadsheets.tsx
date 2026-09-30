@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Send,
   Printer,
+  FileDown,
   Settings,
   ShieldCheck,
   Lock,
@@ -14,6 +15,7 @@ import {
   MapPin,
   HelpCircle,
 } from 'lucide-react'
+import { printNaSheet, chunkInto4Columns } from '@/services/naSheetExport'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -54,6 +56,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
   const [selectedSheet, setSelectedSheet] = useState<NaSheet | null>(null)
   const [isEditingSheet, setIsEditingSheet] = useState(false)
   const [sheetFormData, setSheetFormData] = useState<Partial<NaSheet>>({
+    contract_number: '',
     area_name: '',
     date: '',
     weather: 'Ensolarado',
@@ -68,6 +71,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
   const [isEditingConfig, setIsEditingConfig] = useState(false)
   const [configFormData, setConfigFormData] = useState<Partial<NaAreaConfig>>({
     area_name: '',
+    contract_number: '',
     description: '',
     wells: [],
     active: true,
@@ -154,6 +158,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
     }))
 
     setSheetFormData({
+      contract_number: firstConfig.contract_number || '',
       area_name: firstConfig.area_name,
       date: dStr,
       weather: 'Ensolarado',
@@ -193,6 +198,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
 
     setSheetFormData((prev) => ({
       ...prev,
+      contract_number: configFound?.contract_number || prev.contract_number || '',
       area_name: newAreaName,
       readings: newReadings,
     }))
@@ -266,6 +272,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
   const handleStartNewConfig = () => {
     setConfigFormData({
       area_name: '',
+      contract_number: '',
       description: '',
       wells: [],
       active: true,
@@ -443,11 +450,12 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.print()}
-              className="text-xs min-h-[38px]"
+              onClick={() => printNaSheet(sheetFormData as NaSheet)}
+              className="text-xs min-h-[38px] border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
+              title="Exporta o PDF ou abre visualização para impressão fiel ao documento físico"
             >
-              <Printer className="mr-1.5 h-3.5 w-3.5" />
-              Imprimir
+              <FileDown className="mr-1.5 h-3.5 w-3.5" />
+              Exportar PDF / Imprimir
             </Button>
 
             {isAdmin && selectedSheet?.id && (
@@ -495,10 +503,24 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
               bloqueados automaticamente.
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Área de Monitoramento *
+                Nº Contrato
+              </label>
+              <Input
+                value={sheetFormData.contract_number || ''}
+                onChange={(e) =>
+                  setSheetFormData((p) => ({ ...p, contract_number: e.target.value }))
+                }
+                placeholder="Ex.: CT 5900089378"
+                className="mt-1 h-9 text-xs sm:text-sm font-semibold"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Local / Área *
               </label>
               <select
                 value={sheetFormData.area_name || ''}
@@ -601,92 +623,131 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
           </div>
         </div>
 
-        {/* Tabela Padronizada de Poços da Área: Poço (travado), NA (m), NO (m), Observação */}
+        {/* Tabela Fiel ao Modelo Físico: 4 Blocos Lado a Lado (Desktop) / Empilhado Responsivo (Mobile) */}
         <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
-            <CardTitle className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300 flex items-center justify-between">
-              <span>Medições dos Poços — {sheetFormData.area_name}</span>
-              <span className="text-xs font-normal text-slate-500">
+          <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300 flex items-center gap-2">
+                  <span>Monitoramento do Nível d'Água — {sheetFormData.area_name}</span>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Layout de 4 blocos verticais lado a lado com preenchimento contínuo fiel à
+                  planilha física.
+                </CardDescription>
+              </div>
+              <span className="text-xs font-semibold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2.5 py-1 rounded">
                 {sheetFormData.readings?.length || 0} poços na configuração
               </span>
-            </CardTitle>
+            </div>
           </CardHeader>
-          <CardContent className="p-0 sm:p-4">
+          <CardContent className="p-2 sm:p-4">
             {!sheetFormData.readings || sheetFormData.readings.length === 0 ? (
-              <div className="py-10 text-center text-slate-500">
+              <div className="py-10 text-center text-slate-500 text-xs">
                 Nenhum poço encontrado na configuração desta área. Selecione outra área ou configure
                 os poços como Administrador.
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-none sm:rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
-                <table className="w-full min-w-[700px] border-collapse text-left text-xs">
-                  <thead>
-                    <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
-                      <th className="p-2.5 border border-emerald-800 font-semibold text-center w-36">
-                        Poço (Bloqueado)
-                      </th>
-                      <th className="p-2.5 border border-emerald-800 font-semibold text-center w-40">
-                        NA (m)
-                      </th>
-                      <th className="p-2.5 border border-emerald-800 font-semibold text-center w-40">
-                        NO (m)
-                      </th>
-                      <th className="p-2.5 border border-emerald-800 font-semibold text-center">
-                        Observação
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {sheetFormData.readings.map((reading, idx) => (
-                      <tr
-                        key={reading.well_code || idx}
-                        className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50"
+              /* Grid de 4 Blocos Lado a Lado (Desktop) / 1 ou 2 Blocos (Mobile/Tablet) */
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                {(() => {
+                  const cols = chunkInto4Columns(sheetFormData.readings || [])
+                  return cols.map((colItems, colIdx) => {
+                    return (
+                      <div
+                        key={colIdx}
+                        className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 overflow-hidden shadow-sm"
                       >
-                        {/* Poço: Totalmente Bloqueado (usuário não pode editar/excluir/substituir) */}
-                        <td className="p-2 border border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 text-center font-bold font-mono text-emerald-950 dark:text-emerald-200 select-none">
-                          <div className="flex items-center justify-center gap-1.5 py-1">
-                            <Lock className="h-3 w-3 text-slate-400" />
-                            <span>{reading.well_code}</span>
-                          </div>
-                        </td>
-
-                        {/* NA (m) */}
-                        <td className="p-2 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            inputMode="decimal"
-                            value={reading.na_m}
-                            onChange={(e) => handleUpdateReadingCell(idx, 'na_m', e.target.value)}
-                            placeholder="0,00"
-                            className="h-9 text-xs font-mono text-right"
-                          />
-                        </td>
-
-                        {/* NO (m) */}
-                        <td className="p-2 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            inputMode="decimal"
-                            value={reading.no_m}
-                            onChange={(e) => handleUpdateReadingCell(idx, 'no_m', e.target.value)}
-                            placeholder="0,00"
-                            className="h-9 text-xs font-mono text-right"
-                          />
-                        </td>
-
-                        {/* Observação */}
-                        <td className="p-2 border border-slate-200 dark:border-slate-800">
-                          <Input
-                            value={reading.observation}
-                            onChange={(e) =>
-                              handleUpdateReadingCell(idx, 'observation', e.target.value)
-                            }
-                            placeholder="Ex.: Seco, obstruído, presença de fase livre..."
-                            className="h-9 text-xs"
-                          />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        <div className="bg-slate-200 dark:bg-slate-800 px-2.5 py-1.5 text-center text-[11px] font-bold text-slate-800 dark:text-slate-200 border-b border-slate-300 dark:border-slate-700">
+                          Bloco {colIdx + 1} ({colItems.length} poços)
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-left text-xs">
+                            <thead>
+                              <tr className="bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-[10px] uppercase font-bold border-b border-slate-300 dark:border-slate-700">
+                                <th className="p-1.5 text-center border-r border-slate-200 dark:border-slate-800 w-[24%]">
+                                  Poço
+                                </th>
+                                <th className="p-1.5 text-center border-r border-slate-200 dark:border-slate-800 w-[22%]">
+                                  NA (m)
+                                </th>
+                                <th className="p-1.5 text-center border-r border-slate-200 dark:border-slate-800 w-[22%]">
+                                  NO (m)
+                                </th>
+                                <th className="p-1.5 text-center w-[32%]">Obs.</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                              {colItems.map((reading) => {
+                                // Acha o índice original no array completo para atualização
+                                const originalIdx = (sheetFormData.readings || []).findIndex(
+                                  (r) => r.well_code === reading.well_code,
+                                )
+                                return (
+                                  <tr
+                                    key={reading.well_code}
+                                    className="hover:bg-slate-50 dark:hover:bg-slate-900/60"
+                                  >
+                                    <td className="p-1 text-center font-bold font-mono text-[11px] bg-slate-50/80 dark:bg-slate-900/80 border-r border-slate-200 dark:border-slate-800 text-emerald-950 dark:text-emerald-300">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Lock className="h-2.5 w-2.5 text-slate-400" />
+                                        <span>{reading.well_code}</span>
+                                      </div>
+                                    </td>
+                                    <td className="p-1 border-r border-slate-200 dark:border-slate-800">
+                                      <Input
+                                        inputMode="decimal"
+                                        value={reading.na_m}
+                                        onChange={(e) =>
+                                          handleUpdateReadingCell(
+                                            originalIdx,
+                                            'na_m',
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="0,00"
+                                        className="h-7 px-1 text-[11px] font-mono text-right"
+                                      />
+                                    </td>
+                                    <td className="p-1 border-r border-slate-200 dark:border-slate-800">
+                                      <Input
+                                        inputMode="decimal"
+                                        value={reading.no_m}
+                                        onChange={(e) =>
+                                          handleUpdateReadingCell(
+                                            originalIdx,
+                                            'no_m',
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="0,00"
+                                        className="h-7 px-1 text-[11px] font-mono text-right"
+                                      />
+                                    </td>
+                                    <td className="p-1">
+                                      <Input
+                                        value={reading.observation}
+                                        onChange={(e) =>
+                                          handleUpdateReadingCell(
+                                            originalIdx,
+                                            'observation',
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="Obs..."
+                                        className="h-7 px-1 text-[11px]"
+                                      />
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
             )}
           </CardContent>
@@ -777,21 +838,34 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
               Dados da Área
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="grid gap-4 sm:grid-cols-3">
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Nome da Área *
+                Nome da Área / Localidade *
               </label>
               <Input
                 value={configFormData.area_name || ''}
                 onChange={(e) => setConfigFormData((p) => ({ ...p, area_name: e.target.value }))}
-                placeholder="Ex.: Alto Alegre do Pindaré"
+                placeholder="Ex.: KM244 - ALTO ALEGRE DO PINDARÉ/MA"
                 className="mt-1 h-9 text-xs sm:text-sm font-semibold"
               />
             </div>
             <div>
               <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Descrição / Localidade
+                Nº do Contrato Padrão (Opcional)
+              </label>
+              <Input
+                value={configFormData.contract_number || ''}
+                onChange={(e) =>
+                  setConfigFormData((p) => ({ ...p, contract_number: e.target.value }))
+                }
+                placeholder="Ex.: CT 5900089378"
+                className="mt-1 h-9 text-xs sm:text-sm font-semibold"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Descrição Adicional
               </label>
               <Input
                 value={configFormData.description || ''}

@@ -1,27 +1,36 @@
+export interface InSituNutrientPair {
+  entry: string // T. NUTRIENTES - ENTRADA
+  exit: string // T. NUTRIENTES - SAÍDA
+}
+
 export interface InSituMeasurementRow {
   id: string
+  point?: string // Ponto de medição específico da linha (opcional/legado)
   date: string // DD/MM/AAAA ou ISO
-  time: string // HH:mm
-  ph: string
-  conductivity: string
-  conductivity_unit: string // Ex: µS/cm, mS/cm, etc. Visor do equipamento
-  od_mg_l: string // OD obrigatoriamente rotulado e preenchido em mg/L
-  temperature_c: string // ºC
-  orp: string // mV
-  turbidity: 'Sim' | 'Não' | '' // Sim/Não conforme planilha física
-  weather: string // Ensolarado, Chuvoso, Instável, ou texto livre se Outros
-  responsible: string // Responsável pelas medições
-  nutrients_in: string // T. Nutrientes - Entrada
-  nutrients_out: string // T. Nutrientes - Saída
+  time: string // HORA (HH:mm)
+  ph: string // pH
+  conductivity: string // Cond. (valor numérico no visor)
+  conductivity_unit: string // Ex: µS/cm, mS/cm, etc. Anote sempre a unidade do visor!
+  od_mg_l: string // OD (mg/L) obrigatoriamente rotulado e preenchido em mg/L (NUNCA em %)
+  temperature_c: string // Temp. (ºC)
+  orp: string // ORP (mV)
+  turbidity: 'Sim' | 'Não' | '' // TURVA (sim/não) conforme modelo físico
+  weather: string // CLIMA (Ensolarado, Chuvoso, Instável, ou texto livre)
+  responsible: string // RESPONSÁVEL PELAS MEDIÇÕES
+  // 4 blocos de T. NUTRIENTES (ENTRADA / SAÍDA) correspondentes aos 4 sistemas
+  nutrients?: InSituNutrientPair[] // [Sistema 1, Sistema 2, Sistema 3, Sistema 4]
+  // Compatibilidade retroativa
+  nutrients_in?: string
+  nutrients_out?: string
   notes?: string
 }
 
 export interface InSituSheet {
   id: string
-  project_name: string
-  system_name: string // Ex: Sistema 1, Sistema 2, etc. (modelo padronizado para os quatro sistemas)
-  active_number: string // Número ativo
-  measurement_point: string // Ponto de medição
+  project_name: string // PROJETO:
+  system_name: string // SISTEMA:
+  active_number: string // NÚMERO ATIVO:
+  measurement_point: string // PONTO DE MEDIÇÃO
   records: InSituMeasurementRow[]
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   responsible_name?: string
@@ -40,7 +49,8 @@ export interface NaAreaWellConfig {
 
 export interface NaAreaConfig {
   id: string
-  area_name: string
+  area_name: string // Local / Área
+  contract_number?: string // Nº do Contrato (opcional)
   description?: string
   wells: NaAreaWellConfig[]
   active?: boolean
@@ -49,21 +59,22 @@ export interface NaAreaConfig {
 }
 
 export interface NaWellReadingRow {
-  well_code: string // Ex: PM-03 (bloqueado durante o preenchimento pelo operador)
+  well_code: string // Poço (bloqueado durante o preenchimento pelo operador)
   na_m: string // NA (m)
   no_m: string // NO (m)
-  observation: string // Observação
+  observation: string // Obs.
 }
 
 export interface NaSheet {
   id: string
-  area_name: string // Área selecionada pelo usuário que carrega os poços da config
-  date: string // DD/MM/AAAA ou ISO
-  weather: string // Ensolarado, Chuvoso, Instável, ou texto livre se Outros
+  contract_number?: string // Linha própria de CONTRATO
+  area_name: string // Local / Área
+  date: string // DATA:
+  weather: string // Clima:
   responsible_name: string
   readings: NaWellReadingRow[] // Linhas de poços correspondentes à área
   status: 'draft' | 'submitted' | 'approved' | 'returned'
-  notes?: string
+  notes?: string // Observações (campo amplo de rodapé)
   client_token?: string
   archived?: boolean
   created?: string
