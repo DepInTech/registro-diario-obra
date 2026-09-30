@@ -17,6 +17,8 @@ import {
   WifiOff,
   X,
   AlertTriangle,
+  Activity,
+  Waves,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -50,7 +52,15 @@ function formatSyncTime(date: Date | null): string {
   return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
-export type Page = 'dashboard' | 'projects' | 'rdos' | 'fields' | 'users' | 'audit'
+export type Page =
+  | 'dashboard'
+  | 'projects'
+  | 'rdos'
+  | 'fields'
+  | 'insitu'
+  | 'na_monitoring'
+  | 'users'
+  | 'audit'
 
 const allPrimary = [
   { id: 'dashboard' as Page, label: 'Visão geral', icon: Home },
@@ -67,6 +77,18 @@ const allPrimary = [
     icon: FileSpreadsheet,
     allowedRoles: ['admin', 'technician'],
   },
+  {
+    id: 'insitu' as Page,
+    label: 'Parâmetros In-Situ',
+    icon: Activity,
+    allowedRoles: ['admin', 'technician'],
+  },
+  {
+    id: 'na_monitoring' as Page,
+    label: 'Monitoramento de NA',
+    icon: Waves,
+    allowedRoles: ['admin', 'technician'],
+  },
 ]
 const admin = [
   { id: 'users' as Page, label: 'Gestão de usuários', icon: Users },
@@ -77,6 +99,14 @@ const titles: Record<Page, { title: string; subtitle: string }> = {
   projects: { title: 'Meus projetos', subtitle: 'Obras e contratos atribuídos à sua equipe' },
   rdos: { title: 'Relatórios Diários de Obra', subtitle: 'Criação, revisão e aprovação de RDOs' },
   fields: { title: 'Planilhas de campo', subtitle: 'Medições operacionais e controles ambientais' },
+  insitu: {
+    title: 'Parâmetros In-Situ',
+    subtitle: 'Modelo padronizado de parâmetros para os 4 sistemas',
+  },
+  na_monitoring: {
+    title: "Monitoramento do Nível d'Água",
+    subtitle: 'Medições de NA e NO com poços por área',
+  },
   users: { title: 'Gestão de usuários', subtitle: 'Acessos, perfis e atribuições por projeto' },
   audit: { title: 'Logs de auditoria', subtitle: 'Rastreabilidade completa de ações no sistema' },
 }

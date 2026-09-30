@@ -1,15 +1,15 @@
 {
-  "generatedAt": "2026-09-29T12:42:57.725Z",
+  "generatedAt": "2026-09-30T13:33:34.183Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || id = @request.auth.id)",
-        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || (id = @request.auth.id && @request.body.role:isset = false))",
-        "delete": "@request.auth.id != '' && @request.auth.role = 'admin' && id != @request.auth.id"
+        "list": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || active = true)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || id = @request.auth.id || @request.auth.active = true)",
+        "create": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.active = true && (@request.auth.role = 'admin' || (id = @request.auth.id && @request.body.role:isset = false))",
+        "delete": "@request.auth.id != '' && @request.auth.active = true && @request.auth.role = 'admin' && id != @request.auth.id"
       },
       "fields": [
         {
@@ -1169,6 +1169,237 @@
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_system_settings_key ON system_settings (key)"]
+    },
+    {
+      "name": "in_situ_sheets",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "project_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "system_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "active_number",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "measurement_point",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "records",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["draft", "submitted", "approved", "returned"]
+        },
+        {
+          "name": "responsible_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_token",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "archived",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_in_situ_project ON in_situ_sheets (project_name)",
+        "CREATE INDEX idx_in_situ_system ON in_situ_sheets (system_name)",
+        "CREATE INDEX idx_in_situ_point ON in_situ_sheets (measurement_point)"
+      ]
+    },
+    {
+      "name": "na_area_configs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "area_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "wells",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "active",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_na_area_configs_name ON na_area_configs (area_name)"]
+    },
+    {
+      "name": "na_sheets",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "area_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "weather",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "responsible_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "readings",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["draft", "submitted", "approved", "returned"]
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_token",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "archived",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_na_sheets_area ON na_sheets (area_name)",
+        "CREATE INDEX idx_na_sheets_date ON na_sheets (date)"
+      ]
     }
   ]
 }

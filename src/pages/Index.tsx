@@ -5,6 +5,8 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Projects } from '@/pages/Projects'
 import { RdosPage } from '@/pages/Rdos'
 import { FieldSpreadsheets } from '@/pages/FieldSpreadsheets'
+import { InSituPage } from '@/pages/InSituSpreadsheets'
+import { NaMonitoringPage } from '@/pages/NaMonitoringSpreadsheets'
 import { UsersPage } from '@/pages/Users'
 import { AuditPage } from '@/pages/Audit'
 import { LoginPage } from '@/pages/Login'
@@ -119,10 +121,16 @@ export default function Index() {
       {page === 'fields' && (user?.role === 'admin' || user?.role === 'technician') && (
         <FieldSpreadsheets query={query} />
       )}
+      {page === 'insitu' && (user?.role === 'admin' || user?.role === 'technician') && (
+        <InSituPage query={query} />
+      )}
+      {page === 'na_monitoring' && (user?.role === 'admin' || user?.role === 'technician') && (
+        <NaMonitoringPage query={query} />
+      )}
       {page === 'users' && user?.role === 'admin' && <UsersPage />}
       {page === 'audit' && user?.role === 'admin' && <AuditPage />}
       {/* Fallback de navegação se o usuário tiver perfil que não se enquadre na rota */}
-      {(page === 'rdos' || page === 'fields') &&
+      {(page === 'rdos' || page === 'fields' || page === 'insitu' || page === 'na_monitoring') &&
         user?.role !== 'admin' &&
         user?.role !== 'technician' && <Dashboard navigate={handleNavigate} />}
       {(page === 'users' || page === 'audit') && user?.role !== 'admin' && (
