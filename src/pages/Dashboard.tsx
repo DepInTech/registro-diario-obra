@@ -1,18 +1,13 @@
 import { useEffect, useState } from 'react'
 import {
   Activity,
-  AlertTriangle,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   CheckCircle2,
   ClipboardList,
-  Droplets,
   FileSpreadsheet,
   FolderKanban,
-  MapPin,
-  MoreHorizontal,
-  Plus,
   RefreshCw,
   Users,
   Waves,
@@ -226,7 +221,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         }
       }
 
-      // 4. Carregar Atividades Recentes reais combinando servidor, logs de auditoria e armazenamento offline
+      // Carregar Atividades Recentes reais combinando servidor, logs de auditoria e armazenamento offline
       try {
         const activities: Array<{
           id: string
@@ -687,23 +682,26 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
   return (
     <div className="space-y-6">
-      {/* Welcome header with dynamic greeting */}
-      <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between epa-card p-6 bg-gradient-to-r from-[#032825] via-[#086B63] to-[#0a524c] text-white dark:border-slate-800">
-        <div>
-          <p className="text-xs text-emerald-200 capitalize">{getFormattedDate()}</p>
-          <h2 className="mt-1.5 text-2xl font-bold tracking-tight md:text-3xl">
-            {getGreeting()} <span className="align-top text-lg">👋</span>
+      {/* 1. Welcome header with dynamic greeting & comfortable button wrap */}
+      <section className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between epa-card p-6 bg-gradient-to-r from-[#032825] via-[#086B63] to-[#0a524c] text-white dark:border-slate-800">
+        <div className="min-w-0 max-w-xl">
+          <p className="text-xs text-emerald-200 capitalize tracking-wide font-medium">
+            {getFormattedDate()}
+          </p>
+          <h2 className="mt-1.5 text-2xl font-bold tracking-tight md:text-3xl text-white">
+            {getGreeting()} <span className="align-top text-xl">👋</span>
           </h2>
-          <p className="mt-1 text-xs text-emerald-100/80">
+          <p className="mt-1.5 text-xs sm:text-sm text-emerald-100/80 leading-relaxed">
             Acompanhe em tempo real as operações ambientais, RDOs e planilhas de campo.
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row flex-wrap gap-2.5 w-full sm:w-auto">
+        {/* Action buttons arranged comfortably in responsive flex wrap */}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           {(user?.role === 'admin' || user?.role === 'technician') && (
             <Button
               onClick={() => navigate('rdos')}
-              className="w-full sm:w-auto bg-emerald-600 text-white hover:bg-emerald-500 shadow-md min-h-[44px] font-semibold text-xs justify-center"
+              className="bg-emerald-600 text-white hover:bg-emerald-500 shadow-md min-h-[42px] px-4 font-semibold text-xs justify-center shrink-0"
             >
               <ClipboardList className="mr-2 h-4 w-4 shrink-0" />
               Novo RDO
@@ -713,7 +711,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             <Button
               onClick={() => navigate('fields')}
               variant="outline"
-              className="w-full sm:w-auto bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs justify-center"
+              className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[42px] px-4 font-semibold text-xs justify-center shrink-0"
             >
               <FileSpreadsheet className="mr-2 h-4 w-4 shrink-0" />
               Planilha de Campo
@@ -723,7 +721,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             <Button
               onClick={() => navigate('insitu')}
               variant="outline"
-              className="w-full sm:w-auto bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs justify-center"
+              className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[42px] px-4 font-semibold text-xs justify-center shrink-0"
             >
               <Activity className="mr-2 h-4 w-4 shrink-0" />
               Nova Medição In-Situ
@@ -733,7 +731,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             <Button
               onClick={() => navigate('na_monitoring')}
               variant="outline"
-              className="w-full sm:w-auto bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs justify-center"
+              className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[42px] px-4 font-semibold text-xs justify-center shrink-0"
             >
               <Waves className="mr-2 h-4 w-4 shrink-0" />
               Nova Planilha de NA
@@ -743,7 +741,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             <Button
               onClick={() => navigate('projects')}
               variant="outline"
-              className="w-full sm:w-auto bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs justify-center"
+              className="bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[42px] px-4 font-semibold text-xs justify-center shrink-0"
             >
               <FolderKanban className="mr-2 h-4 w-4 shrink-0" />
               Gerenciar Projetos
@@ -752,74 +750,74 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         </div>
       </section>
 
-      {/* Main KPI Counters */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      {/* 2 & 3. Main KPI Counters - STRICT 3x2 Grid (Desktop: 3 per row, Tablet: 2, Mobile: 1) */}
+      <section className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {[
           {
+            id: 'projects',
             label: 'Projetos ativos',
             value: String(projectsList.length),
-            helper: 'em operação ambiental',
-            trend: '+1 este mês',
+            helper: 'Em operação ambiental',
+            badge: '+1 este mês',
             icon: FolderKanban,
-            color: 'emerald',
             up: true,
             page: 'projects' as Page,
             visible: true,
           },
           {
+            id: 'rdos',
             label: 'RDOs aguardando aprovação',
             value: String(pendingRdos),
             helper: `${rdoCount} relatórios no total`,
-            trend: pendingRdos > 0 ? `${pendingRdos} pendentes` : 'Tudo em dia',
+            badge: pendingRdos > 0 ? `${pendingRdos} pendentes` : 'Tudo em dia',
             icon: ClipboardList,
-            color: 'blue',
             up: pendingRdos === 0,
             page: 'rdos' as Page,
             visible: true,
           },
           {
-            label: 'Planilhas de campo',
+            id: 'sheets',
+            label: 'Planilhas de Campo',
             value: String(sheetCount),
-            helper: 'medições operacionais',
-            trend: `${sheetCount} ativas`,
+            helper: 'Medições operacionais',
+            badge: `${sheetCount} ativas`,
             icon: FileSpreadsheet,
-            color: 'teal',
             up: true,
             page: 'fields' as Page,
             visible: true,
           },
           {
+            id: 'insitu',
             label: 'Medições In-Situ',
             value: String(inSituCount),
-            helper: 'registros realizados',
-            trend: `${inSituCount} ativas`,
+            helper: 'Registros realizados',
+            badge: `${inSituCount} ativas`,
             icon: Activity,
-            color: 'cyan',
             up: true,
             page: 'insitu' as Page,
             visible: true,
           },
           {
+            id: 'na',
             label: 'Planilhas de NA',
             value: String(naSheetCount),
-            helper: 'monitoramentos realizados',
-            trend: `${naSheetCount} ativas`,
+            helper: 'Monitoramentos realizados',
+            badge: `${naSheetCount} ativas`,
             icon: Waves,
-            color: 'sky',
             up: true,
             page: 'na_monitoring' as Page,
             visible: true,
           },
           {
+            id: 'users',
             label: 'Usuários cadastrados',
-            value: user?.role === 'admin' ? String(userCount) : 'Ativo',
-            helper: user?.role === 'admin' ? 'gestão de acessos' : 'seu perfil ativo',
-            trend: user?.role === 'admin' ? 'acessos do sistema' : 'Operação OK',
+            value: user?.role === 'admin' ? String(userCount) : '1',
+            helper: 'Gestão de acessos',
+            badge: 'Acessos do sistema',
             icon: Users,
-            color: 'amber',
             up: true,
             page: (user?.role === 'admin' ? 'users' : 'dashboard') as Page,
-            visible: user?.role === 'admin',
+            visible: true,
           },
         ]
           .filter((stat) => stat.visible)
@@ -828,32 +826,40 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             const Trend = stat.up ? ArrowUpRight : ArrowDownRight
             return (
               <article
-                key={stat.label}
+                key={stat.id}
                 onClick={() => navigate(stat.page)}
-                className="epa-card group p-5 transition hover:-translate-y-0.5 hover:shadow-md cursor-pointer dark:hover:border-emerald-500/40"
+                className="epa-card group p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-emerald-500/40 cursor-pointer flex flex-col justify-between min-h-[160px]"
               >
-                <div className="flex items-start justify-between">
-                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                    <Icon className="h-5 w-5" />
+                <div>
+                  {/* Top: Icon + Badge */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 transition-colors group-hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300 dark:group-hover:bg-emerald-900/60">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800/80 dark:text-slate-300">
+                      <Trend
+                        className={`h-3.5 w-3.5 shrink-0 ${stat.up ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'}`}
+                      />
+                      <span className="whitespace-nowrap">{stat.badge}</span>
+                    </div>
                   </div>
-                  <Trend
-                    className={`h-4 w-4 ${stat.up ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500'}`}
-                  />
+
+                  {/* 4. Visual Hierarchy: Big Number -> Title */}
+                  <div className="mt-4">
+                    <p className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                      {stat.value}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-200 leading-snug">
+                      {stat.label}
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-4 text-3xl font-bold tracking-tight">{stat.value}</p>
-                <p className="mt-1 text-sm font-medium text-slate-700 dark:text-slate-300">
-                  {stat.label}
-                </p>
-                <div className="mt-3 flex items-center justify-between border-t pt-3 text-xs dark:border-slate-800">
-                  <span className="text-slate-400">{stat.helper}</span>
-                  <span
-                    className={
-                      stat.up
-                        ? 'font-medium text-emerald-600 dark:text-emerald-400'
-                        : 'text-amber-600'
-                    }
-                  >
-                    {stat.trend}
+
+                {/* Footer: Complementary info cleanly separated */}
+                <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800/80 dark:text-slate-400">
+                  <span className="truncate">{stat.helper}</span>
+                  <span className="font-medium text-emerald-600 dark:text-emerald-400 text-xs shrink-0 ml-2 group-hover:underline">
+                    Ver detalhes →
                   </span>
                 </div>
               </article>
@@ -861,7 +867,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
           })}
       </section>
 
-      {/* Projects Progress */}
+      {/* 5. Projects Progress */}
       <section>
         <article className="epa-card overflow-hidden">
           <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
@@ -885,7 +891,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               <button
                 onClick={() => navigate('projects')}
                 key={project.id}
-                className="group block w-full text-left rounded-lg p-2 transition hover:bg-slate-50 dark:hover:bg-slate-900/50"
+                className="group block w-full text-left rounded-lg p-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-900/50"
               >
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -912,7 +918,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         </article>
       </section>
 
-      {/* Recent Activities & Quick Shortcuts */}
+      {/* 6. Recent Activities & Operational Shortcuts */}
       <section className="grid gap-5 lg:grid-cols-1 xl:grid-cols-[1.1fr_.9fr]">
         <article className="epa-card overflow-hidden">
           <div className="flex items-center justify-between border-b px-5 py-4 dark:border-slate-800">
@@ -938,7 +944,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               recentActivities.slice(0, 6).map((item) => (
                 <div
                   key={item.id}
-                  className="flex gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                  className="flex gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition-colors"
                 >
                   <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                     {item.initials}
@@ -964,7 +970,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             {user?.role === 'admin' && (
               <button
                 onClick={() => navigate('projects')}
-                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+                className="flex items-center justify-between rounded-xl border p-3.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
               >
                 <div className="flex items-center gap-3">
                   <FolderKanban className="h-5 w-5 text-emerald-700" />
@@ -975,14 +981,14 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-400" />
+                <ArrowRight className="h-4 w-4 text-slate-400 shrink-0" />
               </button>
             )}
 
             {(user?.role === 'admin' || user?.role === 'technician') && (
               <button
                 onClick={() => navigate('rdos')}
-                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+                className="flex items-center justify-between rounded-xl border p-3.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
               >
                 <div className="flex items-center gap-3">
                   <ClipboardList className="h-5 w-5 text-emerald-600" />
@@ -993,14 +999,14 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-400" />
+                <ArrowRight className="h-4 w-4 text-slate-400 shrink-0" />
               </button>
             )}
 
             {(user?.role === 'admin' || user?.role === 'technician') && (
               <button
                 onClick={() => navigate('fields')}
-                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+                className="flex items-center justify-between rounded-xl border p-3.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
               >
                 <div className="flex items-center gap-3">
                   <FileSpreadsheet className="h-5 w-5 text-teal-600" />
@@ -1011,14 +1017,14 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-400" />
+                <ArrowRight className="h-4 w-4 text-slate-400 shrink-0" />
               </button>
             )}
 
             {(user?.role === 'admin' || user?.role === 'technician') && (
               <button
                 onClick={() => navigate('insitu')}
-                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+                className="flex items-center justify-between rounded-xl border p-3.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
               >
                 <div className="flex items-center gap-3">
                   <Activity className="h-5 w-5 text-cyan-600" />
@@ -1029,14 +1035,14 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-400" />
+                <ArrowRight className="h-4 w-4 text-slate-400 shrink-0" />
               </button>
             )}
 
             {(user?.role === 'admin' || user?.role === 'technician') && (
               <button
                 onClick={() => navigate('na_monitoring')}
-                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+                className="flex items-center justify-between rounded-xl border p-3.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
               >
                 <div className="flex items-center gap-3">
                   <Waves className="h-5 w-5 text-sky-600" />
@@ -1047,14 +1053,14 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-400" />
+                <ArrowRight className="h-4 w-4 text-slate-400 shrink-0" />
               </button>
             )}
 
             {user?.role === 'admin' && (
               <button
                 onClick={() => navigate('users')}
-                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+                className="flex items-center justify-between rounded-xl border p-3.5 text-left transition hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
               >
                 <div className="flex items-center gap-3">
                   <Users className="h-5 w-5 text-blue-600" />
@@ -1065,7 +1071,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                     </p>
                   </div>
                 </div>
-                <ArrowRight className="h-4 w-4 text-slate-400" />
+                <ArrowRight className="h-4 w-4 text-slate-400 shrink-0" />
               </button>
             )}
           </div>
