@@ -85,7 +85,8 @@ export interface NaAreaConfig {
 }
 
 export interface NaWellReadingRow {
-  well_code: string // Poço (bloqueado durante o preenchimento pelo operador)
+  id?: string // Identificador único opcional da linha/leitura para reordenação/chave estável
+  well_code: string // Poço (editável na planilha de monitoramento)
   na_m: string // NA (m)
   no_m: string // NO (m)
   observation: string // Obs.

@@ -6,14 +6,15 @@ import {
   Save,
   ArrowLeft,
   Send,
-  Printer,
   FileDown,
   Settings,
   ShieldCheck,
-  Lock,
   Layers,
   MapPin,
-  HelpCircle,
+  Edit3,
+  ArrowUp,
+  ArrowDown,
+  ListOrdered,
 } from 'lucide-react'
 import { printNaSheet, chunkInto4Columns, get4ColumnRows } from '@/services/naSheetExport'
 import { Button } from '@/components/ui/button'
@@ -55,6 +56,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
   // Preenchimento de Planilha de NA
   const [selectedSheet, setSelectedSheet] = useState<NaSheet | null>(null)
   const [isEditingSheet, setIsEditingSheet] = useState(false)
+  const [isCustomArea, setIsCustomArea] = useState(false)
   const [sheetFormData, setSheetFormData] = useState<Partial<NaSheet>>({
     contract_number: '',
     area_name: '',
@@ -150,13 +152,15 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
     const firstConfig = configs[0]
 
     // Popula poços da área selecionada com colunas em branco: NA (m), NO (m), Observação
-    const initialReadings: NaWellReadingRow[] = (firstConfig.wells || []).map((w) => ({
+    const initialReadings: NaWellReadingRow[] = (firstConfig.wells || []).map((w, idx) => ({
+      id: `init_${idx}_${w.code}_${Date.now()}`,
       well_code: w.code,
       na_m: '',
       no_m: '',
       observation: '',
     }))
 
+    setIsCustomArea(false)
     setSheetFormData({
       contract_number: firstConfig.contract_number || '',
       area_name: firstConfig.area_name,
@@ -173,21 +177,36 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
 
   const handleOpenSheet = (sheet: NaSheet) => {
     setSelectedSheet(sheet)
+    const areaMatchesConfig = configs.some((c) => c.area_name === sheet.area_name)
+    setIsCustomArea(!areaMatchesConfig && Boolean(sheet.area_name))
     setSheetFormData({
-      ...sheet,
-      readings: sheet.readings || [],
+      contract_number: sheet.contract_number || '',
+      area_name: sheet.area_name || '',
+      date: sheet.date || '',
+      weather: sheet.weather || 'Ensolarado',
+      responsible_name: sheet.responsible_name || '',
+      status: sheet.status || 'draft',
+      notes: sheet.notes || '',
+      readings: (sheet.readings || []).map((r, idx) => ({
+        ...r,
+        id: r.id || `row_${idx}_${r.well_code}_${Date.now()}`,
+      })),
+      id: sheet.id,
+      client_token: sheet.client_token,
+      archived: sheet.archived,
     })
     setIsEditingSheet(true)
   }
 
-  // Quando o usuário seleciona uma área no preenchimento, carrega automaticamente os poços cadastrados pelo Admin
+  // Quando o usuário seleciona uma área no preenchimento, carrega automaticamente os poços cadastrados pelo Admin como base inicial
   const handleAreaChangeInSheet = (newAreaName: string) => {
     const configFound = configs.find((c) => c.area_name === newAreaName)
     const newReadings: NaWellReadingRow[] = configFound
-      ? (configFound.wells || []).map((w) => {
+      ? (configFound.wells || []).map((w, idx) => {
           // Preserva leitura anterior se mesmo poço
           const prevReading = sheetFormData.readings?.find((r) => r.well_code === w.code)
           return {
+            id: `base_${idx}_${w.code}_${Date.now()}`,
             well_code: w.code,
             na_m: prevReading?.na_m || '',
             no_m: prevReading?.no_m || '',
@@ -216,6 +235,61 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
       return {
         ...prev,
         readings: updated,
+      }
+    })
+  }
+
+  // Ações dinâmicas de poços na planilha de NA
+  const handleAddNewWellReading = () => {
+    setSheetFormData((prev) => {
+      const currentReadings = prev.readings || []
+      // Sugere próximo número sequencial (ex: se tem PM-01 a PM-04, sugere PM-05)
+      let nextWellCode = `PM-${String(currentReadings.length + 1).padStart(2, '0')}`
+      let counter = currentReadings.length + 1
+      while (
+        currentReadings.some((r) => r.well_code.trim().toUpperCase() === nextWellCode.toUpperCase())
+      ) {
+        counter++
+        nextWellCode = `PM-${String(counter).padStart(2, '0')}`
+      }
+
+      const newRow: NaWellReadingRow = {
+        id: `well_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        well_code: nextWellCode,
+        na_m: '',
+        no_m: '',
+        observation: '',
+      }
+
+      return {
+        ...prev,
+        readings: [...currentReadings, newRow],
+      }
+    })
+  }
+
+  const handleRemoveWellReading = (index: number) => {
+    setSheetFormData((prev) => {
+      const current = [...(prev.readings || [])]
+      current.splice(index, 1)
+      return {
+        ...prev,
+        readings: current,
+      }
+    })
+  }
+
+  const handleMoveWellReading = (index: number, direction: 'up' | 'down') => {
+    setSheetFormData((prev) => {
+      const current = [...(prev.readings || [])]
+      const targetIndex = direction === 'up' ? index - 1 : index + 1
+      if (targetIndex < 0 || targetIndex >= current.length) return prev
+      const temp = current[index]
+      current[index] = current[targetIndex]
+      current[targetIndex] = temp
+      return {
+        ...prev,
+        readings: current,
       }
     })
   }
@@ -404,6 +478,9 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
     // Monta matriz de 4 colunas para renderização lado a lado exatamente como no Excel
     const matrixRows = get4ColumnRows(sheetFormData.readings || [])
     const minRowsToDisplay = Math.max(matrixRows.length, 25) // Garante grade visível como no Excel
+
+    // Mapeamento preciso de cada célula da coluna para seu índice real em sheetFormData.readings
+    const cols = chunkInto4Columns(sheetFormData.readings || [])
     const displayMatrix: Array<{
       key: number
       blocks: Array<{
@@ -414,20 +491,28 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
     }> = []
 
     for (let r = 0; r < minRowsToDisplay; r++) {
-      const rowItems = r < matrixRows.length ? matrixRows[r] : [null, null, null, null]
+      const blocks = [0, 1, 2, 3].map((bIdx) => {
+        const item = cols[bIdx] && cols[bIdx][r] ? cols[bIdx][r] : null
+        let originalIdx = -1
+        if (item) {
+          if (item.id) {
+            originalIdx = (sheetFormData.readings || []).findIndex((rd) => rd.id === item.id)
+          }
+          if (originalIdx === -1) {
+            // fallback para busca por índice ou código
+            originalIdx = (sheetFormData.readings || []).indexOf(item)
+          }
+        }
+        return {
+          blockIdx: bIdx,
+          item,
+          originalIdx,
+        }
+      })
+
       displayMatrix.push({
         key: r,
-        blocks: [0, 1, 2, 3].map((bIdx) => {
-          const item = rowItems[bIdx] || null
-          const originalIdx = item
-            ? (sheetFormData.readings || []).findIndex((rd) => rd.well_code === item.well_code)
-            : -1
-          return {
-            blockIdx: bIdx,
-            item,
-            originalIdx,
-          }
-        }),
+        blocks,
       })
     }
 
@@ -470,13 +555,22 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                 </Badge>
               </h2>
               <p className="text-xs text-slate-500">
-                Digitalização fiel da planilha física · 4 blocos lado a lado · Poços bloqueados pela
-                configuração da Área
+                Digitalização fiel da planilha física · Todos os campos e poços 100% editáveis · 4
+                blocos lado a lado
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              onClick={handleAddNewWellReading}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs min-h-[38px] shadow-sm font-semibold"
+              title="Adiciona um novo poço à planilha dentro da estrutura de blocos"
+            >
+              <Plus className="mr-1.5 h-4 w-4" />＋ Adicionar Poço
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -521,32 +615,105 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
           </div>
         </div>
 
-        {/* Seletor Rápido de Área e Configuração */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
-            <span className="font-semibold text-slate-700 dark:text-slate-200">
-              Área de Monitoramento:
-            </span>
-            <select
-              value={sheetFormData.area_name || ''}
-              onChange={(e) => handleAreaChangeInSheet(e.target.value)}
-              className="h-8 rounded border border-slate-300 bg-white px-2.5 font-bold text-emerald-950 dark:border-slate-700 dark:bg-slate-950 dark:text-emerald-300"
-            >
-              {configs.map((c) => (
-                <option key={c.id} value={c.area_name}>
-                  {c.area_name} ({c.wells?.length || 0} poços cadastrados)
-                </option>
+        {/* Barra Informativa e de Controle de Poços */}
+        <div className="space-y-2 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <MapPin className="h-4 w-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                Carregar Base da Área:
+              </span>
+              <select
+                value={isCustomArea ? '__custom__' : sheetFormData.area_name || ''}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    setIsCustomArea(true)
+                  } else {
+                    setIsCustomArea(false)
+                    handleAreaChangeInSheet(e.target.value)
+                  }
+                }}
+                className="h-8 rounded border border-slate-300 bg-white px-2.5 font-semibold text-emerald-950 dark:border-slate-700 dark:bg-slate-950 dark:text-emerald-300"
+              >
+                {configs.map((c) => (
+                  <option key={c.id} value={c.area_name}>
+                    {c.area_name} ({c.wells?.length || 0} poços na base)
+                  </option>
+                ))}
+                <option value="__custom__">Outra localidade / Personalizada...</option>
+              </select>
+              {isCustomArea && (
+                <Input
+                  value={sheetFormData.area_name || ''}
+                  onChange={(e) => setSheetFormData((p) => ({ ...p, area_name: e.target.value }))}
+                  placeholder="Digite o nome da área / localidade..."
+                  className="h-8 w-60 text-xs font-semibold"
+                />
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleAddNewWellReading}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 shadow-sm font-semibold"
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />＋ Adicionar Poço
+              </Button>
+              <span className="text-slate-500 font-medium">
+                Total: <b>{sheetFormData.readings?.length || 0}</b> poço(s)
+              </span>
+            </div>
+          </div>
+
+          {/* Gerenciamento Rápido de Ordem e Poços */}
+          {(sheetFormData.readings || []).length > 0 && (
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 mr-1 flex items-center gap-1">
+                <ListOrdered className="h-3 w-3 text-emerald-600" />
+                Ordem dos poços:
+              </span>
+              {(sheetFormData.readings || []).map((r, idx) => (
+                <div
+                  key={r.id || `badge_${idx}_${r.well_code}`}
+                  className="inline-flex items-center gap-1 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded px-1.5 py-0.5 text-[11px] font-mono shadow-xs"
+                >
+                  <span className="font-bold text-emerald-900 dark:text-emerald-300">
+                    {r.well_code || `P-${idx + 1}`}
+                  </span>
+                  <div className="flex items-center">
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => handleMoveWellReading(idx, 'up')}
+                      title="Mover poço para a esquerda/anterior"
+                      className="text-slate-400 hover:text-emerald-600 disabled:opacity-20 p-0.5"
+                    >
+                      <ArrowUp className="h-2.5 w-2.5 rotate-[-90deg]" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === (sheetFormData.readings || []).length - 1}
+                      onClick={() => handleMoveWellReading(idx, 'down')}
+                      title="Mover poço para a direita/seguinte"
+                      className="text-slate-400 hover:text-emerald-600 disabled:opacity-20 p-0.5"
+                    >
+                      <ArrowDown className="h-2.5 w-2.5 rotate-[-90deg]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveWellReading(idx)}
+                      title={`Remover ${r.well_code}`}
+                      className="text-slate-400 hover:text-rose-600 p-0.5 ml-0.5"
+                    >
+                      <Trash2 className="h-2.5 w-2.5" />
+                    </button>
+                  </div>
+                </div>
               ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-2 text-slate-500">
-            <Lock className="h-3.5 w-3.5 text-slate-400" />
-            <span>
-              Poços configurados pelo Admin: <b>{sheetFormData.readings?.length || 0}</b> (célula
-              "Poço" bloqueada)
-            </span>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* ============================================================== */}
@@ -612,13 +779,25 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                   </td>
                 </tr>
 
-                {/* LINHA 3: IDENTIFICAÇÃO DO LOCAL (ex: KM244 - ALTO ALEGRE DO PINDARÉ/MA) */}
+                {/* LINHA 3: IDENTIFICAÇÃO DO LOCAL (ex: KM244 - ALTO ALEGRE DO PINDARÉ/MA) - EDITÁVEL */}
                 <tr className="border-b border-slate-300 dark:border-slate-800">
                   <td
                     colSpan={16}
-                    className="px-3 py-2 font-bold uppercase text-xs sm:text-sm text-slate-900 dark:text-slate-100 bg-slate-50/60 dark:bg-slate-900/60 border-r border-slate-300 dark:border-slate-800"
+                    className="p-1 px-3 bg-slate-50/60 dark:bg-slate-900/60 border-r border-slate-300 dark:border-slate-800"
                   >
-                    {sheetFormData.area_name || 'KM244 - <LOCALIDADE>/UF'}
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold uppercase text-slate-500 shrink-0">
+                        Localidade / Área:
+                      </span>
+                      <Input
+                        value={sheetFormData.area_name || ''}
+                        onChange={(e) =>
+                          setSheetFormData((p) => ({ ...p, area_name: e.target.value }))
+                        }
+                        placeholder="Ex.: KM244 - ALTO ALEGRE DO PINDARÉ/MA"
+                        className="h-8 max-w-lg font-bold uppercase text-xs sm:text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                      />
+                    </div>
                   </td>
                 </tr>
 
@@ -831,11 +1010,31 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                         return [
                           <td
                             key={`${keyPrefix}-poco`}
-                            className="p-1 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-900/80 border-r border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 select-none"
+                            className="p-0.5 text-center font-mono font-bold text-[11px] bg-emerald-50/30 dark:bg-slate-900/80 border-r border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 group/cell relative"
                           >
-                            <span title="Poço configurado pelo Admin (bloqueado)">
-                              {item.well_code}
-                            </span>
+                            <div className="flex items-center justify-between w-full h-full gap-0.5 px-0.5">
+                              <Input
+                                value={item.well_code || ''}
+                                onChange={(e) =>
+                                  handleUpdateReadingCell(
+                                    originalIdx,
+                                    'well_code',
+                                    e.target.value.toUpperCase(),
+                                  )
+                                }
+                                placeholder="PM-01"
+                                title="Código do poço (editável — clique para alterar)"
+                                className="h-6 w-full min-w-0 px-1 text-[11px] font-mono font-bold text-center uppercase rounded-none border-0 focus-visible:ring-1 focus-visible:ring-emerald-600 bg-transparent text-emerald-950 dark:text-emerald-200"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveWellReading(originalIdx)}
+                                title={`Excluir poço ${item.well_code || ''}`}
+                                className="opacity-0 group-hover/cell:opacity-100 text-slate-400 hover:text-rose-600 p-0.5 rounded transition shrink-0"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            </div>
                           </td>,
                           <td
                             key={`${keyPrefix}-na`}
@@ -1076,8 +1275,8 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
               </div>
             )}
             <p className="mt-4 text-[11px] text-slate-500">
-              Total de poços definidos para a área: <b>{wellsList.length}</b>. Esta lista será
-              apresentada bloqueada aos operadores durante o preenchimento de cada Planilha de NA.
+              Total de poços definidos para a área: <b>{wellsList.length}</b>. Esta lista serve como
+              base inicial configurada para o operador ao criar a Planilha de NA.
             </p>
           </CardContent>
         </Card>
@@ -1101,8 +1300,8 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
             </Badge>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Controle do nível de água (NA) e óleo (NO) por área com carregamento e bloqueio
-            automático de poços.
+            Controle do nível de água (NA) e óleo (NO) por área com base inicial de poços e edição
+            livre.
           </p>
         </div>
 
@@ -1150,18 +1349,20 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
               <ShieldCheck className="h-5 w-5 text-emerald-700 shrink-0 mt-0.5 dark:text-emerald-400" />
               <div className="space-y-1 leading-relaxed">
                 <p className="font-semibold text-emerald-900 dark:text-emerald-100">
-                  Fluxo Padronizado do Monitoramento de NA:
+                  Diretrizes da Planilha de Monitoramento de NA:
                 </p>
                 <p>
-                  <b>1. Admin:</b> Define as Áreas e cadastra a lista dinâmica de poços.
+                  <b>1. Base Inicial:</b> Ao iniciar uma planilha ou selecionar uma área, os poços
+                  cadastrados pelo Administrador são carregados como base inicial.
                 </p>
                 <p>
-                  <b>2. Operador:</b> Inicia uma Nova Planilha de NA, seleciona a Área e o sistema
-                  carrega automaticamente todos os poços cadastrados já <b>bloqueados</b>.
+                  <b>2. 100% Editável:</b> Todos os campos são editáveis — Contrato, Local/Área,
+                  Data, Clima, Código do Poço, NA (m), NO (m), Obs. e Observações gerais.
                 </p>
                 <p>
-                  <b>3. Preenchimento:</b> O técnico informa apenas NA (m), NO (m), Observações e
-                  Clima, sem digitar nem alterar o código dos poços.
+                  <b>3. Liberdade de Poços:</b> Adicione quantos poços forem necessários pelo botão{' '}
+                  <b>"＋ Adicionar Poço"</b>, edite nomes/códigos, exclua ou reordene conforme a
+                  rotina de campo, mantendo sempre o layout original em 4 blocos.
                 </p>
               </div>
             </div>
