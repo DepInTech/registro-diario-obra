@@ -8,7 +8,8 @@ routerAdd(
       throw new ForbiddenError('Acesso não autorizado para auditoria de exportação')
     }
     const body = e.requestInfo().body
-    const action = body.action === 'export_excel' ? 'export_excel' : 'export_pdf'
+    let action = body.action === 'export_excel' ? 'export_excel' : 'export_pdf'
+    if (body.action === 'add_well') action = 'add_well'
     const logs = $app.findCollectionByNameOrId('audit_logs')
     const log = new Record(logs)
     log.set('actor', auth.id)
@@ -17,7 +18,9 @@ routerAdd(
     log.set('entity_record', String(body.entity_record || ''))
     log.set('details', {
       filename: String(body.filename || ''),
-      format: action === 'export_excel' ? 'Excel' : 'PDF',
+      format: action === 'export_excel' ? 'Excel' : action === 'add_well' ? 'Well' : 'PDF',
+      well_code: String(body.well_code || ''),
+      label: String(body.label || ''),
       server_timestamp: log.getString('created') || new Date().toISOString(),
     })
     $app.save(log)

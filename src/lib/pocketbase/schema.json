@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-01T13:27:03.145Z",
+  "generatedAt": "2026-10-01T18:22:20.890Z",
   "collections": [
     {
       "name": "users",
@@ -1083,7 +1083,8 @@
             "approve",
             "return",
             "archive",
-            "unarchive"
+            "unarchive",
+            "add_well"
           ]
         },
         {

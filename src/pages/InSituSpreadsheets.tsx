@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { applyDateMask, isValidBrDate } from '@/lib/dateMask'
 import { inSituService } from '@/services/inSituAndNaService'
+import { auditExport } from '@/services/epa'
 import type { InSituSheet, InSituNutrientRowData } from '@/types/inSituAndNa'
 
 export function InSituPage({ query = '' }: { query?: string }) {
@@ -408,7 +409,20 @@ export function InSituPage({ query = '' }: { query?: string }) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => printInSituSheet(formData as InSituSheet)}
+            onClick={async () => {
+              try {
+                auditExport(
+                  'export_pdf',
+                  'in_situ_sheets',
+                  selectedSheet?.id || formData.project_name || 'in_situ',
+                  `Planilha_In_Situ_${formData.project_name || 'EPA'}.pdf`,
+                  { label: `Planilha In-Situ · ${formData.project_name || '21-0229'}` },
+                ).catch(() => {})
+              } catch {
+                /* intentionally ignored */
+              }
+              printInSituSheet(formData as InSituSheet)
+            }}
             className="text-xs min-h-[36px] border-sky-400 text-sky-900 hover:bg-sky-50 dark:border-sky-700 dark:text-sky-300 font-semibold"
             title="Exporta o PDF ou imprime com layout idêntico ao documento original REV 02"
           >

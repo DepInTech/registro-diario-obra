@@ -95,6 +95,14 @@ onRecordAfterUpdateSuccess(
           const dt = e.record.getString('date') ? e.record.getString('date').slice(0, 10) : ''
           const area = e.record.getString('area') || ''
           label = `Planilha Nº ${num > 0 ? num : e.record.id} · ${dt} (${area})`
+        } else if (entity === 'in_situ_sheets') {
+          const proj = e.record.getString('project_name') || ''
+          const sys = e.record.getString('system_name') || ''
+          label = `Medição In-Situ · ${proj}${sys ? ` (${sys})` : ''}`
+        } else if (entity === 'na_sheets') {
+          const area = e.record.getString('area_name') || ''
+          const dt = e.record.getString('date') ? e.record.getString('date').slice(0, 10) : ''
+          label = `Planilha de NA · ${area}${dt ? ` (${dt})` : ''}`
         }
       } catch (_) {}
 
@@ -129,5 +137,8 @@ onRecordAfterUpdateSuccess(
   'report_wells',
   'report_photos',
   'field_spreadsheets',
+  'in_situ_sheets',
+  'na_sheets',
+  'na_area_configs',
   'users',
 )

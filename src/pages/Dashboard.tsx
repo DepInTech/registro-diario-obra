@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  Activity,
   AlertTriangle,
   ArrowDownRight,
   ArrowRight,
@@ -14,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   Users,
+  Waves,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/context/AuthContext'
@@ -27,6 +29,7 @@ import { offlineStorage } from '@/services/offlineStorage'
 import { Page } from '@/components/Layout'
 import { projects as staticProjects, type EpaProject } from '@/data/epa'
 import pb from '@/lib/pocketbase/client'
+import { inSituService, naSheetService } from '@/services/inSituAndNaService'
 
 export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
   const { user } = useAuth()
@@ -34,6 +37,8 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
   const [rdoCount, setRdoCount] = useState<number>(0)
   const [pendingRdos, setPendingRdos] = useState<number>(0)
   const [sheetCount, setSheetCount] = useState<number>(0)
+  const [inSituCount, setInSituCount] = useState<number>(0)
+  const [naSheetCount, setNaSheetCount] = useState<number>(0)
   const [userCount, setUserCount] = useState<number>(4)
   const [projectsList, setProjectsList] = useState(staticProjects)
   const [recentActivities, setRecentActivities] = useState<
@@ -81,9 +86,17 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
       // 1. Se online e PocketBase disponível, consulta diretamente o servidor e purga itens obsoletos locais
       if (navigator.onLine && pb.authStore.isValid) {
         try {
-          const [serverRdos, serverSheets] = await Promise.all([
+          const [serverRdos, serverSheets, serverInSitu, serverNaSheets] = await Promise.all([
             pb.collection('reports_rdo').getFullList({ sort: '-created' }),
             pb.collection('field_spreadsheets').getFullList({ sort: '-created' }),
+            pb
+              .collection('in_situ_sheets')
+              .getFullList({ sort: '-created' })
+              .catch(() => []),
+            pb
+              .collection('na_sheets')
+              .getFullList({ sort: '-created' })
+              .catch(() => []),
           ])
 
           const serverRdoIds = new Set(serverRdos.map((r) => r.id))
@@ -122,6 +135,12 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
           )
           const activeServerSheets = serverSheets.filter((s) => !s.deleted)
           setSheetCount(activeServerSheets.length + pendingNewSheets.length)
+
+          const activeInSitu = serverInSitu.filter((s: any) => !s.deleted && !s.archived)
+          setInSituCount(activeInSitu.length)
+
+          const activeNa = serverNaSheets.filter((s: any) => !s.deleted && !s.archived)
+          setNaSheetCount(activeNa.length)
         } catch (serverFetchErr) {
           console.warn(
             'Could not fetch server counts directly, using offline cache:',
@@ -137,6 +156,11 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
           const sheets = await offlineStorage.getAllFieldSheets()
           const activeSheets = sheets.filter((s) => !s.deleted)
           setSheetCount(activeSheets.length)
+
+          const cachedInSitu = await inSituService.listSheets()
+          setInSituCount(cachedInSitu.filter((s) => !s.archived).length)
+          const cachedNa = await naSheetService.listSheets()
+          setNaSheetCount(cachedNa.filter((s) => !s.archived).length)
         }
       } else {
         const defaultWipe = new Date('2025-05-28T00:00:00Z').getTime()
@@ -149,6 +173,11 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         const sheets = await offlineStorage.getAllFieldSheets()
         const activeSheets = sheets.filter((s) => !s.deleted)
         setSheetCount(activeSheets.length)
+
+        const cachedInSitu = await inSituService.listSheets()
+        setInSituCount(cachedInSitu.filter((s) => !s.archived).length)
+        const cachedNa = await naSheetService.listSheets()
+        setNaSheetCount(cachedNa.filter((s) => !s.archived).length)
       }
 
       if (navigator.onLine && pb.authStore.isValid && user?.role === 'admin') {
@@ -237,20 +266,33 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
         // Buscar do servidor se online
         if (navigator.onLine && pb.authStore.isValid) {
           try {
-            const [recentRdos, recentSheets, recentLogs] = await Promise.all([
-              pb.collection('reports_rdo').getList(1, 10, {
-                sort: '-created',
-                expand: 'performed_by,project',
-              }),
-              pb.collection('field_spreadsheets').getList(1, 10, {
-                sort: '-created',
-                expand: 'operator,project',
-              }),
-              pb.collection('audit_logs').getList(1, 10, {
-                sort: '-created',
-                expand: 'actor',
-              }),
-            ])
+            const [recentRdos, recentSheets, recentInSitu, recentNa, recentLogs] =
+              await Promise.all([
+                pb.collection('reports_rdo').getList(1, 10, {
+                  sort: '-created',
+                  expand: 'performed_by,project',
+                }),
+                pb.collection('field_spreadsheets').getList(1, 10, {
+                  sort: '-created',
+                  expand: 'operator,project',
+                }),
+                pb
+                  .collection('in_situ_sheets')
+                  .getList(1, 10, {
+                    sort: '-created',
+                  })
+                  .catch(() => ({ items: [] })),
+                pb
+                  .collection('na_sheets')
+                  .getList(1, 10, {
+                    sort: '-created',
+                  })
+                  .catch(() => ({ items: [] })),
+                pb.collection('audit_logs').getList(1, 20, {
+                  sort: '-created',
+                  expand: 'actor',
+                }),
+              ])
 
             // Processar RDOs do servidor
             for (const r of recentRdos.items) {
@@ -310,6 +352,53 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               })
             }
 
+            // Processar In-Situ do servidor
+            for (const ins of recentInSitu.items) {
+              const proj = ins.project_name || '21-0229'
+              const sys = ins.system_name ? ` (${ins.system_name})` : ''
+              const userName = ins.responsible_name || 'Técnico EPA'
+              const timeDisplay = formatFullDateTime(ins.created)
+              const sortTimestamp = ins.created ? new Date(ins.created).getTime() : 0
+
+              let actionText = 'criou uma nova medição In-Situ'
+              if (ins.status === 'submitted') actionText = 'enviou a medição In-Situ'
+              else if (ins.status === 'approved') actionText = 'aprovou a medição In-Situ'
+
+              activities.push({
+                id: `server_insitu_${ins.id}`,
+                user: userName,
+                initials: getInitials(userName),
+                action: actionText,
+                entity: `Projeto ${proj}${sys}`,
+                time: timeDisplay,
+                sortNumber: 0,
+                sortTimestamp,
+              })
+            }
+
+            // Processar Planilhas de NA do servidor
+            for (const na of recentNa.items) {
+              const area = na.area_name || 'Área de Monitoramento'
+              const userName = na.responsible_name || 'Técnico EPA'
+              const timeDisplay = formatFullDateTime(na.created)
+              const sortTimestamp = na.created ? new Date(na.created).getTime() : 0
+
+              let actionText = 'criou uma Planilha de NA'
+              if (na.status === 'submitted') actionText = 'enviou a Planilha de NA'
+              else if (na.status === 'approved') actionText = 'aprovou a Planilha de NA'
+
+              activities.push({
+                id: `server_na_${na.id}`,
+                user: userName,
+                initials: getInitials(userName),
+                action: actionText,
+                entity: `Área: ${area}`,
+                time: timeDisplay,
+                sortNumber: 0,
+                sortTimestamp,
+              })
+            }
+
             // Processar Logs de Auditoria do servidor
             for (const log of recentLogs.items) {
               const actor = (log.expand?.actor as any) || {}
@@ -330,13 +419,31 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               else if (log.action === 'delete') actionText = 'excluiu registro definitivamente'
               else if (log.action === 'approve') actionText = 'aprovou o relatório'
               else if (log.action === 'return') actionText = 'devolveu para correção'
-              else if (log.action === 'create') actionText = 'criou o registro'
-              else if (log.action === 'update') actionText = 'atualizou informações'
+              else if (log.action === 'create') {
+                if (log.entity === 'in_situ_sheets') actionText = 'criou uma nova medição In-Situ'
+                else if (log.entity === 'na_sheets') actionText = 'criou uma Planilha de NA'
+                else actionText = 'criou o registro'
+              } else if (log.action === 'update') {
+                if (log.entity === 'in_situ_sheets') actionText = 'editou a medição In-Situ'
+                else if (log.entity === 'na_sheets') actionText = 'editou a Planilha de NA'
+                else actionText = 'atualizou informações'
+              } else if (log.action === 'export_pdf' || log.action === 'export_excel') {
+                if (log.entity === 'in_situ_sheets') actionText = 'exportou a medição In-Situ'
+                else if (log.entity === 'na_sheets') actionText = 'exportou uma Planilha de NA'
+                else actionText = `exportou o relatório (${details.format || 'PDF'})`
+              } else if (log.action === 'add_well') {
+                actionText = details.well_code
+                  ? `adicionou o poço ${details.well_code} à Planilha de NA`
+                  : 'adicionou um poço à Planilha de NA'
+              }
 
               let entityText = log.entity
               if (log.entity === 'projects') entityText = 'Projeto'
               else if (log.entity === 'reports_rdo') entityText = 'RDO'
               else if (log.entity === 'field_spreadsheets') entityText = 'Planilha de Campo'
+              else if (log.entity === 'in_situ_sheets') entityText = 'Medição In-Situ'
+              else if (log.entity === 'na_sheets') entityText = 'Planilha de NA'
+              else if (log.entity === 'na_area_configs') entityText = 'Configuração de Área'
               else if (log.entity === 'users') entityText = 'Usuários'
               else if (log.entity === 'system_reset') entityText = 'Sistema'
 
@@ -344,7 +451,8 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                 id: `log_${log.id}`,
                 user: userName,
                 initials: getInitials(userName),
-                action: label ? `${actionText} (${label})` : actionText,
+                action:
+                  label && log.action !== 'add_well' ? `${actionText} (${label})` : actionText,
                 entity: entityText,
                 time: timeDisplay,
                 sortNumber: 0,
@@ -358,9 +466,11 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
         // Complementar / Fallback com offlineStorage
         try {
-          const [offlineRdos, offlineSheets] = await Promise.all([
+          const [offlineRdos, offlineSheets, offlineInSitu, offlineNa] = await Promise.all([
             offlineStorage.getAllRdos(),
             offlineStorage.getAllFieldSheets(),
+            inSituService.listSheets().catch(() => []),
+            naSheetService.listSheets().catch(() => []),
           ])
 
           const existingIds = new Set(activities.map((a) => a.id))
@@ -415,6 +525,50 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               entity: `${s.projectName || 'Projeto'} · Área ${s.area || 'Geral'}`,
               time: timeDisplay,
               sortNumber: num,
+              sortTimestamp,
+            })
+          }
+
+          for (const ins of offlineInSitu) {
+            const sid = `server_insitu_${ins.id}`
+            const oid = `offline_insitu_${ins.id}`
+            if (existingIds.has(sid) || existingIds.has(oid)) continue
+
+            const userName = ins.responsible_name || user?.name || 'Técnico EPA'
+            const timeVal = ins.created || ins.updated || ''
+            const timeDisplay = formatFullDateTime(timeVal)
+            const sortTimestamp = timeVal ? new Date(timeVal).getTime() : 0
+
+            activities.push({
+              id: oid,
+              user: userName,
+              initials: getInitials(userName),
+              action: 'registrou medição In-Situ',
+              entity: `Projeto ${ins.project_name || '21-0229'}`,
+              time: timeDisplay,
+              sortNumber: 0,
+              sortTimestamp,
+            })
+          }
+
+          for (const na of offlineNa) {
+            const sid = `server_na_${na.id}`
+            const oid = `offline_na_${na.id}`
+            if (existingIds.has(sid) || existingIds.has(oid)) continue
+
+            const userName = na.responsible_name || user?.name || 'Técnico EPA'
+            const timeVal = na.created || na.updated || ''
+            const timeDisplay = formatFullDateTime(timeVal)
+            const sortTimestamp = timeVal ? new Date(timeVal).getTime() : 0
+
+            activities.push({
+              id: oid,
+              user: userName,
+              initials: getInitials(userName),
+              action: 'registrou Planilha de NA',
+              entity: `Área: ${na.area_name || 'Geral'}`,
+              time: timeDisplay,
+              sortNumber: 0,
               sortTimestamp,
             })
           }
@@ -512,6 +666,10 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
       if (
         col === 'reports_rdo' ||
         col === 'field_spreadsheets' ||
+        col === 'in_situ_sheets' ||
+        col === 'na_sheets' ||
+        col === 'na_area_configs' ||
+        col === 'audit_logs' ||
         col === 'projects' ||
         col === 'users'
       ) {
@@ -561,6 +719,26 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
               Planilha de Campo
             </Button>
           )}
+          {(user?.role === 'admin' || user?.role === 'technician') && (
+            <Button
+              onClick={() => navigate('insitu')}
+              variant="outline"
+              className="w-full sm:w-auto bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs justify-center"
+            >
+              <Activity className="mr-2 h-4 w-4 shrink-0" />
+              Nova Medição In-Situ
+            </Button>
+          )}
+          {(user?.role === 'admin' || user?.role === 'technician') && (
+            <Button
+              onClick={() => navigate('na_monitoring')}
+              variant="outline"
+              className="w-full sm:w-auto bg-white/10 text-white hover:bg-white/20 border-white/20 min-h-[44px] font-semibold text-xs justify-center"
+            >
+              <Waves className="mr-2 h-4 w-4 shrink-0" />
+              Nova Planilha de NA
+            </Button>
+          )}
           {user?.role === 'admin' && (
             <Button
               onClick={() => navigate('projects')}
@@ -575,7 +753,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
       </section>
 
       {/* Main KPI Counters */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         {[
           {
             label: 'Projetos ativos',
@@ -608,6 +786,28 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
             color: 'teal',
             up: true,
             page: 'fields' as Page,
+            visible: true,
+          },
+          {
+            label: 'Medições In-Situ',
+            value: String(inSituCount),
+            helper: 'registros realizados',
+            trend: `${inSituCount} ativas`,
+            icon: Activity,
+            color: 'cyan',
+            up: true,
+            page: 'insitu' as Page,
+            visible: true,
+          },
+          {
+            label: 'Planilhas de NA',
+            value: String(naSheetCount),
+            helper: 'monitoramentos realizados',
+            trend: `${naSheetCount} ativas`,
+            icon: Waves,
+            color: 'sky',
+            up: true,
+            page: 'na_monitoring' as Page,
             visible: true,
           },
           {
@@ -808,6 +1008,42 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                     <p className="text-xs font-semibold">Preencher Planilha de Campo</p>
                     <p className="text-[10px] text-slate-500">
                       Extração, nutrientes, compressores e 5S
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-slate-400" />
+              </button>
+            )}
+
+            {(user?.role === 'admin' || user?.role === 'technician') && (
+              <button
+                onClick={() => navigate('insitu')}
+                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+              >
+                <div className="flex items-center gap-3">
+                  <Activity className="h-5 w-5 text-cyan-600" />
+                  <div>
+                    <p className="text-xs font-semibold">Medições In-Situ</p>
+                    <p className="text-[10px] text-slate-500">
+                      Registrar e consultar medições de parâmetros In-Situ
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="h-4 w-4 text-slate-400" />
+              </button>
+            )}
+
+            {(user?.role === 'admin' || user?.role === 'technician') && (
+              <button
+                onClick={() => navigate('na_monitoring')}
+                className="flex items-center justify-between rounded-xl border p-3 text-left hover:border-emerald-400 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:bg-slate-900/60"
+              >
+                <div className="flex items-center gap-3">
+                  <Waves className="h-5 w-5 text-sky-600" />
+                  <div>
+                    <p className="text-xs font-semibold">Planilha de NA</p>
+                    <p className="text-[10px] text-slate-500">
+                      Registrar e consultar monitoramentos do nível d'água
                     </p>
                   </div>
                 </div>

@@ -108,12 +108,13 @@ export async function createReport(
 export const fileUrl = (record: RecordModel, filename?: string) =>
   filename ? pb.files.getURL(record, filename) : ''
 export const auditExport = (
-  action: 'export_pdf' | 'export_excel',
+  action: 'export_pdf' | 'export_excel' | 'add_well',
   entity: string,
   entityRecord: string,
   filename: string,
+  extra?: { well_code?: string; label?: string },
 ) =>
   pb.send('/backend/v1/epa/audit-export', {
     method: 'POST',
-    body: { action, entity, entity_record: entityRecord, filename },
+    body: { action, entity, entity_record: entityRecord, filename, ...extra },
   })

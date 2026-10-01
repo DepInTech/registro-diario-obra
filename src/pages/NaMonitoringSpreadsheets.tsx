@@ -37,6 +37,7 @@ import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { applyDateMask, isValidBrDate } from '@/lib/dateMask'
 import { naConfigService, naSheetService } from '@/services/inSituAndNaService'
+import { auditExport } from '@/services/epa'
 import type { NaAreaConfig, NaSheet, NaWellReadingRow } from '@/types/inSituAndNa'
 
 const FIXED_WEATHER_CHOICES = ['Ensolarado', 'Chuvoso', 'Instável']
@@ -259,6 +260,21 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
         na_m: '',
         no_m: '',
         observation: '',
+      }
+
+      try {
+        auditExport(
+          'add_well',
+          'na_sheets',
+          selectedSheet?.id || prev.area_name || 'na_sheet',
+          `poco_${nextWellCode}`,
+          {
+            well_code: nextWellCode,
+            label: `poço ${nextWellCode} à Planilha de NA (${prev.area_name || 'Geral'})`,
+          },
+        ).catch(() => {})
+      } catch {
+        /* intentionally ignored */
       }
 
       return {
@@ -574,7 +590,20 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => printNaSheet(sheetFormData as NaSheet)}
+              onClick={async () => {
+                try {
+                  auditExport(
+                    'export_pdf',
+                    'na_sheets',
+                    selectedSheet?.id || sheetFormData.area_name || 'na_sheet',
+                    `Planilha_NA_${sheetFormData.area_name || 'EPA'}.pdf`,
+                    { label: `Planilha de NA · ${sheetFormData.area_name || 'Geral'}` },
+                  ).catch(() => {})
+                } catch {
+                  /* intentionally ignored */
+                }
+                printNaSheet(sheetFormData as NaSheet)
+              }}
               className="text-xs min-h-[38px] border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 font-semibold"
               title="Exporta o PDF ou abre visualização para impressão fiel ao modelo oficial"
             >
