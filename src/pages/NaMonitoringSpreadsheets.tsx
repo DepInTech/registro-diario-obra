@@ -15,7 +15,7 @@ import {
   MapPin,
   HelpCircle,
 } from 'lucide-react'
-import { printNaSheet, chunkInto4Columns } from '@/services/naSheetExport'
+import { printNaSheet, chunkInto4Columns, get4ColumnRows } from '@/services/naSheetExport'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -401,10 +401,40 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
       rawWeather === 'Outros' || (rawWeather !== '' && !FIXED_WEATHER_CHOICES.includes(rawWeather))
     const displayWeather = rawWeather === 'Outros' ? '' : rawWeather
 
+    // Monta matriz de 4 colunas para renderização lado a lado exatamente como no Excel
+    const matrixRows = get4ColumnRows(sheetFormData.readings || [])
+    const minRowsToDisplay = Math.max(matrixRows.length, 25) // Garante grade visível como no Excel
+    const displayMatrix: Array<{
+      key: number
+      blocks: Array<{
+        blockIdx: number
+        item: NaWellReadingRow | null
+        originalIdx: number
+      }>
+    }> = []
+
+    for (let r = 0; r < minRowsToDisplay; r++) {
+      const rowItems = r < matrixRows.length ? matrixRows[r] : [null, null, null, null]
+      displayMatrix.push({
+        key: r,
+        blocks: [0, 1, 2, 3].map((bIdx) => {
+          const item = rowItems[bIdx] || null
+          const originalIdx = item
+            ? (sheetFormData.readings || []).findIndex((rd) => rd.well_code === item.well_code)
+            : -1
+          return {
+            blockIdx: bIdx,
+            item,
+            originalIdx,
+          }
+        }),
+      })
+    }
+
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Barra superior de ações */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -440,8 +470,8 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                 </Badge>
               </h2>
               <p className="text-xs text-slate-500">
-                Poços carregados automaticamente pela Área configurada · Nível d'Água (m) e Nível de
-                Óleo (m)
+                Digitalização fiel da planilha física · 4 blocos lado a lado · Poços bloqueados pela
+                configuração da Área
               </p>
             </div>
           </div>
@@ -451,8 +481,8 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
               variant="outline"
               size="sm"
               onClick={() => printNaSheet(sheetFormData as NaSheet)}
-              className="text-xs min-h-[38px] border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300"
-              title="Exporta o PDF ou abre visualização para impressão fiel ao documento físico"
+              className="text-xs min-h-[38px] border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 font-semibold"
+              title="Exporta o PDF ou abre visualização para impressão fiel ao modelo oficial"
             >
               <FileDown className="mr-1.5 h-3.5 w-3.5" />
               Exportar PDF / Imprimir
@@ -483,7 +513,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
             <Button
               size="sm"
               onClick={() => handleSaveSheet('submitted')}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs min-h-[38px] shadow-sm"
+              className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs min-h-[38px] shadow-sm font-semibold"
             >
               <Send className="mr-1.5 h-3.5 w-3.5" />
               Enviar / Salvar
@@ -491,285 +521,393 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
           </div>
         </div>
 
-        {/* Informações da Ficha e Seleção de Área */}
-        <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardHeader className="bg-slate-50/80 dark:bg-slate-900/50 pb-4 border-b border-slate-200 dark:border-slate-800">
-            <CardTitle className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300 flex items-center gap-2">
-              <MapPin className="h-4 w-4" />
-              Identificação da Área e Condições Operacionais
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Ao selecionar a Área, os poços cadastrados pelo Administrador são carregados e
-              bloqueados automaticamente.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Nº Contrato
-              </label>
-              <Input
-                value={sheetFormData.contract_number || ''}
-                onChange={(e) =>
-                  setSheetFormData((p) => ({ ...p, contract_number: e.target.value }))
-                }
-                placeholder="Ex.: CT 5900089378"
-                className="mt-1 h-9 text-xs sm:text-sm font-semibold"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Local / Área *
-              </label>
-              <select
-                value={sheetFormData.area_name || ''}
-                onChange={(e) => handleAreaChangeInSheet(e.target.value)}
-                className="mt-1 flex h-9 w-full rounded-md border border-slate-200 bg-white px-3 py-1 text-xs sm:text-sm shadow-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
-              >
-                {configs.map((c) => (
-                  <option key={c.id} value={c.area_name}>
-                    {c.area_name} ({c.wells?.length || 0} poços)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Data (DD/MM/AAAA) *
-              </label>
-              <Input
-                value={sheetFormData.date || ''}
-                onChange={(e) =>
-                  setSheetFormData((p) => ({ ...p, date: applyDateMask(e.target.value) }))
-                }
-                placeholder="DD/MM/AAAA"
-                maxLength={10}
-                className={cn(
-                  'mt-1 h-9 text-xs sm:text-sm font-mono text-center',
-                  sheetFormData.date &&
-                    !isValidBrDate(sheetFormData.date) &&
-                    'border-rose-500 bg-rose-50',
-                )}
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Clima
-              </label>
-              {isOtherWeather ? (
-                <div className="mt-1 flex items-center gap-1">
-                  <Input
-                    value={displayWeather}
-                    onChange={(e) => setSheetFormData((p) => ({ ...p, weather: e.target.value }))}
-                    placeholder="Descreva o clima..."
-                    className="h-9 text-xs flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSheetFormData((p) => ({ ...p, weather: 'Ensolarado' }))}
-                    className="h-9 px-2 text-[10px] shrink-0"
-                  >
-                    Opções
-                  </Button>
-                </div>
-              ) : (
-                <select
-                  value={rawWeather}
-                  onChange={(e) =>
-                    setSheetFormData((p) => ({
-                      ...p,
-                      weather: e.target.value === 'Outros' ? 'Outros' : e.target.value,
-                    }))
-                  }
-                  className="mt-1 h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs dark:border-slate-800 dark:bg-slate-950"
-                >
-                  <option value="Ensolarado">Ensolarado</option>
-                  <option value="Chuvoso">Chuvoso</option>
-                  <option value="Instável">Instável</option>
-                  <option value="Outros">Outros</option>
-                </select>
-              )}
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Responsável pelas Medições
-              </label>
-              <Input
-                value={sheetFormData.responsible_name || ''}
-                onChange={(e) =>
-                  setSheetFormData((p) => ({ ...p, responsible_name: e.target.value }))
-                }
-                placeholder="Nome do técnico"
-                className="mt-1 h-9 text-xs sm:text-sm"
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Aviso de Regra de Bloqueio dos Poços pelo Admin */}
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3.5 text-xs text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200 flex items-center gap-2.5">
-          <Lock className="h-4 w-4 text-emerald-700 shrink-0 dark:text-emerald-400" />
-          <div className="leading-relaxed">
-            <b>Poços Bloqueados:</b> Os poços abaixo foram configurados previamente pelo
-            Administrador para a área <b>{sheetFormData.area_name}</b>. O operador preenche apenas
-            NA (m), NO (m) e Observação. Para incluir ou alterar poços da área, contate o
-            Administrador na aba "Configuração de NA".
+        {/* Seletor Rápido de Área e Configuração */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-emerald-700 dark:text-emerald-400 shrink-0" />
+            <span className="font-semibold text-slate-700 dark:text-slate-200">
+              Área de Monitoramento:
+            </span>
+            <select
+              value={sheetFormData.area_name || ''}
+              onChange={(e) => handleAreaChangeInSheet(e.target.value)}
+              className="h-8 rounded border border-slate-300 bg-white px-2.5 font-bold text-emerald-950 dark:border-slate-700 dark:bg-slate-950 dark:text-emerald-300"
+            >
+              {configs.map((c) => (
+                <option key={c.id} value={c.area_name}>
+                  {c.area_name} ({c.wells?.length || 0} poços cadastrados)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 text-slate-500">
+            <Lock className="h-3.5 w-3.5 text-slate-400" />
+            <span>
+              Poços configurados pelo Admin: <b>{sheetFormData.readings?.length || 0}</b> (célula
+              "Poço" bloqueada)
+            </span>
           </div>
         </div>
 
-        {/* Tabela Fiel ao Modelo Físico: 4 Blocos Lado a Lado (Desktop) / Empilhado Responsivo (Mobile) */}
-        <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40">
-            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <CardTitle className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300 flex items-center gap-2">
-                  <span>Monitoramento do Nível d'Água — {sheetFormData.area_name}</span>
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Layout de 4 blocos verticais lado a lado com preenchimento contínuo fiel à
-                  planilha física.
-                </CardDescription>
-              </div>
-              <span className="text-xs font-semibold text-slate-500 bg-slate-200 dark:bg-slate-800 px-2.5 py-1 rounded">
-                {sheetFormData.readings?.length || 0} poços na configuração
-              </span>
-            </div>
-          </CardHeader>
-          <CardContent className="p-2 sm:p-4">
-            {!sheetFormData.readings || sheetFormData.readings.length === 0 ? (
-              <div className="py-10 text-center text-slate-500 text-xs">
-                Nenhum poço encontrado na configuração desta área. Selecione outra área ou configure
-                os poços como Administrador.
-              </div>
-            ) : (
-              /* Grid de 4 Blocos Lado a Lado (Desktop) / 1 ou 2 Blocos (Mobile/Tablet) */
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                {(() => {
-                  const cols = chunkInto4Columns(sheetFormData.readings || [])
-                  return cols.map((colItems, colIdx) => {
-                    return (
-                      <div
-                        key={colIdx}
-                        className="rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 overflow-hidden shadow-sm"
-                      >
-                        <div className="bg-slate-200 dark:bg-slate-800 px-2.5 py-1.5 text-center text-[11px] font-bold text-slate-800 dark:text-slate-200 border-b border-slate-300 dark:border-slate-700">
-                          Bloco {colIdx + 1} ({colItems.length} poços)
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full border-collapse text-left text-xs">
-                            <thead>
-                              <tr className="bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-[10px] uppercase font-bold border-b border-slate-300 dark:border-slate-700">
-                                <th className="p-1.5 text-center border-r border-slate-200 dark:border-slate-800 w-[24%]">
-                                  Poço
-                                </th>
-                                <th className="p-1.5 text-center border-r border-slate-200 dark:border-slate-800 w-[22%]">
-                                  NA (m)
-                                </th>
-                                <th className="p-1.5 text-center border-r border-slate-200 dark:border-slate-800 w-[22%]">
-                                  NO (m)
-                                </th>
-                                <th className="p-1.5 text-center w-[32%]">Obs.</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                              {colItems.map((reading) => {
-                                // Acha o índice original no array completo para atualização
-                                const originalIdx = (sheetFormData.readings || []).findIndex(
-                                  (r) => r.well_code === reading.well_code,
-                                )
-                                return (
-                                  <tr
-                                    key={reading.well_code}
-                                    className="hover:bg-slate-50 dark:hover:bg-slate-900/60"
-                                  >
-                                    <td className="p-1 text-center font-bold font-mono text-[11px] bg-slate-50/80 dark:bg-slate-900/80 border-r border-slate-200 dark:border-slate-800 text-emerald-950 dark:text-emerald-300">
-                                      <div className="flex items-center justify-center gap-1">
-                                        <Lock className="h-2.5 w-2.5 text-slate-400" />
-                                        <span>{reading.well_code}</span>
-                                      </div>
-                                    </td>
-                                    <td className="p-1 border-r border-slate-200 dark:border-slate-800">
-                                      <Input
-                                        inputMode="decimal"
-                                        value={reading.na_m}
-                                        onChange={(e) =>
-                                          handleUpdateReadingCell(
-                                            originalIdx,
-                                            'na_m',
-                                            e.target.value,
-                                          )
-                                        }
-                                        placeholder="0,00"
-                                        className="h-7 px-1 text-[11px] font-mono text-right"
-                                      />
-                                    </td>
-                                    <td className="p-1 border-r border-slate-200 dark:border-slate-800">
-                                      <Input
-                                        inputMode="decimal"
-                                        value={reading.no_m}
-                                        onChange={(e) =>
-                                          handleUpdateReadingCell(
-                                            originalIdx,
-                                            'no_m',
-                                            e.target.value,
-                                          )
-                                        }
-                                        placeholder="0,00"
-                                        className="h-7 px-1 text-[11px] font-mono text-right"
-                                      />
-                                    </td>
-                                    <td className="p-1">
-                                      <Input
-                                        value={reading.observation}
-                                        onChange={(e) =>
-                                          handleUpdateReadingCell(
-                                            originalIdx,
-                                            'observation',
-                                            e.target.value,
-                                          )
-                                        }
-                                        placeholder="Obs..."
-                                        className="h-7 px-1 text-[11px]"
-                                      />
-                                    </td>
-                                  </tr>
-                                )
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )
-                  })
-                })()}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* ============================================================== */}
+        {/* DIGITALIZAÇÃO DA PLANILHA FÍSICA (LAYOUT OFICIAL DO EXCEL)     */}
+        {/* 16 Colunas: 4 blocos de [Poço | NA (m) | NO (m) | Obs.]        */}
+        {/* ============================================================== */}
+        <div className="rounded-lg border-2 border-slate-400 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-sm overflow-hidden">
+          {/* Container com scroll horizontal em telas menores para NUNCA quebrar a estrutura em cards */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] border-collapse text-xs table-fixed">
+              <colgroup>
+                {/* Bloco 1 (4 colunas) */}
+                <col className="w-[8%]" />
+                <col className="w-[6%]" />
+                <col className="w-[6%]" />
+                <col className="w-[5%]" />
+                {/* Bloco 2 (4 colunas) */}
+                <col className="w-[8%]" />
+                <col className="w-[6%]" />
+                <col className="w-[6%]" />
+                <col className="w-[5%]" />
+                {/* Bloco 3 (4 colunas) */}
+                <col className="w-[8%]" />
+                <col className="w-[6%]" />
+                <col className="w-[6%]" />
+                <col className="w-[5%]" />
+                {/* Bloco 4 (4 colunas) */}
+                <col className="w-[8%]" />
+                <col className="w-[6%]" />
+                <col className="w-[6%]" />
+                <col className="w-[5%]" />
+              </colgroup>
+              <tbody>
+                {/* LINHA 1: CONTRATO */}
+                <tr className="border-b border-slate-300 dark:border-slate-800">
+                  <td
+                    colSpan={16}
+                    className="px-3 py-1.5 font-bold uppercase text-[12px] tracking-wide text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-900/80 border-r border-slate-300 dark:border-slate-800"
+                  >
+                    CONTRATO
+                  </td>
+                </tr>
 
-        {/* Observações da Ficha */}
-        <Card className="border border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold uppercase tracking-wide text-slate-700 dark:text-slate-300">
-              Observações Gerais do Monitoramento
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <textarea
-              value={sheetFormData.notes || ''}
-              onChange={(e) => setSheetFormData((p) => ({ ...p, notes: e.target.value }))}
-              placeholder="Informações gerais sobre o estado da área, nível estático ou condições operacionais..."
-              rows={3}
-              className="w-full rounded-md border border-slate-200 bg-white p-2.5 text-xs sm:text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-600 dark:border-slate-800 dark:bg-slate-950"
-            />
-          </CardContent>
-        </Card>
+                {/* LINHA 2: NÚMERO DO CONTRATO (ex: CT 5900089378) */}
+                <tr className="border-b border-slate-300 dark:border-slate-800">
+                  <td
+                    colSpan={16}
+                    className="p-1 px-3 bg-white dark:bg-slate-950 border-r border-slate-300 dark:border-slate-800"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={sheetFormData.contract_number || ''}
+                        onChange={(e) =>
+                          setSheetFormData((p) => ({ ...p, contract_number: e.target.value }))
+                        }
+                        placeholder="Ex.: CT 5900089378"
+                        className="h-8 w-80 font-bold font-mono text-xs border-slate-300 dark:border-slate-700"
+                      />
+                      <span className="text-[11px] text-slate-400 italic">
+                        (Identificação do contrato da área/projeto)
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+
+                {/* LINHA 3: IDENTIFICAÇÃO DO LOCAL (ex: KM244 - ALTO ALEGRE DO PINDARÉ/MA) */}
+                <tr className="border-b border-slate-300 dark:border-slate-800">
+                  <td
+                    colSpan={16}
+                    className="px-3 py-2 font-bold uppercase text-xs sm:text-sm text-slate-900 dark:text-slate-100 bg-slate-50/60 dark:bg-slate-900/60 border-r border-slate-300 dark:border-slate-800"
+                  >
+                    {sheetFormData.area_name || 'KM244 - <LOCALIDADE>/UF'}
+                  </td>
+                </tr>
+
+                {/* LINHA 4: PLANILHA DIÁRIA DE CAMPO */}
+                <tr className="border-b border-slate-300 dark:border-slate-800">
+                  <td
+                    colSpan={16}
+                    className="px-3 py-1.5 font-bold uppercase text-xs sm:text-sm text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-900 border-r border-slate-300 dark:border-slate-800"
+                  >
+                    PLANILHA DIÁRIA DE CAMPO
+                  </td>
+                </tr>
+
+                {/* LINHA 5: Monitoramento do Nível d'Água */}
+                <tr className="border-b-2 border-slate-400 dark:border-slate-700">
+                  <td
+                    colSpan={16}
+                    className="px-3 py-1.5 font-semibold text-xs text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-900/60 border-r border-slate-300 dark:border-slate-800"
+                  >
+                    Monitoramento do Nível d'Água
+                  </td>
+                </tr>
+
+                {/* LINHA 6: DATA: (cols 1-12) e Clima: (cols 13-16) */}
+                <tr className="border-b-2 border-slate-400 dark:border-slate-700 bg-white dark:bg-slate-950">
+                  <td
+                    colSpan={12}
+                    className="px-3 py-1.5 border-r border-slate-300 dark:border-slate-800"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                        DATA:
+                      </span>
+                      <Input
+                        value={sheetFormData.date || ''}
+                        onChange={(e) =>
+                          setSheetFormData((p) => ({ ...p, date: applyDateMask(e.target.value) }))
+                        }
+                        placeholder="DD/MM/AAAA"
+                        maxLength={10}
+                        className={cn(
+                          'h-7 w-32 font-mono text-center text-xs border-slate-300 dark:border-slate-700',
+                          sheetFormData.date &&
+                            !isValidBrDate(sheetFormData.date) &&
+                            'border-rose-500 bg-rose-50 dark:bg-rose-950/40',
+                        )}
+                      />
+                      <span className="text-[11px] text-slate-400 ml-4 hidden sm:inline">
+                        Responsável:
+                      </span>
+                      <Input
+                        value={sheetFormData.responsible_name || ''}
+                        onChange={(e) =>
+                          setSheetFormData((p) => ({ ...p, responsible_name: e.target.value }))
+                        }
+                        placeholder="Técnico responsável"
+                        className="h-7 w-48 text-xs border-slate-300 dark:border-slate-700 hidden sm:inline-flex"
+                      />
+                    </div>
+                  </td>
+                  <td colSpan={4} className="px-3 py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                        Clima:
+                      </span>
+                      {isOtherWeather ? (
+                        <div className="flex items-center gap-1 flex-1">
+                          <Input
+                            value={displayWeather}
+                            onChange={(e) =>
+                              setSheetFormData((p) => ({ ...p, weather: e.target.value }))
+                            }
+                            placeholder="Descreva o clima..."
+                            className="h-7 text-xs flex-1 border-slate-300 dark:border-slate-700"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setSheetFormData((p) => ({ ...p, weather: 'Ensolarado' }))
+                            }
+                            className="h-7 px-1.5 text-[10px]"
+                          >
+                            Lista
+                          </Button>
+                        </div>
+                      ) : (
+                        <select
+                          value={rawWeather}
+                          onChange={(e) =>
+                            setSheetFormData((p) => ({
+                              ...p,
+                              weather: e.target.value === 'Outros' ? 'Outros' : e.target.value,
+                            }))
+                          }
+                          className="h-7 flex-1 rounded border border-slate-300 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
+                        >
+                          <option value="Ensolarado">Ensolarado</option>
+                          <option value="Chuvoso">Chuvoso</option>
+                          <option value="Instável">Instável</option>
+                          <option value="Outros">Outros</option>
+                        </select>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+
+                {/* LINHA 7: CABEÇALHOS DAS COLUNAS (4 BLOCOS IDÊNTICOS: Poço | NA (m) | NO (m) | Obs.) */}
+                <tr className="bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold text-[11px] border-b-2 border-slate-400 dark:border-slate-700 select-none">
+                  {/* Bloco 1 */}
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    Poço
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    NA (m)
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    NO (m)
+                  </th>
+                  <th className="p-1 text-center border-r-2 border-slate-400 dark:border-slate-600">
+                    Obs.
+                  </th>
+                  {/* Bloco 2 */}
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    Poço
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    NA (m)
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    NO (m)
+                  </th>
+                  <th className="p-1 text-center border-r-2 border-slate-400 dark:border-slate-600">
+                    Obs.
+                  </th>
+                  {/* Bloco 3 */}
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    Poço
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    NA (m)
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    NO (m)
+                  </th>
+                  <th className="p-1 text-center border-r-2 border-slate-400 dark:border-slate-600">
+                    Obs.
+                  </th>
+                  {/* Bloco 4 */}
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    Poço
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    NA (m)
+                  </th>
+                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                    NO (m)
+                  </th>
+                  <th className="p-1 text-center">Obs.</th>
+                </tr>
+
+                {/* LINHAS DE DADOS (4 BLOCOS LADO A LADO) */}
+                {displayMatrix.map((row) => {
+                  const rowIdx = row.key
+                  return (
+                    <tr
+                      key={rowIdx}
+                      className={cn(
+                        'border-b border-slate-200 dark:border-slate-800 hover:bg-emerald-50/20 dark:hover:bg-slate-900/40',
+                        rowIdx % 2 === 1 && 'bg-slate-50/40 dark:bg-slate-900/20',
+                      )}
+                    >
+                      {row.blocks.flatMap(({ blockIdx, item, originalIdx }) => {
+                        const isLastBlock = blockIdx === 3
+                        const keyPrefix = `r${rowIdx}-b${blockIdx}`
+
+                        if (!item) {
+                          return [
+                            <td
+                              key={`${keyPrefix}-poco`}
+                              className="p-1 text-center border-r border-slate-200 dark:border-slate-800 text-slate-300 select-none"
+                            >
+                              &nbsp;
+                            </td>,
+                            <td
+                              key={`${keyPrefix}-na`}
+                              className="p-1 border-r border-slate-200 dark:border-slate-800 select-none"
+                            >
+                              &nbsp;
+                            </td>,
+                            <td
+                              key={`${keyPrefix}-no`}
+                              className="p-1 border-r border-slate-200 dark:border-slate-800 select-none"
+                            >
+                              &nbsp;
+                            </td>,
+                            <td
+                              key={`${keyPrefix}-obs`}
+                              className={cn(
+                                'p-1 select-none',
+                                !isLastBlock && 'border-r-2 border-slate-400 dark:border-slate-700',
+                              )}
+                            >
+                              &nbsp;
+                            </td>,
+                          ]
+                        }
+
+                        return [
+                          <td
+                            key={`${keyPrefix}-poco`}
+                            className="p-1 text-center font-mono font-bold text-[11px] bg-slate-50 dark:bg-slate-900/80 border-r border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 select-none"
+                          >
+                            <span title="Poço configurado pelo Admin (bloqueado)">
+                              {item.well_code}
+                            </span>
+                          </td>,
+                          <td
+                            key={`${keyPrefix}-na`}
+                            className="p-0.5 border-r border-slate-200 dark:border-slate-800"
+                          >
+                            <Input
+                              inputMode="decimal"
+                              value={item.na_m || ''}
+                              onChange={(e) =>
+                                handleUpdateReadingCell(originalIdx, 'na_m', e.target.value)
+                              }
+                              placeholder="—"
+                              className="h-6 w-full px-1 text-[11px] font-mono text-right rounded-none border-0 focus-visible:ring-1 focus-visible:ring-emerald-600 bg-transparent"
+                            />
+                          </td>,
+                          <td
+                            key={`${keyPrefix}-no`}
+                            className="p-0.5 border-r border-slate-200 dark:border-slate-800"
+                          >
+                            <Input
+                              inputMode="decimal"
+                              value={item.no_m || ''}
+                              onChange={(e) =>
+                                handleUpdateReadingCell(originalIdx, 'no_m', e.target.value)
+                              }
+                              placeholder="—"
+                              className="h-6 w-full px-1 text-[11px] font-mono text-right rounded-none border-0 focus-visible:ring-1 focus-visible:ring-emerald-600 bg-transparent"
+                            />
+                          </td>,
+                          <td
+                            key={`${keyPrefix}-obs`}
+                            className={cn(
+                              'p-0.5',
+                              !isLastBlock && 'border-r-2 border-slate-400 dark:border-slate-700',
+                            )}
+                          >
+                            <Input
+                              value={item.observation || ''}
+                              onChange={(e) =>
+                                handleUpdateReadingCell(originalIdx, 'observation', e.target.value)
+                              }
+                              placeholder=""
+                              className="h-6 w-full px-1 text-[11px] rounded-none border-0 focus-visible:ring-1 focus-visible:ring-emerald-600 bg-transparent"
+                            />
+                          </td>,
+                        ]
+                      })}
+                    </tr>
+                  )
+                })}
+
+                {/* LINHA 39 (RODAPÉ): Observações */}
+                <tr className="border-t-2 border-slate-400 dark:border-slate-700 bg-white dark:bg-slate-950">
+                  <td colSpan={16} className="p-3">
+                    <div className="space-y-1.5">
+                      <label className="font-bold uppercase text-[11px] text-slate-800 dark:text-slate-200">
+                        Observações
+                      </label>
+                      <textarea
+                        value={sheetFormData.notes || ''}
+                        onChange={(e) => setSheetFormData((p) => ({ ...p, notes: e.target.value }))}
+                        placeholder="Observações de campo sobre as condições da área, poços secos, obstruções ou anomalias..."
+                        rows={3}
+                        className="w-full rounded border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 p-2 text-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-600 text-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     )
   }

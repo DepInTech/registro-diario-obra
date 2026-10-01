@@ -58,7 +58,8 @@ export function printNaSheet(sheet: NaSheet): void {
   }
 
   const rows = get4ColumnRows(sheet.readings || [])
-  const maxDisplayRows = Math.max(rows.length, 18) // Garante linhas suficientes para preencher folha física como no modelo
+  // O modelo Excel original possui 31 linhas de medição (linhas 8 a 38)
+  const maxDisplayRows = Math.max(rows.length, 31)
 
   // Preenche até maxDisplayRows se necessário
   const displayRows: Array<Array<NaWellReadingRow | null>> = []
@@ -70,216 +71,188 @@ export function printNaSheet(sheet: NaSheet): void {
     }
   }
 
+  const escapeHtml = (text?: string) =>
+    (text || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;')
+
   const tableRowsHtml = displayRows
     .map((row) => {
       const cellsHtml = [0, 1, 2, 3]
         .map((colIdx) => {
           const item = row[colIdx]
-          const well = item?.well_code || '&nbsp;'
-          const na = item?.na_m || '&nbsp;'
-          const no = item?.no_m || '&nbsp;'
-          const obs = item?.observation || '&nbsp;'
+          const well = item?.well_code ? escapeHtml(item.well_code) : '&nbsp;'
+          const na = item?.na_m ? escapeHtml(item.na_m) : '&nbsp;'
+          const no = item?.no_m ? escapeHtml(item.no_m) : '&nbsp;'
+          const obs = item?.observation ? escapeHtml(item.observation) : '&nbsp;'
           return `
-            <td class="col-poco">${well}</td>
-            <td class="col-num">${na}</td>
-            <td class="col-num">${no}</td>
-            <td class="col-obs">${obs}</td>
-          `
+          <td class="col-poco">${well}</td>
+          <td class="col-num">${na}</td>
+          <td class="col-num">${no}</td>
+          <td class="col-obs">${obs}</td>
+        `
         })
         .join('')
       return `<tr>${cellsHtml}</tr>`
     })
     .join('')
 
+  const contractDisplay = sheet.contract_number ? escapeHtml(sheet.contract_number) : '—'
+  const areaDisplay = sheet.area_name ? escapeHtml(sheet.area_name) : '—'
+  const dateDisplay = sheet.date ? escapeHtml(sheet.date) : '___/___/______'
+  const weatherDisplay = sheet.weather ? escapeHtml(sheet.weather) : '—'
+  const notesDisplay = sheet.notes ? escapeHtml(sheet.notes).replace(/\n/g, '<br/>') : ''
+
   const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <title>Planilha de Campo - Monitoramento do Nível d'Água - ${sheet.area_name || 'NA'}</title>
-  <style>
-    @page {
-      size: A4 portrait;
-      margin: 10mm 8mm 10mm 8mm;
-    }
-    * {
-      box-sizing: border-box;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    body {
-      font-family: Arial, Helvetica, sans-serif;
-      margin: 0;
-      padding: 0;
-      color: #000;
-      background: #fff;
-      font-size: 9pt;
-      line-height: 1.2;
-    }
-    .sheet-container {
-      width: 100%;
-      max-width: 190mm;
-      margin: 0 auto;
-    }
+<meta charset="utf-8">
+<title>Planilha NA Semanal - ${sheet.area_name || 'Monitoramento'}</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 8mm 6mm 8mm 6mm;
+  }
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 0;
+    padding: 0;
+    color: #000;
+    background: #fff;
+    font-size: 8.5pt;
+    line-height: 1.15;
+  }
+  .sheet-wrapper {
+    width: 100%;
+    max-width: 198mm;
+    margin: 0 auto;
+  }
 
-    /* Cabeçalho Fiel à Planilha de NA */
-    .header-box {
-      border: 1.5px solid #000;
-      margin-bottom: 2px;
-    }
-    .header-row {
-      display: flex;
-      align-items: center;
-      border-bottom: 1px solid #000;
-    }
-    .header-row:last-child {
-      border-bottom: none;
-    }
-    .header-logo-cell {
-      width: 130px;
-      padding: 6px;
-      border-right: 1px solid #000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .header-logo-cell img {
-      max-height: 48px;
-      max-width: 110px;
-      object-fit: contain;
-    }
-    .header-meta-cell {
-      flex: 1;
-      padding: 0;
-    }
-    .meta-line {
-      padding: 3px 8px;
-      font-size: 8.5pt;
-      border-bottom: 1px solid #000;
-      display: flex;
-      align-items: center;
-    }
-    .meta-line:last-child {
-      border-bottom: none;
-    }
-    .meta-label {
-      font-weight: bold;
-      margin-right: 6px;
-    }
-    .title-banner {
-      background-color: #dbeafe;
-      border-bottom: 1px solid #000;
-      padding: 5px 8px;
-      text-align: center;
-    }
-    .title-banner h1 {
-      margin: 0;
-      font-size: 11pt;
-      font-weight: bold;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      color: #000;
-    }
-    .title-banner h2 {
-      margin: 2px 0 0 0;
-      font-size: 9.5pt;
-      font-weight: 600;
-      color: #1e3a8a;
-    }
+  /* Tabela da Planilha Completa - Fiel à grade do Excel */
+  table.excel-sheet {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1.5px solid #000;
+    table-layout: fixed;
+  }
 
-    /* Linha Data e Clima */
-    .data-clima-bar {
-      display: flex;
-      border: 1.5px solid #000;
-      border-top: none;
-      background-color: #f1f5f9;
-      font-size: 9pt;
-      font-weight: bold;
-      margin-bottom: 4px;
-    }
-    .data-box {
-      flex: 1;
-      padding: 4px 8px;
-      border-right: 1.5px solid #000;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .clima-box {
-      width: 200px;
-      padding: 4px 8px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .resp-box {
-      width: 220px;
-      padding: 4px 8px;
-      border-left: 1.5px solid #000;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+  table.excel-sheet td, table.excel-sheet th {
+    border: 1px solid #777;
+    padding: 2px 4px;
+    font-size: 8pt;
+    vertical-align: middle;
+    height: 19px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 
-    /* Tabela de 4 blocos de poços */
-    table.na-table {
-      width: 100%;
-      border-collapse: collapse;
-      border: 1.5px solid #000;
-      margin-bottom: 4px;
-      table-layout: fixed;
-    }
-    table.na-table th, table.na-table td {
-      border: 1px solid #000;
-      padding: 2.5px 3px;
-      font-size: 8pt;
-      height: 18px;
-      vertical-align: middle;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    table.na-table th {
-      background-color: #cbd5e1;
-      font-weight: bold;
-      text-align: center;
-    }
-    /* Estilo de largura das colunas por bloco (4 blocos idênticos = 25% da largura cada) */
-    .col-poco {
-      width: 8.5%;
-      font-weight: bold;
-      text-align: center;
-      background-color: #f8fafc;
-    }
-    .col-num {
-      width: 5.5%;
-      text-align: right;
-      padding-right: 4px;
-    }
-    .col-obs {
-      width: 11%;
-      text-align: left;
-    }
+  /* Linhas do Cabeçalho Excel */
+  .hdr-contrato-title {
+    font-weight: bold;
+    font-size: 8.5pt;
+    background: #fff;
+    text-align: left;
+    border-bottom: 1px solid #777 !important;
+  }
+  .hdr-contrato-val {
+    font-weight: bold;
+    font-size: 9pt;
+    background: #fff;
+    text-align: left;
+    border-bottom: 1px solid #777 !important;
+  }
+  .hdr-local {
+    font-weight: bold;
+    font-size: 9pt;
+    background: #fff;
+    text-align: left;
+    border-bottom: 1px solid #777 !important;
+  }
+  .hdr-title-diaria {
+    font-weight: bold;
+    font-size: 10pt;
+    background: #fff;
+    text-align: left;
+    text-transform: uppercase;
+    border-bottom: 1px solid #777 !important;
+  }
+  .hdr-subtitle-na {
+    font-weight: bold;
+    font-size: 9.5pt;
+    background: #fff;
+    text-align: left;
+    border-bottom: 1.5px solid #000 !important;
+  }
 
-    /* Rodapé de Observações */
-    .obs-footer {
-      border: 1.5px solid #000;
-      padding: 6px 8px;
-      min-height: 55px;
-      font-size: 8.5pt;
-      background-color: #fafafa;
-    }
-    .obs-footer-label {
-      font-weight: bold;
-      margin-bottom: 3px;
-      text-transform: uppercase;
-      font-size: 8pt;
-      color: #333;
-    }
-    .obs-footer-content {
-      white-space: pre-wrap;
-      font-family: inherit;
-    }
+  /* Linha Data / Clima */
+  .hdr-data-cell {
+    background: #fff;
+    border-bottom: 1.5px solid #000 !important;
+  }
+  .hdr-clima-cell {
+    background: #fff;
+    border-bottom: 1.5px solid #000 !important;
+    text-align: left;
+  }
 
+  /* Cabeçalhos dos 4 Blocos: Poço | NA (m) | NO (m) | Obs. */
+  .col-hdr {
+    background-color: #f1f5f9;
+    font-weight: bold;
+    text-align: center;
+    border-top: 1.5px solid #000 !important;
+    border-bottom: 1.5px solid #000 !important;
+    font-size: 8pt;
+  }
+
+  .col-poco {
+    width: 7%;
+    font-weight: bold;
+    text-align: center;
+    background-color: #fcfcfc;
+    font-family: Consolas, "Courier New", monospace;
+  }
+  .col-num {
+    width: 5.5%;
+    text-align: right;
+    padding-right: 4px;
+    font-family: Consolas, "Courier New", monospace;
+  }
+  .col-obs {
+    width: 7%;
+    text-align: left;
+    font-size: 7.5pt;
+  }
+
+  /* Rodapé: Observações */
+  .obs-cell {
+    vertical-align: top;
+    padding: 6px 8px;
+    min-height: 60px;
+    height: 65px;
+    white-space: normal;
+    word-break: break-word;
+    font-size: 8pt;
+    background: #fff;
+    border-top: 1.5px solid #000 !important;
+  }
+  .obs-title {
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+  .obs-content {
+    font-weight: normal;
+    white-space: pre-wrap;
+  }
     .no-print-bar {
       position: fixed;
       top: 0;
@@ -334,82 +307,75 @@ export function printNaSheet(sheet: NaSheet): void {
     </div>
   </div>
 
-  <div class="sheet-container">
-    <!-- Cabeçalho -->
-    <div class="header-box">
-      <div class="header-row">
-        <div class="header-logo-cell">
-          <img src="${EPA_LOGO_BASE64}" alt="Grupo EPA" />
-        </div>
-        <div class="header-meta-cell">
-          <div class="meta-line">
-            <span class="meta-label">CONTRATO:</span>
-            <span>${sheet.contract_number ? sheet.contract_number : sheet.area_name ? `Contrato ref. ${sheet.area_name}` : '—'}</span>
-          </div>
-          <div class="meta-line">
-            <span class="meta-label">LOCAL / ÁREA:</span>
-            <span>${sheet.area_name || '—'}</span>
-          </div>
-        </div>
-      </div>
-      <div class="title-banner">
-        <h1>PLANILHA DIÁRIA DE CAMPO</h1>
-        <h2>Monitoramento do Nível d'Água</h2>
-      </div>
-    </div>
+  <div class="sheet-wrapper">
+    <table class="excel-sheet">
+      <tbody>
+        <!-- Linha 1: CONTRATO -->
+        <tr>
+          <td colspan="16" class="hdr-contrato-title">CONTRATO</td>
+        </tr>
+        <!-- Linha 2: CT ... -->
+        <tr>
+          <td colspan="16" class="hdr-contrato-val">${contractDisplay}</td>
+        </tr>
+        <!-- Linha 3: KM244 - ... -->
+        <tr>
+          <td colspan="16" class="hdr-local">${areaDisplay}</td>
+        </tr>
+        <!-- Linha 4: PLANILHA DIÁRIA DE CAMPO -->
+        <tr>
+          <td colspan="16" class="hdr-title-diaria">PLANILHA DIÁRIA DE CAMPO</td>
+        </tr>
+        <!-- Linha 5: Monitoramento do Nível d'Água -->
+        <tr>
+          <td colspan="16" class="hdr-subtitle-na">Monitoramento do Nível d'Água</td>
+        </tr>
+        <!-- Linha 6: DATA: (cols 1-12) e Clima: (cols 13-16) -->
+        <tr>
+          <td colspan="12" class="hdr-data-cell">
+            <strong>DATA:</strong> &nbsp;<span style="font-family: Consolas, monospace; font-size: 8.5pt;">${dateDisplay}</span>
+          </td>
+          <td colspan="4" class="hdr-clima-cell">
+            <strong>Clima:</strong> &nbsp;<span>${weatherDisplay}</span>
+          </td>
+        </tr>
 
-    <!-- Linha DATA / Clima / Responsável -->
-    <div class="data-clima-bar">
-      <div class="data-box">
-        <span>DATA:</span>
-        <span style="font-weight: normal; font-size: 9.5pt;">${sheet.date || '___/___/______'}</span>
-      </div>
-      <div class="clima-box">
-        <span>Clima:</span>
-        <span style="font-weight: normal;">${sheet.weather || '—'}</span>
-      </div>
-      <div class="resp-box">
-        <span>Responsável:</span>
-        <span style="font-weight: normal;">${sheet.responsible_name || '—'}</span>
-      </div>
-    </div>
-
-    <!-- Tabela 4 Blocos Lado a Lado -->
-    <table class="na-table">
-      <thead>
+        <!-- Linha 7: Cabeçalho dos 4 Blocos -->
         <tr>
           <!-- Bloco 1 -->
-          <th style="width: 8.5%;">Poço</th>
-          <th style="width: 5.5%;">NA (m)</th>
-          <th style="width: 5.5%;">NO (m)</th>
-          <th style="width: 11%;">Obs.</th>
+          <th class="col-hdr col-poco">Poço</th>
+          <th class="col-hdr col-num">NA (m)</th>
+          <th class="col-hdr col-num">NO (m)</th>
+          <th class="col-hdr col-obs">Obs.</th>
           <!-- Bloco 2 -->
-          <th style="width: 8.5%;">Poço</th>
-          <th style="width: 5.5%;">NA (m)</th>
-          <th style="width: 5.5%;">NO (m)</th>
-          <th style="width: 11%;">Obs.</th>
+          <th class="col-hdr col-poco">Poço</th>
+          <th class="col-hdr col-num">NA (m)</th>
+          <th class="col-hdr col-num">NO (m)</th>
+          <th class="col-hdr col-obs">Obs.</th>
           <!-- Bloco 3 -->
-          <th style="width: 8.5%;">Poço</th>
-          <th style="width: 5.5%;">NA (m)</th>
-          <th style="width: 5.5%;">NO (m)</th>
-          <th style="width: 11%;">Obs.</th>
+          <th class="col-hdr col-poco">Poço</th>
+          <th class="col-hdr col-num">NA (m)</th>
+          <th class="col-hdr col-num">NO (m)</th>
+          <th class="col-hdr col-obs">Obs.</th>
           <!-- Bloco 4 -->
-          <th style="width: 8.5%;">Poço</th>
-          <th style="width: 5.5%;">NA (m)</th>
-          <th style="width: 5.5%;">NO (m)</th>
-          <th style="width: 11%;">Obs.</th>
+          <th class="col-hdr col-poco">Poço</th>
+          <th class="col-hdr col-num">NA (m)</th>
+          <th class="col-hdr col-num">NO (m)</th>
+          <th class="col-hdr col-obs">Obs.</th>
         </tr>
-      </thead>
-      <tbody>
+
+        <!-- Linhas de Poços (4 blocos lado a lado) -->
         ${tableRowsHtml}
+
+        <!-- Linha Final: Observações -->
+        <tr>
+          <td colspan="16" class="obs-cell">
+            <div class="obs-title">Observações</div>
+            <div class="obs-content">${notesDisplay || '&nbsp;'}</div>
+          </td>
+        </tr>
       </tbody>
     </table>
-
-    <!-- Rodapé: Observações -->
-    <div class="obs-footer">
-      <div class="obs-footer-label">Observações:</div>
-      <div class="obs-footer-content">${sheet.notes ? sheet.notes.replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Nenhuma observação registrada.'}</div>
-    </div>
   </div>
 
   <script>
