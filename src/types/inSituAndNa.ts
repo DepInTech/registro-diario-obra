@@ -55,8 +55,11 @@ export interface InSituSheet {
   system_name: string // SISTEMA:
   active_number: string // NÚMERO ATIVO:
   measurement_point?: string // PONTO DE MEDIÇÃO (opcional legado)
+  date?: string // DATA da Planilha (DD/MM/AAAA) manual
+  rev?: string // REV (Ex: "02", "01", "03"...) editável
+  rev_date?: string // Data da revisão (Ex: "15/07/26") editável
   records: InSituMeasurementRow[]
-  // Seção de Nutrientes em Linhas (15 linhas: ENTRADA/SAÍDA/T. NUTRIENTES x 5 repetições)
+  // Seção de Medições/Nutrientes em Linhas (conjuntos dinâmicos de ENTRADA / SAÍDA / T. NUTRIENTES)
   nutrient_rows?: InSituNutrientRowData[]
   status: 'draft' | 'submitted' | 'approved' | 'returned'
   responsible_name?: string

@@ -3,6 +3,7 @@ import { Activity, Plus, Trash2, Save, ArrowLeft, Send, FileDown, Sparkles } fro
 import {
   printInSituSheet,
   buildDefaultNutrientRows,
+  createNutrientTrio,
   IN_SITU_REPETITION_COUNT,
 } from '@/services/inSituSheetExport'
 import { EPA_LOGO_BASE64 } from '@/assets/epaLogoBase64'
@@ -42,6 +43,9 @@ export function InSituPage({ query = '' }: { query?: string }) {
     project_name: '21-0229',
     system_name: '',
     active_number: '',
+    date: '',
+    rev: '02',
+    rev_date: '15/07/26',
     status: 'draft',
     notes: '',
     records: [],
@@ -90,6 +94,9 @@ export function InSituPage({ query = '' }: { query?: string }) {
       project_name: '21-0229',
       system_name: '',
       active_number: '',
+      date: '', // Vazio para preenchimento manual obrigatório (sem data automática de hoje)
+      rev: '02',
+      rev_date: '15/07/26',
       responsible_name: user?.name || '',
       status: 'draft',
       notes: '',
@@ -105,10 +112,39 @@ export function InSituPage({ query = '' }: { query?: string }) {
     const nutrientRows = buildDefaultNutrientRows(sheet.nutrient_rows, sheet.records)
     setFormData({
       ...sheet,
+      date: sheet.date || '',
+      rev: sheet.rev || '02',
+      rev_date: sheet.rev_date || '15/07/26',
       records: sheet.records || [],
       nutrient_rows: nutrientRows,
     })
     setIsEditing(true)
+  }
+
+  // Adiciona dinamicamente um novo conjunto completo (ENTRADA + SAÍDA + T. NUTRIENTES)
+  const handleAddDayRecord = () => {
+    setFormData((prev) => {
+      const currentRows =
+        prev.nutrient_rows && prev.nutrient_rows.length > 0
+          ? prev.nutrient_rows
+          : buildDefaultNutrientRows(prev.nutrient_rows, prev.records)
+
+      // Determina o próximo system_index a partir do maior existente
+      const maxIndex = currentRows.reduce((acc, r) => Math.max(acc, r.system_index ?? 0), -1)
+      const nextIndex = maxIndex + 1
+
+      // Herda a data da planilha se preenchida, para facilitar o registro do dia
+      const newTrio = createNutrientTrio(nextIndex, prev.date || '')
+      return {
+        ...prev,
+        nutrient_rows: [...currentRows, ...newTrio],
+      }
+    })
+
+    toast({
+      title: 'Novo Registro / Dia adicionado',
+      description: 'Conjunto ENTRADA, SAÍDA e T. NUTRIENTES incluído na planilha.',
+    })
   }
 
   const handleUpdateRowCell = (
@@ -118,7 +154,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
   ) => {
     setFormData((prev) => {
       const currentRows =
-        prev.nutrient_rows && prev.nutrient_rows.length === IN_SITU_REPETITION_COUNT * 3
+        prev.nutrient_rows && prev.nutrient_rows.length > 0
           ? prev.nutrient_rows
           : buildDefaultNutrientRows(prev.nutrient_rows, prev.records)
 
@@ -147,12 +183,21 @@ export function InSituPage({ query = '' }: { query?: string }) {
       return
     }
 
+    if (formData.date && !isValidBrDate(formData.date)) {
+      toast({
+        title: 'Data da Planilha inválida',
+        description: 'Informe uma data válida no formato DD/MM/AAAA.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const currentRows =
-      formData.nutrient_rows && formData.nutrient_rows.length === IN_SITU_REPETITION_COUNT * 3
+      formData.nutrient_rows && formData.nutrient_rows.length > 0
         ? formData.nutrient_rows
         : buildDefaultNutrientRows(formData.nutrient_rows, formData.records)
 
-    // Validação de datas preenchidas
+    // Validação de datas preenchidas nas linhas
     for (const row of currentRows) {
       if (row.date && !isValidBrDate(row.date)) {
         toast({
@@ -167,6 +212,9 @@ export function InSituPage({ query = '' }: { query?: string }) {
     try {
       const payload: Partial<InSituSheet> = {
         ...formData,
+        date: formData.date || '',
+        rev: formData.rev || '02',
+        rev_date: formData.rev_date || '15/07/26',
         nutrient_rows: currentRows,
         id: selectedSheet?.id,
         status: newStatus || formData.status || 'draft',
@@ -343,11 +391,19 @@ export function InSituPage({ query = '' }: { query?: string }) {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span>Linhas preenchidas:</span>
+                      <span>Medições preenchidas:</span>
                       <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                        {filledCount} de 15 medições
+                        {filledCount} de {rows.length} medições ({Math.floor(rows.length / 3)} dias)
                       </span>
                     </div>
+                    {sheet.date && (
+                      <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-2 text-[11px]">
+                        <span>Data da Planilha:</span>
+                        <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
+                          {sheet.date}
+                        </span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )
@@ -360,9 +416,12 @@ export function InSituPage({ query = '' }: { query?: string }) {
 
   // Preenchimento da planilha digital (fiel ao documento físico anexado IN SITU REV2)
   const rows =
-    formData.nutrient_rows && formData.nutrient_rows.length === IN_SITU_REPETITION_COUNT * 3
+    formData.nutrient_rows && formData.nutrient_rows.length > 0
       ? formData.nutrient_rows
       : buildDefaultNutrientRows(formData.nutrient_rows, formData.records)
+
+  const revDisplay = formData.rev?.trim() || '02'
+  const revDateDisplay = formData.rev_date?.trim() || '15/07/26'
 
   return (
     <div className="space-y-4">
@@ -465,7 +524,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
 
       {/* DOCUMENTO DIGITAL IN-SITU (Versão digital da planilha física original) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 sm:p-5 shadow-sm">
-        {/* Top Header: Logo EPA | MEDIÇÕES IN-SITU | Planilha in-situ REV 02. 15/07/26 */}
+        {/* Top Header: Logo EPA | MEDIÇÕES IN-SITU | Planilha in-situ — REV {rev}. {data} (Editáveis por Admin e Técnico) */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-200 dark:border-slate-800">
           <div className="w-full sm:w-48 flex justify-center sm:justify-start">
             <img
@@ -481,15 +540,35 @@ export function InSituPage({ query = '' }: { query?: string }) {
             </h1>
           </div>
 
-          <div className="w-full sm:w-48 flex justify-center sm:justify-end">
-            <div className="inline-block bg-[#eaf6d8] dark:bg-lime-950/60 text-[#557924] dark:text-lime-300 border border-[#cbe5a3] dark:border-lime-800 px-3 py-1.5 rounded text-center text-[11px] font-bold leading-tight shadow-xs">
-              <div>Planilha in-situ</div>
-              <div className="text-[10px] font-semibold">REV 02. 15/07/26</div>
+          <div className="w-full sm:w-64 flex justify-center sm:justify-end">
+            {/* Bloco de identificação da versão da planilha totalmente editável */}
+            <div className="bg-[#eaf6d8] dark:bg-lime-950/60 text-[#557924] dark:text-lime-300 border border-[#cbe5a3] dark:border-lime-800 px-3 py-1.5 rounded text-center text-[11px] font-bold leading-tight shadow-xs w-full sm:w-auto">
+              <div className="tracking-wide">Planilha in-situ</div>
+              <div className="mt-1 flex items-center justify-center gap-1 text-[10px] font-semibold">
+                <span className="font-bold">REV</span>
+                <input
+                  type="text"
+                  value={formData.rev ?? '02'}
+                  onChange={(e) => setFormData((p) => ({ ...p, rev: e.target.value }))}
+                  placeholder="02"
+                  title="Número da Revisão (ex: 01, 02, 03...)"
+                  className="w-8 h-5 text-center font-bold font-mono bg-white/80 dark:bg-slate-900/80 border border-lime-400 dark:border-lime-700 rounded px-0.5 text-[#557924] dark:text-lime-300 focus:outline-none focus:ring-1 focus:ring-lime-500"
+                />
+                <span>.</span>
+                <input
+                  type="text"
+                  value={formData.rev_date ?? '15/07/26'}
+                  onChange={(e) => setFormData((p) => ({ ...p, rev_date: e.target.value }))}
+                  placeholder="15/07/26"
+                  title="Data da Revisão (ex: 15/07/26)"
+                  className="w-20 h-5 text-center font-bold font-mono bg-white/80 dark:bg-slate-900/80 border border-lime-400 dark:border-lime-700 rounded px-1 text-[#557924] dark:text-lime-300 focus:outline-none focus:ring-1 focus:ring-lime-500"
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Faixa Oficial: PROJETO: 21-0229 | SISTEMA: | NÚMERO ATIVO: */}
+        {/* Faixa Oficial: PROJETO | SISTEMA | NÚMERO ATIVO | DATA (editável por Admin e Técnico, sem pré-preenchimento automático) */}
         <div className="grid grid-cols-1 md:grid-cols-12 border-2 border-[#5b738e] dark:border-slate-700 bg-white dark:bg-slate-900 mb-3 text-xs divide-y md:divide-y-0 md:divide-x divide-[#5b738e] dark:divide-slate-700">
           <div className="md:col-span-3 p-2 flex items-center gap-2">
             <span className="font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
@@ -504,7 +583,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
             />
           </div>
 
-          <div className="md:col-span-5 p-2 flex items-center gap-2">
+          <div className="md:col-span-4 p-2 flex items-center gap-2">
             <span className="font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
               SISTEMA:
             </span>
@@ -517,7 +596,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
             />
           </div>
 
-          <div className="md:col-span-4 p-2 flex items-center gap-2">
+          <div className="md:col-span-3 p-2 flex items-center gap-2">
             <span className="font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
               NÚMERO ATIVO:
             </span>
@@ -529,6 +608,47 @@ export function InSituPage({ query = '' }: { query?: string }) {
               className="w-full font-mono font-medium text-slate-900 dark:text-slate-100 bg-transparent border-0 p-0 focus:outline-none focus:ring-0 text-xs"
             />
           </div>
+
+          <div className="md:col-span-2 p-2 flex items-center gap-2">
+            <span className="font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
+              DATA:
+            </span>
+            <input
+              type="text"
+              value={formData.date || ''}
+              onChange={(e) => setFormData((p) => ({ ...p, date: applyDateMask(e.target.value) }))}
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
+              title="Data correspondente à planilha (preenchimento manual)"
+              className={cn(
+                'w-full font-mono font-medium text-slate-900 dark:text-slate-100 bg-transparent border-0 p-0 focus:outline-none focus:ring-0 text-xs',
+                formData.date && !isValidBrDate(formData.date) && 'text-rose-600',
+              )}
+            />
+          </div>
+        </div>
+
+        {/* Barra de controle dos registros diários: Botão ÚNICO "＋ Adicionar Registro / Dia" */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 py-1.5 mb-2">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              onClick={handleAddDayRecord}
+              className="bg-sky-700 hover:bg-sky-800 text-white text-xs h-9 px-3.5 shadow-sm font-semibold"
+              title="Adiciona um novo conjunto completo diário: ENTRADA + SAÍDA + T. NUTRIENTES"
+            >
+              <Plus className="mr-1.5 h-4 w-4" />＋ Adicionar Registro / Dia
+            </Button>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              Cada clique adiciona o trio completo (ENTRADA + SAÍDA + T. NUTRIENTES)
+            </span>
+          </div>
+
+          <div className="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+            Total de linhas:{' '}
+            <strong className="text-slate-900 dark:text-slate-100">{rows.length}</strong> (
+            {Math.floor(rows.length / 3)} dias/conjuntos)
+          </div>
         </div>
 
         {/* Indicador de rolagem para telas menores */}
@@ -536,7 +656,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
           👉 Deslize horizontalmente para visualizar e editar todas as 11 colunas da planilha física
         </p>
 
-        {/* Tabela Oficial Única: 11 colunas x 15 linhas (5 repetições de ENTRADA/SAÍDA/T. NUTRIENTES) */}
+        {/* Tabela Oficial Única: 11 colunas x N linhas dinâmicas (conjuntos de ENTRADA/SAÍDA/T. NUTRIENTES) */}
         <div className="overflow-x-auto border-2 border-[#5b738e] dark:border-slate-700 mb-3">
           <table className="w-full min-w-[1100px] border-collapse text-left text-xs bg-white dark:bg-slate-950">
             <colgroup>

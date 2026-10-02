@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-02T12:56:52.615Z",
+  "generatedAt": "2026-10-02T13:55:06.837Z",
   "collections": [
     {
       "name": "users",
@@ -1203,7 +1203,7 @@
         {
           "name": "measurement_point",
           "type": "text",
-          "required": true,
+          "required": false,
           "system": false
         },
         {
@@ -1256,6 +1256,30 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "nutrient_rows",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "date",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "rev",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "rev_date",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

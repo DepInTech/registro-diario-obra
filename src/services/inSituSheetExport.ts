@@ -10,30 +10,66 @@ export const NUTRIENT_ROW_TYPES: Array<'ENTRADA' | 'SAÍDA' | 'T. NUTRIENTES'> =
 export const IN_SITU_REPETITION_COUNT = 5 // Conforme o arquivo anexado oficial IN SITU REV2 (5 trios = 15 linhas)
 
 /**
- * Cria ou sincroniza as 15 linhas da planilha in-situ conforme o arquivo anexado IN SITU REV2:
- * ENTRADA / SAÍDA / T. NUTRIENTES repetidos 5 vezes (índices 0 a 4 = 15 linhas no total).
- * Mantém compatibilidade com dados existentes em nutrient_rows ou em records legados.
+ * Cria um novo trio (ENTRADA, SAÍDA, T. NUTRIENTES) para um determinado system_index
+ */
+export function createNutrientTrio(systemIndex: number, date = ''): InSituNutrientRowData[] {
+  const ts = Date.now()
+  return NUTRIENT_ROW_TYPES.map((type) => {
+    const slug = type.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()
+    return {
+      id: `insitu_row_${systemIndex}_${slug}_${ts}_${Math.random().toString(36).slice(2, 6)}`,
+      type,
+      system_index: systemIndex,
+      date,
+      time: '',
+      ph: '',
+      conductivity: '',
+      conductivity_unit: 'µS/cm',
+      od_mg_l: '',
+      temperature_c: '',
+      orp: '',
+      turbidity: '',
+      weather: '',
+      responsible: '',
+      notes: '',
+    }
+  })
+}
+
+/**
+ * Cria ou sincroniza as linhas da planilha in-situ:
+ * Se existing já tiver linhas (5, 6, 7 ou mais trios), preserva todas elas.
+ * Se existing estiver vazio ou for novo, cria o número inicial de trios (padrão 5 trios = 15 linhas)
+ * e aplica fallbacks de records legados se existirem.
  */
 export function buildDefaultNutrientRows(
   existing?: InSituNutrientRowData[],
   legacyRecords?: InSituMeasurementRow[],
 ): InSituNutrientRowData[] {
+  // Se existing existir e contiver linhas, preserva todas elas mantendo dinamismo
+  if (existing && existing.length > 0) {
+    return existing.map((r, idx) => ({
+      ...r,
+      id:
+        r.id ||
+        `insitu_row_${r.system_index ?? Math.floor(idx / 3)}_${r.type.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}_${idx}`,
+      system_index: typeof r.system_index === 'number' ? r.system_index : Math.floor(idx / 3),
+      conductivity_unit: r.conductivity_unit ?? 'µS/cm',
+    }))
+  }
+
+  // Se for novo ou vazio, inicializa com 5 trios
   const rows: InSituNutrientRowData[] = []
   let index = 0
 
   for (let s = 0; s < IN_SITU_REPETITION_COUNT; s++) {
     for (const type of NUTRIENT_ROW_TYPES) {
       const rowId = `insitu_row_${s}_${type.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`
-      // Tenta encontrar por id exato, ou por par (system_index, type), ou por posição no array existente
-      const found =
-        existing?.find((r) => r.id === rowId) ||
-        existing?.find((r) => r.system_index === s && r.type === type) ||
-        (existing && existing[index] && existing[index].type === type ? existing[index] : undefined)
 
-      // Fallback a partir de records legados caso existing não contenha esta linha
+      // Fallback a partir de records legados caso existam
       let fallbackPh = ''
       let fallbackCond = ''
-      let fallbackCondUnit = ''
+      let fallbackCondUnit = 'µS/cm'
       let fallbackOd = ''
       let fallbackTemp = ''
       let fallbackOrp = ''
@@ -43,15 +79,14 @@ export function buildDefaultNutrientRows(
       let fallbackDate = ''
       let fallbackTime = ''
 
-      if (!found && legacyRecords && legacyRecords.length > 0) {
-        // Se houver um registro legado na mesma posição ordinal (index)
+      if (legacyRecords && legacyRecords.length > 0) {
         if (legacyRecords[index]) {
           const rec = legacyRecords[index]
           fallbackDate = rec.date || ''
           fallbackTime = rec.time || ''
           fallbackPh = rec.ph || ''
           fallbackCond = rec.conductivity || ''
-          fallbackCondUnit = rec.conductivity_unit || ''
+          fallbackCondUnit = rec.conductivity_unit || 'µS/cm'
           fallbackOd = rec.od_mg_l || ''
           fallbackTemp = rec.temperature_c || ''
           fallbackOrp = rec.orp || ''
@@ -59,7 +94,6 @@ export function buildDefaultNutrientRows(
           fallbackWeather = rec.weather || ''
           fallbackResp = rec.responsible || ''
         } else {
-          // Fallback adicional por nutrients legados
           const firstRec = legacyRecords[0]
           const pair = firstRec.nutrients?.[s]
           if (pair) {
@@ -76,18 +110,18 @@ export function buildDefaultNutrientRows(
         id: rowId,
         type,
         system_index: s,
-        date: found?.date ?? fallbackDate,
-        time: found?.time ?? fallbackTime,
-        ph: found?.ph ?? fallbackPh,
-        conductivity: found?.conductivity ?? fallbackCond,
-        conductivity_unit: found?.conductivity_unit ?? fallbackCondUnit,
-        od_mg_l: found?.od_mg_l ?? fallbackOd,
-        temperature_c: found?.temperature_c ?? fallbackTemp,
-        orp: found?.orp ?? fallbackOrp,
-        turbidity: found?.turbidity ?? fallbackTurb,
-        weather: found?.weather ?? fallbackWeather,
-        responsible: found?.responsible ?? fallbackResp,
-        notes: found?.notes || '',
+        date: fallbackDate,
+        time: fallbackTime,
+        ph: fallbackPh,
+        conductivity: fallbackCond,
+        conductivity_unit: fallbackCondUnit,
+        od_mg_l: fallbackOd,
+        temperature_c: fallbackTemp,
+        orp: fallbackOrp,
+        turbidity: fallbackTurb,
+        weather: fallbackWeather,
+        responsible: fallbackResp,
+        notes: '',
       })
       index++
     }
@@ -190,6 +224,9 @@ export function printInSituSheet(sheet: InSituSheet): void {
   }
 
   const rows = buildDefaultNutrientRows(sheet.nutrient_rows, sheet.records)
+  const revNumber = sheet.rev?.trim() || '02'
+  const revDate = sheet.rev_date?.trim() || '15/07/26'
+  const sheetDate = sheet.date?.trim() || ''
 
   const rowsHtml = rows
     .map((row) => {
@@ -219,7 +256,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <title>Planilha in-situ REV 02 - ${sheet.project_name || '21-0229'}</title>
+  <title>Planilha in-situ REV ${revNumber} - ${sheet.project_name || '21-0229'}</title>
   <style>
     @page {
       size: A4 landscape;
@@ -312,11 +349,15 @@ export function printInSituSheet(sheet: InSituSheet): void {
       border-right: 1.5px solid #5b738e;
     }
     .meta-col.col-sistema {
-      width: 45%;
+      width: 35%;
       border-right: 1.5px solid #5b738e;
     }
     .meta-col.col-ativo {
-      width: 30%;
+      width: 20%;
+      border-right: 1.5px solid #5b738e;
+    }
+    .meta-col.col-data {
+      width: 20%;
     }
     .meta-val {
       font-weight: 600;
@@ -433,7 +474,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
 </head>
 <body>
   <div class="no-print-bar">
-    <div><strong>Grupo EPA — Planilha In-Situ</strong> (REV 02. 15/07/26)</div>
+    <div><strong>Grupo EPA — Planilha In-Situ</strong> (REV ${revNumber}. ${revDate})</div>
     <div>
       <button onclick="window.print()">Imprimir / Salvar PDF</button>
     </div>
@@ -451,12 +492,12 @@ export function printInSituSheet(sheet: InSituSheet): void {
       <div class="header-right">
         <div class="rev-pill">
           Planilha in-situ<br>
-          REV 02. 15/07/26
+          REV ${revNumber}. ${revDate}
         </div>
       </div>
     </div>
 
-    <!-- Faixa: PROJETO | SISTEMA | NÚMERO ATIVO -->
+    <!-- Faixa: PROJETO | SISTEMA | NÚMERO ATIVO | DATA -->
     <div class="meta-box">
       <div class="meta-col col-projeto">
         <span>PROJETO:</span>
@@ -469,6 +510,10 @@ export function printInSituSheet(sheet: InSituSheet): void {
       <div class="meta-col col-ativo">
         <span>NÚMERO ATIVO:</span>
         <span class="meta-val">${sheet.active_number || ''}</span>
+      </div>
+      <div class="meta-col col-data">
+        <span>DATA:</span>
+        <span class="meta-val">${sheetDate || '—'}</span>
       </div>
     </div>
 
