@@ -54,9 +54,124 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
     extractionRows = `<tr><td colspan="5" style="border:1px solid #777;padding:8px;text-align:center;color:#666;">Nenhum poço registrado</td></tr>`
   }
 
-  const infData = sheet.get('infiltration_data') || {}
-  const compData = sheet.get('compressor_data') || {}
-  const oilData = sheet.get('oil_removal_data') || {}
+  let infData = sheet.get('infiltration_data') || {}
+  if (typeof infData === 'string' && infData.trim() !== '') {
+    try {
+      infData = JSON.parse(infData)
+    } catch (_) {
+      infData = {}
+    }
+  }
+  let compData = sheet.get('compressor_data') || {}
+  if (typeof compData === 'string' && compData.trim() !== '') {
+    try {
+      compData = JSON.parse(compData)
+    } catch (_) {
+      compData = {}
+    }
+  }
+  let oilData = sheet.get('oil_removal_data') || {}
+  if (typeof oilData === 'string' && oilData.trim() !== '') {
+    try {
+      oilData = JSON.parse(oilData)
+    } catch (_) {
+      oilData = {}
+    }
+  }
+
+  // Determinação dinâmica de compressores
+  const compIndicesSet = new Set([1, 2])
+  if (compData && typeof compData === 'object') {
+    Object.keys(compData).forEach((key) => {
+      const match = key.match(/\d+$/)
+      if (match) {
+        const num = parseInt(match[0], 10)
+        if (!isNaN(num) && num >= 1 && num <= 100) {
+          compIndicesSet.add(num)
+        }
+      }
+    })
+  }
+  const compIndices = Array.from(compIndicesSet).sort((a, b) => a - b)
+
+  // Determinação dinâmica de saídas de infiltração
+  const infExitsSet = new Set([1, 2, 3])
+  if (infData && typeof infData === 'object') {
+    Object.keys(infData).forEach((key) => {
+      const match = key.match(/^out(\d+)(Morning|Afternoon)$/)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (!isNaN(num) && num >= 1 && num <= 100) {
+          infExitsSet.add(num)
+        }
+      }
+    })
+  }
+  const infExits = Array.from(infExitsSet).sort((a, b) => a - b)
+
+  let dynamicInfExitRows = ''
+  for (let i = 0; i < infExits.length; i++) {
+    const n = infExits[i]
+    const padStr = String(n).padStart(2, '0')
+    const mVal = infData['out' + n + 'Morning'] || ''
+    const aVal = infData['out' + n + 'Afternoon'] || ''
+    dynamicInfExitRows +=
+      '<tr>' +
+      '<td class="label-col">Saída ' +
+      padStr +
+      '</td>' +
+      '<td colspan="2" style="text-align:right;">' +
+      mVal +
+      '</td>' +
+      '<td colspan="2" style="text-align:right;">' +
+      aVal +
+      '</td>' +
+      '</tr>'
+  }
+
+  let compHeaderCells = ''
+  let linhaArHeaderCells = ''
+  for (let i = 0; i < compIndices.length; i++) {
+    const c = compIndices[i]
+    const pad = String(c).padStart(2, '0')
+    compHeaderCells += '<th style="text-align:center;">COMPRESSOR ' + pad + '</th>'
+    linhaArHeaderCells +=
+      '<th style="text-align:center; background-color:#145a32;">COMPRESSOR ' + pad + '</th>'
+  }
+
+  const compParamSpecs = [
+    { label: 'Horímetro (hr)', prefix: 'horimetro' },
+    { label: 'Pressão (bar)', prefix: 'pressao', fallbackPrefix: 'pressure' },
+    { label: 'Drenagem de água (mL)', prefix: 'drenagem' },
+    { label: 'Tempo Desligado', prefix: 'tempoDesligado' },
+    { label: 'Troca do filtro de ar', prefix: 'filtroAr' },
+    { label: 'Nível de óleo', prefix: 'nivelOleo' },
+    { label: 'Troca de óleo e filtro (a cada 1000hrs)', prefix: 'trocaOleo' },
+  ]
+
+  let compParamRows = ''
+  for (let s = 0; s < compParamSpecs.length; s++) {
+    const spec = compParamSpecs[s]
+    let cells = ''
+    for (let i = 0; i < compIndices.length; i++) {
+      const c = compIndices[i]
+      const val =
+        compData[spec.prefix + c] ||
+        (spec.fallbackPrefix ? compData[spec.fallbackPrefix + c] : '') ||
+        ''
+      cells += '<td style="text-align:center;">' + val + '</td>'
+    }
+    compParamRows += '<tr><td class="label-col">' + spec.label + '</td>' + cells + '</tr>'
+  }
+
+  let linhaArCells = ''
+  for (let i = 0; i < compIndices.length; i++) {
+    const c = compIndices[i]
+    const val = compData['linhaAr' + c] || ''
+    linhaArCells += '<td style="text-align:center; font-weight:bold;">' + val + '</td>'
+  }
+
+  const tableColSpan = Math.max(5, 1 + compIndices.length)
 
   const dateStr = sheet.getString('date') ? sheet.getString('date').slice(0, 10) : ''
   const mapKg = sheet.getFloat('nutrient_map_kg') || 0
@@ -83,35 +198,35 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
     <table style="width:100%;">
       <!-- CABEÇALHO OFICIAL -->
       <tr>
-        <td colspan="5" class="header-title" style="padding: 12px; font-size: 14px;">
+        <td colspan="${tableColSpan}" class="header-title" style="padding: 12px; font-size: 14px;">
           Controle Operacional Diário de Remediação
         </td>
       </tr>
 
       <!-- CABEÇALHO DE METADADOS -->
       <tr>
-        <td class="label-col" style="width: 20%;">OPERADOR:</td>
-        <td style="width: 25%; font-weight: bold;">${operator.getString('name')}</td>
+        <td class="label-col" style="width: 20%;">TÉCNICO / RESPONSÁVEL:</td>
+        <td style="width: 25%; font-weight: bold;">${sheet.operatorName || ''}</td>
         <td class="label-col" style="width: 15%;">DATA:</td>
-        <td colspan="2" style="width: 40%; font-weight: bold;">${dateStr}</td>
+        <td colspan="${tableColSpan - 3}" style="width: 40%; font-weight: bold;">${sheet.date || ''}</td>
       </tr>
       <tr>
         <td class="label-col">ÁREA:</td>
-        <td>${sheet.getString('area')}</td>
+        <td>${sheet.area || ''}</td>
         <td class="label-col">CLIMA:</td>
-        <td colspan="2">${sheet.getString('weather') || 'Ensolarado'}</td>
+        <td colspan="${tableColSpan - 3}">${sheet.weather || 'Ensolarado'}</td>
       </tr>
       <tr>
         <td class="label-col">PLUVIÔMETRO:</td>
-        <td colspan="4">${sheet.getFloat('pluviometer') || 0} mm</td>
+        <td colspan="${tableColSpan - 1}">${sheet.pluviometer || 0} mm</td>
       </tr>
 
       <!-- 1. EXTRAÇÃO/VOLUME BOMBEADO -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
       </tr>
       <tr>
-        <th style="width: 22%;">Poço de Remediação</th>
+        <th style="width: 20%;">Poço de Remediação</th>
         <th style="width: 20%;">
           Hidrômetro (Manhã)<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${morningTime || '—'}</span>
@@ -121,13 +236,13 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${afternoonTime || '—'}</span>
         </th>
         <th style="width: 18%;">Altura da bomba (m)</th>
-        <th style="width: 20%;">Saída de Cada Autopump (500mL)*</th>
+        <th colspan="${tableColSpan - 4}" style="width: 22%;">Saída Autopump (500mL)*</th>
       </tr>
       ${extractionRows}
 
       <!-- 2. INFILTRAÇÃO/VOLUME INFILTRADO -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">2. INFILTRAÇÃO/VOLUME INFILTRADO</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">2. INFILTRAÇÃO/VOLUME INFILTRADO</td>
       </tr>
       <tr>
         <th style="width: 30%;">Hidrômetro</th>
@@ -135,7 +250,7 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
           Manhã<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${infMorningTime || '—'}</span>
         </th>
-        <th colspan="2" style="width: 35%;">
+        <th colspan="${tableColSpan - 3}" style="width: 35%;">
           Tarde<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${infAfternoonTime || '—'}</span>
         </th>
@@ -143,155 +258,103 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
       <tr>
         <td class="label-col">Geral</td>
         <td colspan="2" style="text-align:right;">${infData.geralMorning || ''}</td>
-        <td colspan="2" style="text-align:right;">${infData.geralAfternoon || ''}</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:right;">${infData.geralAfternoon || ''}</td>
       </tr>
-      <tr>
-        <td class="label-col">Saída 01</td>
-        <td colspan="2" style="text-align:right;">${infData.out1Morning || ''}</td>
-        <td colspan="2" style="text-align:right;">${infData.out1Afternoon || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Saída 02</td>
-        <td colspan="2" style="text-align:right;">${infData.out2Morning || ''}</td>
-        <td colspan="2" style="text-align:right;">${infData.out2Afternoon || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Saída 03</td>
-        <td colspan="2" style="text-align:right;">${infData.out3Morning || ''}</td>
-        <td colspan="2" style="text-align:right;">${infData.out3Afternoon || ''}</td>
-      </tr>
+      ${dynamicInfExitRows}
       <tr>
         <td class="label-col">Pressão da Bomba (Infiltração)</td>
         <td colspan="2" style="text-align:center;">${infData.bombaInfiltracao || ''}</td>
         <td class="label-col">Pressão da Bomba - Geral</td>
-        <td style="text-align:center;">${infData.bombaGeral || ''}</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center;">${infData.bombaGeral || ''}</td>
       </tr>
 
       <!-- 3. DOSAGEM DE NUTRIENTES -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">3. DOSAGEM DE NUTRIENTES</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">3. DOSAGEM DE NUTRIENTES</td>
       </tr>
       <tr>
         <th style="width: 30%;">Realizada (S/N)</th>
         <th colspan="2" style="width: 35%;">Quantidade MAP (Kg)</th>
-        <th colspan="2" style="width: 35%;">Quantidade Ureia (Kg)</th>
+        <th colspan="${tableColSpan - 3}" style="width: 35%;">Quantidade Ureia (Kg)</th>
       </tr>
       <tr>
         <td style="text-align:center; font-weight:bold;">${nutrientDone ? 'Sim' : 'Não'}</td>
         <td colspan="2" style="text-align:center; font-weight:bold;">${mapKg}</td>
-        <td colspan="2" style="text-align:center; font-weight:bold;">${ureiaKg}</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:center; font-weight:bold;">${ureiaKg}</td>
       </tr>
 
       <!-- 4. COMPRESSORES -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">4. COMPRESSORES</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">4. COMPRESSORES</td>
       </tr>
       <tr>
-        <th style="width: 40%;">PARÂMETROS</th>
-        <th colspan="2" style="width: 30%;">COMPRESSOR 01</th>
-        <th colspan="2" style="width: 30%;">COMPRESSOR 02</th>
+        <th style="width: 35%;">PARÂMETROS</th>
+        ${compHeaderCells}
       </tr>
+      ${compParamRows}
       <tr>
-        <td class="label-col">Horímetro (hr)</td>
-        <td colspan="2" style="text-align:center;">${compData.horimetro1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.horimetro2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Pressão (bar)</td>
-        <td colspan="2" style="text-align:center;">${compData.pressao1 || compData.pressure1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.pressao2 || compData.pressure2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Drenagem de água (mL)</td>
-        <td colspan="2" style="text-align:center;">${compData.drenagem1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.drenagem2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Tempo Desligado</td>
-        <td colspan="2" style="text-align:center;">${compData.tempoDesligado1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.tempoDesligado2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Troca do filtro de ar</td>
-        <td colspan="2" style="text-align:center;">${compData.filtroAr1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.filtroAr2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Nível de óleo</td>
-        <td colspan="2" style="text-align:center;">${compData.nivelOleo1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.nivelOleo2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Troca de óleo e filtro (a cada 1000hrs)</td>
-        <td colspan="2" style="text-align:center;">${compData.trocaOleo1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.trocaOleo2 || ''}</td>
-      </tr>
-      <tr>
-        <th style="width: 40%; background-color:#145a32;">LINHA DE AR</th>
-        <th colspan="2" style="width: 30%; background-color:#145a32;">COMPRESSOR 01</th>
-        <th colspan="2" style="width: 30%; background-color:#145a32;">COMPRESSOR 02</th>
+        <th style="width: 35%; background-color:#145a32;">LINHA DE AR</th>
+        ${linhaArHeaderCells}
       </tr>
       <tr>
         <td class="label-col">Pressão da Linha de Ar</td>
-        <td colspan="2" style="text-align:center; font-weight:bold;">${compData.linhaAr1 || ''}</td>
-        <td colspan="2" style="text-align:center; font-weight:bold;">${compData.linhaAr2 || ''}</td>
+        ${linhaArCells}
       </tr>
 
       <!-- 5. REMOÇÃO DE ÓLEO -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">5. REMOÇÃO DE ÓLEO</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">5. REMOÇÃO DE ÓLEO</td>
       </tr>
       <tr>
-        <td colspan="5" style="background-color:#f9fbf9; font-weight:bold; border:1px solid #777;">Caixa Separadora (SAO 01)</td>
+        <td colspan="${tableColSpan}" style="background-color:#f9fbf9; font-weight:bold; border:1px solid #777;">Caixa Separadora (SAO 01)</td>
       </tr>
       <tr>
         <td class="label-col">Volume de óleo removido (mL):</td>
         <td colspan="2" style="text-align:center;">${oilData.sao1Volume || ''}</td>
         <td class="label-col">Data da última limpeza:</td>
-        <td style="text-align:center; font-weight:bold;">${oilData.sao1DataLimpeza || oilData.sao1Date || ''}</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center; font-weight:bold;">${oilData.sao1DataLimpeza || oilData.sao1Date || ''}</td>
       </tr>
       <tr>
-        <td colspan="5" style="background-color:#f9fbf9; font-weight:bold; border:1px solid #777;">Caixa Separadora (SAO 02)</td>
+        <td colspan="${tableColSpan}" style="background-color:#f9fbf9; font-weight:bold; border:1px solid #777;">Caixa Separadora (SAO 02)</td>
       </tr>
       <tr>
         <td class="label-col">Volume de óleo removido (mL):</td>
         <td colspan="2" style="text-align:center;">${oilData.sao2Volume || ''}</td>
         <td class="label-col">Data da última limpeza:</td>
-        <td style="text-align:center; font-weight:bold;">${oilData.sao2DataLimpeza || oilData.sao2Date || ''}</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center; font-weight:bold;">${oilData.sao2DataLimpeza || oilData.sao2Date || ''}</td>
       </tr>
 
       <!-- 6. RESÍDUOS SÓLIDOS E LÍQUIDOS -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">6. RESÍDUOS SÓLIDOS E LÍQUIDOS</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">6. RESÍDUOS SÓLIDOS E LÍQUIDOS</td>
       </tr>
       <tr>
         <td colspan="2" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Líquido</td>
-        <td colspan="3" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Sólido</td>
+        <td colspan="${tableColSpan - 2}" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Sólido</td>
       </tr>
       <tr>
-        <td colspan="2" style="text-align:center; font-size: 13px; font-weight:bold;">${wasteLiquid}</td>
-        <td colspan="3" style="text-align:center; font-size: 13px; font-weight:bold;">${wasteSolid}</td>
+        <td colspan="2" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_liquid_qty || '—'}</td>
+        <td colspan="${tableColSpan - 2}" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_solid_qty || '—'}</td>
       </tr>
 
       <!-- 7. CONTROLES AMBIENTAIS E 5S -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">7. CONTROLES AMBIENTAIS E 5S</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">7. CONTROLES AMBIENTAIS E 5S</td>
       </tr>
       <tr>
         <td class="label-col">5S (S/N):</td>
-        <td style="text-align:center; font-weight:bold;">${env5s ? 'Sim' : 'Não'}</td>
+        <td style="text-align:center; font-weight:bold;">${sheet.env_5s_check ? 'Sim' : 'Não'}</td>
         <td class="label-col">CHECKLIST MENSAL (S/N):</td>
-        <td colspan="2" style="text-align:center; font-weight:bold;">${envChecklist ? 'Sim' : 'Não'}</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:center; font-weight:bold;">${sheet.env_checklist_monthly ? 'Sim' : 'Não'}</td>
       </tr>
 
       <!-- 8. OBSERVAÇÕES E MANUTENÇÕES -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">8. OBSERVAÇÕES E MANUTENÇÕES</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">8. OBSERVAÇÕES E MANUTENÇÕES</td>
       </tr>
       <tr>
-        <td colspan="5" style="padding: 10px; min-height: 50px;">${sheet.getString('observations') || '—'}</td>
-      </tr>
-    </table>
+        <td colspan="${tableColSpan}" style="padding: 10px; min-height: 50px;">${sheet.observations || '—'}</td>
+      </tr>    </table>
   </body>
   </html>`
 

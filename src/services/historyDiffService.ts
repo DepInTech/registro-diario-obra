@@ -256,9 +256,19 @@ export function diffFieldSheet(
   const allInfKeys = Array.from(new Set([...Object.keys(prevInf), ...Object.keys(nextInf)]))
   for (const k of allInfKeys) {
     if (normalizeCompare(prevInf[k]) !== normalizeCompare(nextInf[k])) {
+      let dynamicLabel = infLabels[k]
+      if (!dynamicLabel) {
+        const outMatch = k.match(/^out(\d+)(Morning|Afternoon)$/)
+        if (outMatch) {
+          const num = String(outMatch[1]).padStart(2, '0')
+          const period = outMatch[2] === 'Morning' ? 'Manhã' : 'Tarde'
+          dynamicLabel = `Infiltração Saída ${num} (${period})`
+        }
+      }
+
       changes.push({
         field: `infiltration_data.${k}`,
-        label: infLabels[k] || `Infiltração: ${k}`,
+        label: dynamicLabel || `Infiltração: ${k}`,
         previousValue: formatValueDisplay(prevInf[k]),
         newValue: formatValueDisplay(nextInf[k]),
         changedAt: now,
@@ -293,9 +303,34 @@ export function diffFieldSheet(
   const allCompKeys = Array.from(new Set([...Object.keys(prevComp), ...Object.keys(nextComp)]))
   for (const k of allCompKeys) {
     if (normalizeCompare(prevComp[k]) !== normalizeCompare(nextComp[k])) {
+      let dynamicLabel = compLabels[k]
+      if (!dynamicLabel) {
+        const arMatch = k.match(/^linhaAr(\d+)$/)
+        if (arMatch) {
+          dynamicLabel = `Pressão Linha de Ar — Comp. ${String(arMatch[1]).padStart(2, '0')}`
+        } else {
+          const compMatch = k.match(/^([a-zA-Z]+)(\d+)$/)
+          if (compMatch) {
+            const prop = compMatch[1]
+            const cNum = String(compMatch[2]).padStart(2, '0')
+            const propNames: Record<string, string> = {
+              horimetro: 'Horímetro',
+              pressao: 'Pressão',
+              pressure: 'Pressão',
+              drenagem: 'Drenagem de água',
+              tempoDesligado: 'Tempo Desligado',
+              filtroAr: 'Filtro de Ar',
+              nivelOleo: 'Nível de Óleo',
+              trocaOleo: 'Troca de Óleo',
+            }
+            dynamicLabel = `Compressor ${cNum} — ${propNames[prop] || prop}`
+          }
+        }
+      }
+
       changes.push({
         field: `compressor_data.${k}`,
-        label: compLabels[k] || `Compressor: ${k}`,
+        label: dynamicLabel || `Compressor: ${k}`,
         previousValue: formatValueDisplay(prevComp[k]),
         newValue: formatValueDisplay(nextComp[k]),
         changedAt: now,

@@ -19,6 +19,7 @@ import {
   Leaf,
   Loader2,
   Plus,
+  Printer,
   Recycle,
   Save,
   Search,
@@ -1365,6 +1366,57 @@ function FieldFullEditor({
   const { isOnline, syncNow } = useSync()
   const { toast } = useToast()
 
+  // Helpers para compressores e saídas de infiltração dinâmicos
+  // Estado local para permitir compressores e saídas extras mesmo antes de preencher valores
+  const [extraCompCount, setExtraCompCount] = useState<number>(0)
+  const [extraInfExitCount, setExtraInfExitCount] = useState<number>(0)
+
+  const activeCompressorIndices = useMemo(() => {
+    const list = getCompressorIndices(formData.compressor_data)
+    const maxInMap = list.length > 0 ? Math.max(...list) : 2
+    const totalMax = Math.max(2, maxInMap, extraCompCount)
+    const result: number[] = []
+    for (let i = 1; i <= totalMax; i++) {
+      result.push(i)
+    }
+    return result
+  }, [formData.compressor_data, extraCompCount])
+
+  const activeInfiltrationExitNumbers = useMemo(() => {
+    const list = getInfiltrationExitNumbers(formData.infiltration_data)
+    const maxInMap = list.length > 0 ? Math.max(...list) : 3
+    const totalMax = Math.max(3, maxInMap, extraInfExitCount)
+    const result: number[] = []
+    for (let i = 1; i <= totalMax; i++) {
+      result.push(i)
+    }
+    return result
+  }, [formData.infiltration_data, extraInfExitCount])
+
+  const handleAddCompressor = () => {
+    const nextIdx = Math.max(3, (activeCompressorIndices[activeCompressorIndices.length - 1] || 2) + 1)
+    setExtraCompCount(nextIdx)
+    const currentComp = { ...(formData.compressor_data || {}) }
+    currentComp[`horimetro${nextIdx}`] = currentComp[`horimetro${nextIdx}`] || ''
+    handleFieldChange('compressor_data', currentComp)
+    toast({
+      title: 'Compressor adicionado',
+      description: `COMPRESSOR ${String(nextIdx).padStart(2, '0')} adicionado às tabelas de Compressores e Linha de Ar.`,
+    })
+  }
+
+  const handleAddInfiltrationExit = () => {
+    const nextExit = Math.max(4, (activeInfiltrationExitNumbers[activeInfiltrationExitNumbers.length - 1] || 3) + 1)
+    setExtraInfExitCount(nextExit)
+    const currentInf = { ...(formData.infiltration_data || {}) }
+    currentInf[`out${nextExit}Morning`] = currentInf[`out${nextExit}Morning`] || ''
+    handleFieldChange('infiltration_data', currentInf)
+    toast({
+      title: 'Saída adicionada',
+      description: `Saída ${String(nextExit).padStart(2, '0')} adicionada à tabela de Infiltração.`,
+    })
+  }
+
   // Sincronização em tempo real do editor com o IndexedDB e eventos do servidor
   const currentSheetIdRef = useRef(formData.id)
   useEffect(() => {
@@ -2309,12 +2361,22 @@ function FieldFullEditor({
             </Button>
           )}
 
+          <Button
+            variant="outline"
+            onClick={() => printFieldSheet(formData)}
+            className="min-h-[44px] text-xs font-semibold dark:border-slate-800 print:hidden"
+            title="Imprimir ou Salvar como PDF formatado"
+          >
+            <Printer className="mr-1.5 h-4 w-4 text-slate-600 dark:text-slate-400" />
+            Imprimir / PDF
+          </Button>
+
           {canExportExcel && (
             <Button
               variant="outline"
               onClick={handleExportExcel}
               disabled={isExporting}
-              className="min-h-[44px] text-xs font-semibold dark:border-slate-800"
+              className="min-h-[44px] text-xs font-semibold dark:border-slate-800 print:hidden"
             >
               {isExporting ? (
                 <span className="flex items-center gap-1.5">
@@ -3007,18 +3069,31 @@ function FieldFullEditor({
               2. INFILTRAÇÃO/VOLUME INFILTRADO
             </h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Leitura de hidrômetros geral e saídas 01 a 03 com horário de medição e pressões da
-              bomba
+              Leitura de hidrômetros geral e saídas com horário de medição e pressões da bomba
             </p>
           </div>
-          {isReturnedField('infiltracao') && (
-            <span className="rounded bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
-              🟨 CAMPO PARA CORREÇÃO
-            </span>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {isReturnedField('infiltracao') && (
+              <span className="rounded bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950 uppercase tracking-tight shadow-sm">
+                🟨 CAMPO PARA CORREÇÃO
+              </span>
+            )}
+            {!isLocked && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddInfiltrationExit}
+                className="w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[36px]"
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Adicionar Saída
+              </Button>
+            )}
+          </div>
         </div>
 
-        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
+        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner overflow-x-auto">
           <table className="w-full min-w-[500px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
@@ -3070,9 +3145,11 @@ function FieldFullEditor({
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {[
                 { label: 'Geral', mKey: 'geralMorning', aKey: 'geralAfternoon' },
-                { label: 'Saída 01', mKey: 'out1Morning', aKey: 'out1Afternoon' },
-                { label: 'Saída 02', mKey: 'out2Morning', aKey: 'out2Afternoon' },
-                { label: 'Saída 03', mKey: 'out3Morning', aKey: 'out3Afternoon' },
+                ...activeInfiltrationExitNumbers.map((num) => ({
+                  label: `Saída ${String(num).padStart(2, '0')}`,
+                  mKey: `out${num}Morning`,
+                  aKey: `out${num}Afternoon`,
+                })),
               ].map((row) => {
                 const isMLocked = isSubFieldLockedByAdmin('infiltration_data', row.mKey)
                 const isALocked = isSubFieldLockedByAdmin('infiltration_data', row.aKey)
@@ -3257,154 +3334,171 @@ function FieldFullEditor({
 
       {/* 4. COMPRESSORES */}
       <section className="epa-card p-6">
-        <div className="border-b pb-4 dark:border-slate-800">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300">
-            4. COMPRESSORES
-          </h2>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            Parâmetros operacionais dos compressores 01 e 02 e pressão da linha de ar
-          </p>
+        <div className="border-b pb-4 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300">
+              4. COMPRESSORES
+            </h2>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Parâmetros operacionais dos compressores e pressão da linha de ar
+            </p>
+          </div>
+          {!isLocked && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddCompressor}
+              className="w-fit text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 min-h-[36px]"
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Adicionar Compressor
+            </Button>
+          )}
         </div>
 
-        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
-          <table className="w-full min-w-[500px] border-collapse text-left text-xs">
+        {/* Dica de rolagem horizontal quando houver vários compressores */}
+        {activeCompressorIndices.length > 2 && (
+          <p className="mt-2 text-[11px] text-slate-400 flex items-center gap-1">
+            <span>👉 Deslize horizontalmente para visualizar e preencher todos os compressores adicionados</span>
+          </p>
+        )}
+
+        {/* Tabela de Parâmetros dos Compressores */}
+        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner overflow-x-auto">
+          <table
+            className="w-full border-collapse text-left text-xs"
+            style={{ minWidth: `${Math.max(500, 240 + activeCompressorIndices.length * 150)}px` }}
+          >
             <thead>
               <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-1/2">
+                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-60 min-w-[220px]">
                   PARÂMETROS
                 </th>
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-1/4">
-                  COMPRESSOR 01
-                </th>
-                <th className="p-2.5 border border-emerald-800 font-semibold text-center w-1/4">
-                  COMPRESSOR 02
-                </th>
+                {activeCompressorIndices.map((c) => (
+                  <th
+                    key={c}
+                    className="p-2.5 border border-emerald-800 font-semibold text-center min-w-[140px]"
+                  >
+                    COMPRESSOR {String(c).padStart(2, '0')}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {[
-                { label: 'Horímetro (hr)', k1: 'horimetro1', k2: 'horimetro2', ph: 'Ex.: 5448.81' },
-                { label: 'Pressão (bar)', k1: 'pressao1', k2: 'pressao2', ph: 'Ex.: 6 bar' },
+                { label: 'Horímetro (hr)', prefix: 'horimetro', ph: 'Ex.: 5448.81' },
+                { label: 'Pressão (bar)', prefix: 'pressao', fallbackPrefix: 'pressure', ph: 'Ex.: 6 bar' },
                 {
                   label: 'Drenagem de água (mL)',
-                  k1: 'drenagem1',
-                  k2: 'drenagem2',
+                  prefix: 'drenagem',
                   ph: 'Ex.: 6 LTS',
                 },
                 {
                   label: 'Tempo Desligado',
-                  k1: 'tempoDesligado1',
-                  k2: 'tempoDesligado2',
+                  prefix: 'tempoDesligado',
                   ph: 'Ex.: 0 min',
                 },
                 {
                   label: 'Troca do filtro de ar',
-                  k1: 'filtroAr1',
-                  k2: 'filtroAr2',
+                  prefix: 'filtroAr',
                   ph: 'Ex.: OK / data',
                 },
-                { label: 'Nível de óleo', k1: 'nivelOleo1', k2: 'nivelOleo2', ph: 'Ex.: OK' },
+                { label: 'Nível de óleo', prefix: 'nivelOleo', ph: 'Ex.: OK' },
                 {
                   label: 'Troca de óleo e filtro (a cada 1000hrs)',
-                  k1: 'trocaOleo1',
-                  k2: 'trocaOleo2',
+                  prefix: 'trocaOleo',
                   ph: 'Ex.: 6000HR',
                 },
-              ].map((row) => {
-                const isK1Locked = isSubFieldLockedByAdmin('compressor_data', row.k1)
-                const isK2Locked = isSubFieldLockedByAdmin('compressor_data', row.k2)
-                return (
-                  <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                    <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
-                      {row.label}
-                    </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
-                      {isK1Locked ? (
-                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
-                          <span>{formData.compressor_data?.[row.k1] || '—'}</span>
-                        </div>
-                      ) : (
-                        <Input
-                          inputMode="decimal"
-                          value={formData.compressor_data?.[row.k1] || ''}
-                          onChange={(e) =>
-                            handleFieldChange('compressor_data', {
-                              ...formData.compressor_data,
-                              [row.k1]: e.target.value,
-                            })
-                          }
-                          disabled={isLocked}
-                          placeholder={row.ph}
-                          className="h-10 font-mono text-xs sm:text-sm text-center"
-                        />
-                      )}
-                    </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
-                      {isK2Locked ? (
-                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
-                          <span>{formData.compressor_data?.[row.k2] || '—'}</span>
-                        </div>
-                      ) : (
-                        <Input
-                          inputMode="decimal"
-                          value={formData.compressor_data?.[row.k2] || ''}
-                          onChange={(e) =>
-                            handleFieldChange('compressor_data', {
-                              ...formData.compressor_data,
-                              [row.k2]: e.target.value,
-                            })
-                          }
-                          disabled={isLocked}
-                          placeholder={row.ph}
-                          className="h-10 font-mono text-xs sm:text-sm text-center"
-                        />
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
+              ].map((row) => (
+                <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
+                  <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                    {row.label}
+                  </td>
+                  {activeCompressorIndices.map((c) => {
+                    const key = `${row.prefix}${c}`
+                    const fallbackKey = row.fallbackPrefix ? `${row.fallbackPrefix}${c}` : null
+                    const isLockedByAdmin =
+                      isSubFieldLockedByAdmin('compressor_data', key) ||
+                      (fallbackKey ? isSubFieldLockedByAdmin('compressor_data', fallbackKey) : false)
+                    const currentVal =
+                      formData.compressor_data?.[key] ||
+                      (fallbackKey ? formData.compressor_data?.[fallbackKey] : '') ||
+                      ''
+                    return (
+                      <td key={c} className="p-2 border border-slate-200 dark:border-slate-800 min-w-[140px]">
+                        {isLockedByAdmin ? (
+                          <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                            <span>{currentVal || '—'}</span>
+                          </div>
+                        ) : (
+                          <Input
+                            inputMode="decimal"
+                            value={currentVal}
+                            onChange={(e) =>
+                              handleFieldChange('compressor_data', {
+                                ...formData.compressor_data,
+                                [key]: e.target.value,
+                              })
+                            }
+                            disabled={isLocked}
+                            placeholder={row.ph}
+                            className="h-10 font-mono text-xs sm:text-sm text-center"
+                          />
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        {/* Segunda tabela: LINHA DE AR */}
-        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
-          <table className="w-full min-w-[500px] border-collapse text-left text-xs">
+        {/* Segunda tabela: LINHA DE AR (sincronizada automaticamente com compressores) */}
+        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner overflow-x-auto">
+          <table
+            className="w-full border-collapse text-left text-xs"
+            style={{ minWidth: `${Math.max(500, 240 + activeCompressorIndices.length * 150)}px` }}
+          >
             <thead>
               <tr className="bg-emerald-800 text-white dark:bg-emerald-900 text-[11px]">
-                <th className="p-2.5 border border-emerald-700 font-semibold text-center w-1/2">
+                <th className="p-2.5 border border-emerald-700 font-semibold text-center w-60 min-w-[220px]">
                   LINHA DE AR
                 </th>
-                <th className="p-2.5 border border-emerald-700 font-semibold text-center w-1/4">
-                  COMPRESSOR 01
-                </th>
-                <th className="p-2.5 border border-emerald-700 font-semibold text-center w-1/4">
-                  COMPRESSOR 02
-                </th>
+                {activeCompressorIndices.map((c) => (
+                  <th
+                    key={c}
+                    className="p-2.5 border border-emerald-700 font-semibold text-center min-w-[140px]"
+                  >
+                    COMPRESSOR {String(c).padStart(2, '0')}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {(() => {
-                const isAr1Locked = isSubFieldLockedByAdmin('compressor_data', 'linhaAr1')
-                const isAr2Locked = isSubFieldLockedByAdmin('compressor_data', 'linhaAr2')
-                return (
-                  <tr>
-                    <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
-                      Pressão da Linha de Ar (ex.: PSI)
-                    </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
-                      {isAr1Locked ? (
+              <tr>
+                <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                  Pressão da Linha de Ar (ex.: PSI)
+                </td>
+                {activeCompressorIndices.map((c) => {
+                  const arKey = `linhaAr${c}`
+                  const isArLocked = isSubFieldLockedByAdmin('compressor_data', arKey)
+                  const currentArVal = formData.compressor_data?.[arKey] || ''
+                  return (
+                    <td key={c} className="p-2 border border-slate-200 dark:border-slate-800 min-w-[140px]">
+                      {isArLocked ? (
                         <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
-                          <span>{formData.compressor_data?.linhaAr1 || '—'}</span>
+                          <span>{currentArVal || '—'}</span>
                         </div>
                       ) : (
                         <Input
                           inputMode="decimal"
-                          value={formData.compressor_data?.linhaAr1 || ''}
+                          value={currentArVal}
                           onChange={(e) =>
                             handleFieldChange('compressor_data', {
                               ...formData.compressor_data,
-                              linhaAr1: e.target.value,
+                              [arKey]: e.target.value,
                             })
                           }
                           disabled={isLocked}
@@ -3413,30 +3507,9 @@ function FieldFullEditor({
                         />
                       )}
                     </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
-                      {isAr2Locked ? (
-                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
-                          <span>{formData.compressor_data?.linhaAr2 || '—'}</span>
-                        </div>
-                      ) : (
-                        <Input
-                          inputMode="decimal"
-                          value={formData.compressor_data?.linhaAr2 || ''}
-                          onChange={(e) =>
-                            handleFieldChange('compressor_data', {
-                              ...formData.compressor_data,
-                              linhaAr2: e.target.value,
-                            })
-                          }
-                          disabled={isLocked}
-                          placeholder="Ex.: 85 PSI"
-                          className="h-10 font-mono text-xs sm:text-sm text-center"
-                        />
-                      )}
-                    </td>
-                  </tr>
-                )
-              })()}
+                  )
+                })}
+              </tr>
             </tbody>
           </table>
         </div>
@@ -3845,6 +3918,300 @@ function SectionHeader({
   )
 }
 
+export function printFieldSheet(sheet: OfflineFieldSheetItem) {
+  const win = window.open('', '_blank')
+  if (!win) {
+    window.print()
+    return
+  }
+
+  const extData = sheet.extraction_data || []
+  let fallbackMorning = ''
+  let fallbackAfternoon = ''
+  if (Array.isArray(extData)) {
+    for (const r of extData) {
+      if (!fallbackMorning && r.morning_time) fallbackMorning = r.morning_time
+      if (!fallbackAfternoon && r.afternoon_time) fallbackAfternoon = r.afternoon_time
+    }
+  }
+
+  const morningTime = sheet.morning_time || fallbackMorning || ''
+  const afternoonTime = sheet.afternoon_time || fallbackAfternoon || ''
+  const infMorningTime = sheet.infiltration_morning_time || ''
+  const infAfternoonTime = sheet.infiltration_afternoon_time || ''
+
+  let extractionRows = ''
+  if (Array.isArray(extData) && extData.length > 0) {
+    extData.forEach((r) => {
+      let finalAutopump = r.autopump || ''
+      if (!finalAutopump && r.autopump_condition) {
+        finalAutopump =
+          r.autopump_condition === 'Outros' && r.autopump_condition_other
+            ? `Outros — ${r.autopump_condition_other}`
+            : r.autopump_condition
+      }
+
+      extractionRows += `<tr>
+        <td style="border:1px solid #777;padding:5px 8px;text-align:center;font-weight:bold;">${r.well || '—'}</td>
+        <td style="border:1px solid #777;padding:5px 8px;text-align:right;">${r.morning || ''}</td>
+        <td style="border:1px solid #777;padding:5px 8px;text-align:right;">${r.afternoon || ''}</td>
+        <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${r.pump || ''}</td>
+        <td style="border:1px solid #777;padding:5px 8px;text-align:center;">${finalAutopump}</td>
+      </tr>`
+    })
+  } else {
+    extractionRows = `<tr><td colspan="5" style="border:1px solid #777;padding:8px;text-align:center;color:#666;">Nenhum poço registrado</td></tr>`
+  }
+
+  const infData = sheet.infiltration_data || {}
+  const compData = sheet.compressor_data || {}
+  const oilData = sheet.oil_removal_data || {}
+
+  const compressorIndices = getCompressorIndices(compData)
+  const infiltrationExitNumbers = getInfiltrationExitNumbers(infData)
+
+  let dynamicInfExitRows = ''
+  for (const n of infiltrationExitNumbers) {
+    const padStr = String(n).padStart(2, '0')
+    const mVal = infData[`out${n}Morning`] || ''
+    const aVal = infData[`out${n}Afternoon`] || ''
+    dynamicInfExitRows += `<tr>
+      <td class="label-col">Saída ${padStr}</td>
+      <td colspan="2" style="text-align:right;">${mVal}</td>
+      <td colspan="2" style="text-align:right;">${aVal}</td>
+    </tr>`
+  }
+
+  let compHeaderCells = ''
+  let linhaArHeaderCells = ''
+  for (const c of compressorIndices) {
+    const pad = String(c).padStart(2, '0')
+    compHeaderCells += `<th style="text-align:center;">COMPRESSOR ${pad}</th>`
+    linhaArHeaderCells += `<th style="text-align:center; background-color:#145a32;">COMPRESSOR ${pad}</th>`
+  }
+
+  const compParamSpecs = [
+    { label: 'Horímetro (hr)', prefix: 'horimetro' },
+    { label: 'Pressão (bar)', prefix: 'pressao', fallbackPrefix: 'pressure' },
+    { label: 'Drenagem de água (mL)', prefix: 'drenagem' },
+    { label: 'Tempo Desligado', prefix: 'tempoDesligado' },
+    { label: 'Troca do filtro de ar', prefix: 'filtroAr' },
+    { label: 'Nível de óleo', prefix: 'nivelOleo' },
+    { label: 'Troca de óleo e filtro (a cada 1000hrs)', prefix: 'trocaOleo' },
+  ]
+
+  let compParamRows = ''
+  for (const spec of compParamSpecs) {
+    let cells = ''
+    for (const c of compressorIndices) {
+      const val = compData[`${spec.prefix}${c}`] || (spec.fallbackPrefix ? compData[`${spec.fallbackPrefix}${c}`] : '') || ''
+      cells += `<td style="text-align:center;">${val}</td>`
+    }
+    compParamRows += `<tr>
+      <td class="label-col">${spec.label}</td>
+      ${cells}
+    </tr>`
+  }
+
+  let linhaArCells = ''
+  for (const c of compressorIndices) {
+    const val = compData[`linhaAr${c}`] || ''
+    linhaArCells += `<td style="text-align:center; font-weight:bold;">${val}</td>`
+  }
+
+  const tableColSpan = Math.max(5, 1 + compressorIndices.length)
+
+  const printHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Planilha de Campo EPA — ${sheet.date}</title>
+  <style>
+    @page { size: A4 portrait; margin: 8mm; }
+    body { font-family: Calibri, Arial, sans-serif; font-size: 11px; margin: 0; color: #111; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    th { background-color: #0b5345; color: #ffffff; border: 1px solid #555; padding: 5px; font-weight: bold; text-align: center; }
+    td { border: 1px solid #777; padding: 4px 6px; }
+    .header-title { background-color: #0b5345; color: #ffffff; font-size: 14px; font-weight: bold; text-align: center; }
+    .section-hdr { background-color: #d1e7dd; color: #0b5345; font-weight: bold; font-size: 11px; border: 1px solid #777; }
+    .label-col { background-color: #f2f7f5; font-weight: bold; border: 1px solid #777; }
+    .no-print-bar {
+      background: #1e293b; color: #fff; padding: 10px 16px; display: flex;
+      align-items: center; justify-content: space-between; font-size: 13px;
+    }
+    .no-print-bar button {
+      background: #059669; color: #fff; border: none; padding: 8px 18px;
+      font-size: 13px; font-weight: 600; border-radius: 6px; cursor: pointer;
+    }
+    .no-print-bar button:hover { background: #047857; }
+    @media print {
+      .no-print-bar { display: none !important; }
+      body { padding: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print-bar">
+    <div><strong>Grupo EPA — Visualização e Impressão de Planilha de Campo</strong></div>
+    <div><button onclick="window.print()">Imprimir / Salvar PDF</button></div>
+  </div>
+
+  <div style="padding: 10px;">
+    <table>
+      <tr>
+        <td colspan="${tableColSpan}" class="header-title" style="padding: 10px;">
+          Controle Operacional Diário de Remediação
+        </td>
+      </tr>
+      <tr>
+        <td class="label-col" style="width: 20%;">TÉCNICO / RESPONSÁVEL:</td>
+        <td style="width: 25%; font-weight: bold;">${sheet.operatorName || ''}</td>
+        <td class="label-col" style="width: 15%;">DATA:</td>
+        <td colspan="${tableColSpan - 3}" style="width: 40%; font-weight: bold;">${sheet.date || ''}</td>
+      </tr>
+      <tr>
+        <td class="label-col">ÁREA:</td>
+        <td>${sheet.area || ''}</td>
+        <td class="label-col">CLIMA:</td>
+        <td colspan="${tableColSpan - 3}">${sheet.weather || 'Ensolarado'}</td>
+      </tr>
+      <tr>
+        <td class="label-col">PLUVIÔMETRO:</td>
+        <td colspan="${tableColSpan - 1}">${sheet.pluviometer || 0} mm</td>
+      </tr>
+
+      <!-- 1. EXTRAÇÃO/VOLUME BOMBEADO -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 6px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
+      </tr>
+      <tr>
+        <th style="width: 20%;">Poço de Remediação</th>
+        <th style="width: 20%;">Hidrômetro (Manhã) ${morningTime ? `(${morningTime})` : ''}</th>
+        <th style="width: 20%;">Hidrômetro (Tarde) ${afternoonTime ? `(${afternoonTime})` : ''}</th>
+        <th style="width: 18%;">Altura da bomba (m)</th>
+        <th colspan="${tableColSpan - 4}" style="width: 22%;">Saída Autopump (500mL)*</th>
+      </tr>
+      ${extractionRows}
+
+      <!-- 2. INFILTRAÇÃO/VOLUME INFILTRADO -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 6px;">2. INFILTRAÇÃO/VOLUME INFILTRADO</td>
+      </tr>
+      <tr>
+        <th style="width: 30%;">Hidrômetro</th>
+        <th colspan="2" style="width: 35%;">Manhã ${infMorningTime ? `(${infMorningTime})` : ''}</th>
+        <th colspan="${tableColSpan - 3}" style="width: 35%;">Tarde ${infAfternoonTime ? `(${infAfternoonTime})` : ''}</th>
+      </tr>
+      <tr>
+        <td class="label-col">Geral</td>
+        <td colspan="2" style="text-align:right;">${infData.geralMorning || ''}</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:right;">${infData.geralAfternoon || ''}</td>
+      </tr>
+      ${dynamicInfExitRows}
+      <tr>
+        <td class="label-col">Pressão da Bomba (Infiltração)</td>
+        <td colspan="2" style="text-align:center;">${infData.bombaInfiltracao || ''}</td>
+        <td class="label-col">Pressão da Bomba - Geral</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center;">${infData.bombaGeral || ''}</td>
+      </tr>
+
+      <!-- 3. DOSAGEM DE NUTRIENTES -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 6px;">3. DOSAGEM DE NUTRIENTES</td>
+      </tr>
+      <tr>
+        <th style="width: 30%;">Realizada (S/N)</th>
+        <th colspan="2" style="width: 35%;">Quantidade MAP (Kg)</th>
+        <th colspan="${tableColSpan - 3}" style="width: 35%;">Quantidade Ureia (Kg)</th>
+      </tr>
+      <tr>
+        <td style="text-align:center; font-weight:bold;">${sheet.nutrient_done ? 'Sim' : 'Não'}</td>
+        <td colspan="2" style="text-align:center; font-weight:bold;">${sheet.nutrient_map_kg || 0}</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:center; font-weight:bold;">${sheet.nutrient_ureia_kg || 0}</td>
+      </tr>
+
+      <!-- 4. COMPRESSORES -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 6px;">4. COMPRESSORES</td>
+      </tr>
+      <tr>
+        <th style="width: 35%;">PARÂMETROS</th>
+        ${compHeaderCells}
+      </tr>
+      ${compParamRows}
+      <tr>
+        <th style="width: 35%; background-color:#145a32;">LINHA DE AR</th>
+        ${linhaArHeaderCells}
+      </tr>
+      <tr>
+        <td class="label-col">Pressão da Linha de Ar</td>
+        ${linhaArCells}
+      </tr>
+
+      <!-- 5. REMOÇÃO DE ÓLEO -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 6px;">5. REMOÇÃO DE ÓLEO</td>
+      </tr>
+      <tr>
+        <td colspan="${tableColSpan}" style="background-color:#f9fbf9; font-weight:bold;">Caixa Separadora (SAO 01)</td>
+      </tr>
+      <tr>
+        <td class="label-col">Volume de óleo removido (mL):</td>
+        <td colspan="2" style="text-align:center;">${oilData.sao1Volume || ''}</td>
+        <td class="label-col">Data da última limpeza:</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center; font-weight:bold;">${oilData.sao1DataLimpeza || oilData.sao1Date || ''}</td>
+      </tr>
+      <tr>
+        <td colspan="${tableColSpan}" style="background-color:#f9fbf9; font-weight:bold;">Caixa Separadora (SAO 02)</td>
+      </tr>
+      <tr>
+        <td class="label-col">Volume de óleo removido (mL):</td>
+        <td colspan="2" style="text-align:center;">${oilData.sao2Volume || ''}</td>
+        <td class="label-col">Data da última limpeza:</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center; font-weight:bold;">${oilData.sao2DataLimpeza || oilData.sao2Date || ''}</td>
+      </tr>
+
+      <!-- 6. RESÍDUOS SÓLIDOS E LÍQUIDOS -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 6px;">6. RESÍDUOS SÓLIDOS E LÍQUIDOS</td>
+      </tr>
+      <tr>
+        <td colspan="2" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Líquido</td>
+        <td colspan="${tableColSpan - 2}" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Sólido</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_liquid_qty || '—'}</td>
+        <td colspan="${tableColSpan - 2}" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_solid_qty || '—'}</td>
+      </tr>
+
+      <!-- 7. CONTROLES AMBIENTAIS E 5S -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 6px;">7. CONTROLES AMBIENTAIS E 5S</td>
+      </tr>
+      <tr>
+        <td class="label-col">5S (S/N):</td>
+        <td style="text-align:center; font-weight:bold;">${sheet.env_5s_check ? 'Sim' : 'Não'}</td>
+        <td class="label-col">CHECKLIST MENSAL (S/N):</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:center; font-weight:bold;">${sheet.env_checklist_monthly ? 'Sim' : 'Não'}</td>
+      </tr>
+
+      <!-- 8. OBSERVAÇÕES E MANUTENÇÕES -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 6px;">8. OBSERVAÇÕES E MANUTENÇÕES</td>
+      </tr>
+      <tr>
+        <td colspan="${tableColSpan}" style="padding: 8px; min-height: 40px;">${sheet.observations || '—'}</td>
+      </tr>
+    </table>
+  </div>
+</body>
+</html>`
+
+  win.document.open()
+  win.document.write(printHtml)
+  win.document.close()
+}
+
 /**
  * Generates local XML-Excel spreadsheet matching official EPA header and columns
  */
@@ -3886,6 +4253,61 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
     extractionRows = `<tr><td colspan="5" style="border:1px solid #777;padding:8px;text-align:center;color:#666;">Nenhum poço registrado</td></tr>`
   }
 
+  // Determinação dinâmica de compressores e saídas de infiltração
+  const compressorIndices = getCompressorIndices(compData)
+  const infiltrationExitNumbers = getInfiltrationExitNumbers(infData)
+
+  let dynamicInfExitRows = ''
+  for (const n of infiltrationExitNumbers) {
+    const padStr = String(n).padStart(2, '0')
+    const mVal = infData[`out${n}Morning`] || ''
+    const aVal = infData[`out${n}Afternoon`] || ''
+    dynamicInfExitRows += `<tr>
+      <td class="label-col">Saída ${padStr}</td>
+      <td colspan="2" style="text-align:right;">${mVal}</td>
+      <td colspan="2" style="text-align:right;">${aVal}</td>
+    </tr>`
+  }
+
+  let compHeaderCells = ''
+  let linhaArHeaderCells = ''
+  for (const c of compressorIndices) {
+    const pad = String(c).padStart(2, '0')
+    compHeaderCells += `<th style="text-align:center;">COMPRESSOR ${pad}</th>`
+    linhaArHeaderCells += `<th style="text-align:center; background-color:#145a32;">COMPRESSOR ${pad}</th>`
+  }
+
+  const compParamSpecs = [
+    { label: 'Horímetro (hr)', prefix: 'horimetro' },
+    { label: 'Pressão (bar)', prefix: 'pressao', fallbackPrefix: 'pressure' },
+    { label: 'Drenagem de água (mL)', prefix: 'drenagem' },
+    { label: 'Tempo Desligado', prefix: 'tempoDesligado' },
+    { label: 'Troca do filtro de ar', prefix: 'filtroAr' },
+    { label: 'Nível de óleo', prefix: 'nivelOleo' },
+    { label: 'Troca de óleo e filtro (a cada 1000hrs)', prefix: 'trocaOleo' },
+  ]
+
+  let compParamRows = ''
+  for (const spec of compParamSpecs) {
+    let cells = ''
+    for (const c of compressorIndices) {
+      const val = compData[`${spec.prefix}${c}`] || (spec.fallbackPrefix ? compData[`${spec.fallbackPrefix}${c}`] : '') || ''
+      cells += `<td style="text-align:center;">${val}</td>`
+    }
+    compParamRows += `<tr>
+      <td class="label-col">${spec.label}</td>
+      ${cells}
+    </tr>`
+  }
+
+  let linhaArCells = ''
+  for (const c of compressorIndices) {
+    const val = compData[`linhaAr${c}`] || ''
+    linhaArCells += `<td style="text-align:center; font-weight:bold;">${val}</td>`
+  }
+
+  const tableColSpan = Math.max(5, 1 + compressorIndices.length)
+
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
   <head>
     <meta charset="utf-8">
@@ -3902,7 +4324,7 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
     <table style="width:100%;">
       <!-- CABEÇALHO OFICIAL -->
       <tr>
-        <td colspan="5" class="header-title" style="padding: 12px; font-size: 14px;">
+        <td colspan="${tableColSpan}" class="header-title" style="padding: 12px; font-size: 14px;">
           Controle Operacional Diário de Remediação
         </td>
       </tr>
@@ -3912,22 +4334,22 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
         <td class="label-col" style="width: 20%;">TÉCNICO / RESPONSÁVEL:</td>
         <td style="width: 25%; font-weight: bold;">${sheet.operatorName || ''}</td>
         <td class="label-col" style="width: 15%;">DATA:</td>
-        <td colspan="2" style="width: 40%; font-weight: bold;">${sheet.date || ''}</td>
+        <td colspan="${tableColSpan - 3}" style="width: 40%; font-weight: bold;">${sheet.date || ''}</td>
       </tr>
       <tr>
         <td class="label-col">ÁREA:</td>
         <td>${sheet.area || ''}</td>
         <td class="label-col">CLIMA:</td>
-        <td colspan="2">${sheet.weather || 'Ensolarado'}</td>
+        <td colspan="${tableColSpan - 3}">${sheet.weather || 'Ensolarado'}</td>
       </tr>
       <tr>
         <td class="label-col">PLUVIÔMETRO:</td>
-        <td colspan="4">${sheet.pluviometer || 0} mm</td>
+        <td colspan="${tableColSpan - 1}">${sheet.pluviometer || 0} mm</td>
       </tr>
 
       <!-- 1. EXTRAÇÃO/VOLUME BOMBEADO -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">1. EXTRAÇÃO/VOLUME BOMBEADO</td>
       </tr>
       <tr>
         <th style="width: 20%;">Poço de Remediação</th>
@@ -3940,13 +4362,13 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${afternoonTime || '—'}</span>
         </th>
         <th style="width: 18%;">Altura da bomba (m)</th>
-        <th style="width: 22%;">Saída Autopump (500mL)*</th>
+        <th colspan="${tableColSpan - 4}" style="width: 22%;">Saída Autopump (500mL)*</th>
       </tr>
       ${extractionRows}
 
       <!-- 2. INFILTRAÇÃO/VOLUME INFILTRADO -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">2. INFILTRAÇÃO/VOLUME INFILTRADO</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">2. INFILTRAÇÃO/VOLUME INFILTRADO</td>
       </tr>
       <tr>
         <th style="width: 30%;">Hidrômetro</th>
@@ -3954,7 +4376,7 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
           Manhã<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${infMorningTime || '—'}</span>
         </th>
-        <th colspan="2" style="width: 35%;">
+        <th colspan="${tableColSpan - 3}" style="width: 35%;">
           Tarde<br>
           <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${infAfternoonTime || '—'}</span>
         </th>
@@ -3962,99 +4384,106 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
       <tr>
         <td class="label-col">Geral</td>
         <td colspan="2" style="text-align:right;">${infData.geralMorning || ''}</td>
-        <td colspan="2" style="text-align:right;">${infData.geralAfternoon || ''}</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:right;">${infData.geralAfternoon || ''}</td>
       </tr>
-      <tr>
-        <td class="label-col">Saída 01</td>
-        <td colspan="2" style="text-align:right;">${infData.out1Morning || ''}</td>
-        <td colspan="2" style="text-align:right;">${infData.out1Afternoon || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Saída 02</td>
-        <td colspan="2" style="text-align:right;">${infData.out2Morning || ''}</td>
-        <td colspan="2" style="text-align:right;">${infData.out2Afternoon || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Saída 03</td>
-        <td colspan="2" style="text-align:right;">${infData.out3Morning || ''}</td>
-        <td colspan="2" style="text-align:right;">${infData.out3Afternoon || ''}</td>
-      </tr>
+      ${dynamicInfExitRows}
       <tr>
         <td class="label-col">Pressão da Bomba (Infiltração)</td>
         <td colspan="2" style="text-align:center;">${infData.bombaInfiltracao || ''}</td>
         <td class="label-col">Pressão da Bomba - Geral</td>
-        <td style="text-align:center;">${infData.bombaGeral || ''}</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center;">${infData.bombaGeral || ''}</td>
       </tr>
 
       <!-- 3. DOSAGEM DE NUTRIENTES -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">3. DOSAGEM DE NUTRIENTES</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">3. DOSAGEM DE NUTRIENTES</td>
       </tr>
       <tr>
         <th style="width: 30%;">Realizada (S/N)</th>
         <th colspan="2" style="width: 35%;">Quantidade MAP (Kg)</th>
-        <th colspan="2" style="width: 35%;">Quantidade Ureia (Kg)</th>
+        <th colspan="${tableColSpan - 3}" style="width: 35%;">Quantidade Ureia (Kg)</th>
       </tr>
       <tr>
         <td style="text-align:center; font-weight:bold;">${sheet.nutrient_done ? 'Sim' : 'Não'}</td>
         <td colspan="2" style="text-align:center; font-weight:bold;">${sheet.nutrient_map_kg || 0}</td>
-        <td colspan="2" style="text-align:center; font-weight:bold;">${sheet.nutrient_ureia_kg || 0}</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:center; font-weight:bold;">${sheet.nutrient_ureia_kg || 0}</td>
       </tr>
 
       <!-- 4. COMPRESSORES -->
       <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">4. COMPRESSORES</td>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">4. COMPRESSORES</td>
       </tr>
       <tr>
-        <th style="width: 40%;">PARÂMETROS</th>
-        <th colspan="2" style="width: 30%;">COMPRESSOR 01</th>
-        <th colspan="2" style="width: 30%;">COMPRESSOR 02</th>
+        <th style="width: 35%;">PARÂMETROS</th>
+        ${compHeaderCells}
       </tr>
+      ${compParamRows}
       <tr>
-        <td class="label-col">Horímetro (hr)</td>
-        <td colspan="2" style="text-align:center;">${compData.horimetro1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.horimetro2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Pressão (bar)</td>
-        <td colspan="2" style="text-align:center;">${compData.pressao1 || compData.pressure1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.pressao2 || compData.pressure2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Drenagem de água (mL)</td>
-        <td colspan="2" style="text-align:center;">${compData.drenagem1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.drenagem2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Tempo Desligado</td>
-        <td colspan="2" style="text-align:center;">${compData.tempoDesligado1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.tempoDesligado2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Troca do filtro de ar</td>
-        <td colspan="2" style="text-align:center;">${compData.filtroAr1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.filtroAr2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Nível de óleo</td>
-        <td colspan="2" style="text-align:center;">${compData.nivelOleo1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.nivelOleo2 || ''}</td>
-      </tr>
-      <tr>
-        <td class="label-col">Troca de óleo e filtro (a cada 1000hrs)</td>
-        <td colspan="2" style="text-align:center;">${compData.trocaOleo1 || ''}</td>
-        <td colspan="2" style="text-align:center;">${compData.trocaOleo2 || ''}</td>
-      </tr>
-      <tr>
-        <th style="width: 40%; background-color:#145a32;">LINHA DE AR</th>
-        <th colspan="2" style="width: 30%; background-color:#145a32;">COMPRESSOR 01</th>
-        <th colspan="2" style="width: 30%; background-color:#145a32;">COMPRESSOR 02</th>
+        <th style="width: 35%; background-color:#145a32;">LINHA DE AR</th>
+        ${linhaArHeaderCells}
       </tr>
       <tr>
         <td class="label-col">Pressão da Linha de Ar</td>
-        <td colspan="2" style="text-align:center; font-weight:bold;">${compData.linhaAr1 || ''}</td>
-        <td colspan="2" style="text-align:center; font-weight:bold;">${compData.linhaAr2 || ''}</td>
+        ${linhaArCells}
       </tr>
+
+      <!-- 5. REMOÇÃO DE ÓLEO -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">5. REMOÇÃO DE ÓLEO</td>
+      </tr>
+      <tr>
+        <td colspan="${tableColSpan}" style="background-color:#f9fbf9; font-weight:bold; border:1px solid #777;">Caixa Separadora (SAO 01)</td>
+      </tr>
+      <tr>
+        <td class="label-col">Volume de óleo removido (mL):</td>
+        <td colspan="2" style="text-align:center;">${oilData.sao1Volume || ''}</td>
+        <td class="label-col">Data da última limpeza:</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center; font-weight:bold;">${oilData.sao1DataLimpeza || oilData.sao1Date || ''}</td>
+      </tr>
+      <tr>
+        <td colspan="${tableColSpan}" style="background-color:#f9fbf9; font-weight:bold; border:1px solid #777;">Caixa Separadora (SAO 02)</td>
+      </tr>
+      <tr>
+        <td class="label-col">Volume de óleo removido (mL):</td>
+        <td colspan="2" style="text-align:center;">${oilData.sao2Volume || ''}</td>
+        <td class="label-col">Data da última limpeza:</td>
+        <td colspan="${Math.max(1, tableColSpan - 4)}" style="text-align:center; font-weight:bold;">${oilData.sao2DataLimpeza || oilData.sao2Date || ''}</td>
+      </tr>
+
+      <!-- 6. RESÍDUOS SÓLIDOS E LÍQUIDOS -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">6. RESÍDUOS SÓLIDOS E LÍQUIDOS</td>
+      </tr>
+      <tr>
+        <td colspan="2" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Líquido</td>
+        <td colspan="${tableColSpan - 2}" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Sólido</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_liquid_qty || '—'}</td>
+        <td colspan="${tableColSpan - 2}" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_solid_qty || '—'}</td>
+      </tr>
+
+      <!-- 7. CONTROLES AMBIENTAIS E 5S -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">7. CONTROLES AMBIENTAIS E 5S</td>
+      </tr>
+      <tr>
+        <td class="label-col">5S (S/N):</td>
+        <td style="text-align:center; font-weight:bold;">${sheet.env_5s_check ? 'Sim' : 'Não'}</td>
+        <td class="label-col">CHECKLIST MENSAL (S/N):</td>
+        <td colspan="${tableColSpan - 3}" style="text-align:center; font-weight:bold;">${sheet.env_checklist_monthly ? 'Sim' : 'Não'}</td>
+      </tr>
+
+      <!-- 8. OBSERVAÇÕES E MANUTENÇÕES -->
+      <tr>
+        <td colspan="${tableColSpan}" class="section-hdr" style="padding: 7px;">8. OBSERVAÇÕES E MANUTENÇÕES</td>
+      </tr>
+      <tr>
+        <td colspan="${tableColSpan}" style="padding: 10px; min-height: 50px;">${sheet.observations || '—'}</td>
+      </tr>
+    </table>
+  </body>
+  </html>`
 
       <!-- 5. REMOÇÃO DE ÓLEO -->
       <tr>
