@@ -7,7 +7,7 @@ export const NUTRIENT_ROW_TYPES: Array<'ENTRADA' | 'SAÍDA' | 'T. NUTRIENTES'> =
   'T. NUTRIENTES',
 ]
 
-export const IN_SITU_REPETITION_COUNT = 5 // Conforme o arquivo anexado oficial IN SITU REV2 (5 trios = 15 linhas)
+export const IN_SITU_REPETITION_COUNT = 0
 
 /**
  * Cria um novo trio (ENTRADA, SAÍDA, T. NUTRIENTES) para um determinado system_index
@@ -44,7 +44,7 @@ export function createNutrientTrio(systemIndex: number, date = ''): InSituNutrie
  */
 export function buildDefaultNutrientRows(
   existing?: InSituNutrientRowData[],
-  legacyRecords?: InSituMeasurementRow[],
+  _legacyRecords?: InSituMeasurementRow[],
 ): InSituNutrientRowData[] {
   // Se existing existir e contiver linhas, preserva todas elas mantendo dinamismo
   if (existing && existing.length > 0) {
@@ -58,76 +58,8 @@ export function buildDefaultNutrientRows(
     }))
   }
 
-  // Se for novo ou vazio, inicializa com 5 trios
-  const rows: InSituNutrientRowData[] = []
-  let index = 0
-
-  for (let s = 0; s < IN_SITU_REPETITION_COUNT; s++) {
-    for (const type of NUTRIENT_ROW_TYPES) {
-      const rowId = `insitu_row_${s}_${type.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`
-
-      // Fallback a partir de records legados caso existam
-      let fallbackPh = ''
-      let fallbackCond = ''
-      let fallbackCondUnit = 'µS/cm'
-      let fallbackOd = ''
-      let fallbackTemp = ''
-      let fallbackOrp = ''
-      let fallbackTurb: 'Sim' | 'Não' | '' = ''
-      let fallbackWeather = ''
-      let fallbackResp = ''
-      let fallbackDate = ''
-      let fallbackTime = ''
-
-      if (legacyRecords && legacyRecords.length > 0) {
-        if (legacyRecords[index]) {
-          const rec = legacyRecords[index]
-          fallbackDate = rec.date || ''
-          fallbackTime = rec.time || ''
-          fallbackPh = rec.ph || ''
-          fallbackCond = rec.conductivity || ''
-          fallbackCondUnit = rec.conductivity_unit || 'µS/cm'
-          fallbackOd = rec.od_mg_l || ''
-          fallbackTemp = rec.temperature_c || ''
-          fallbackOrp = rec.orp || ''
-          fallbackTurb = rec.turbidity || ''
-          fallbackWeather = rec.weather || ''
-          fallbackResp = rec.responsible || ''
-        } else {
-          const firstRec = legacyRecords[0]
-          const pair = firstRec.nutrients?.[s]
-          if (pair) {
-            if (type === 'ENTRADA' && pair.entry) fallbackPh = pair.entry
-            if (type === 'SAÍDA' && pair.exit) fallbackPh = pair.exit
-          } else if (s === 0) {
-            if (type === 'ENTRADA' && firstRec.nutrients_in) fallbackPh = firstRec.nutrients_in
-            if (type === 'SAÍDA' && firstRec.nutrients_out) fallbackPh = firstRec.nutrients_out
-          }
-        }
-      }
-
-      rows.push({
-        id: rowId,
-        type,
-        system_index: s,
-        date: fallbackDate,
-        time: fallbackTime,
-        ph: fallbackPh,
-        conductivity: fallbackCond,
-        conductivity_unit: fallbackCondUnit,
-        od_mg_l: fallbackOd,
-        temperature_c: fallbackTemp,
-        orp: fallbackOrp,
-        turbidity: fallbackTurb,
-        weather: fallbackWeather,
-        responsible: fallbackResp,
-        notes: '',
-      })
-      index++
-    }
-  }
-
-  return rows
+  // A tabela deve nascer VAZIA: nenhum trio pré-criado, nenhum valor de exemplo.
+  return []
 }
 
 /**
@@ -345,19 +277,15 @@ export function printInSituSheet(sheet: InSituSheet): void {
       gap: 6px;
     }
     .meta-col.col-projeto {
-      width: 25%;
+      width: 30%;
       border-right: 1.5px solid #5b738e;
     }
     .meta-col.col-sistema {
-      width: 35%;
+      width: 45%;
       border-right: 1.5px solid #5b738e;
     }
     .meta-col.col-ativo {
-      width: 20%;
-      border-right: 1.5px solid #5b738e;
-    }
-    .meta-col.col-data {
-      width: 20%;
+      width: 25%;
     }
     .meta-val {
       font-weight: 600;
@@ -497,7 +425,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
       </div>
     </div>
 
-    <!-- Faixa: PROJETO | SISTEMA | NÚMERO ATIVO | DATA -->
+    <!-- Faixa Oficial: PROJETO | SISTEMA | NÚMERO ATIVO -->
     <div class="meta-box">
       <div class="meta-col col-projeto">
         <span>PROJETO:</span>
@@ -510,10 +438,6 @@ export function printInSituSheet(sheet: InSituSheet): void {
       <div class="meta-col col-ativo">
         <span>NÚMERO ATIVO:</span>
         <span class="meta-val">${sheet.active_number || ''}</span>
-      </div>
-      <div class="meta-col col-data">
-        <span>DATA:</span>
-        <span class="meta-val">${sheetDate || '—'}</span>
       </div>
     </div>
 

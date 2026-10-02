@@ -32,6 +32,38 @@ export function applyDateMask(val: unknown): string {
 }
 
 /**
+ * Máscara específica para data curta (DD/MM/AA) com barras fixas.
+ * Ao digitar "150726", formata progressivamente:
+ * "1" -> "1"
+ * "15" -> "15/"
+ * "150" -> "15/0"
+ * "1507" -> "15/07/"
+ * "150726" -> "15/07/26"
+ * As barras são geradas automaticamente e não podem ser apagadas pelo usuário.
+ */
+export function applyShortDateMask(val: unknown): string {
+  if (val === null || val === undefined) return ''
+  const str = String(val)
+  // Apenas dígitos, no máximo 6 (DDMMAA)
+  const digits = str.replace(/\D/g, '').slice(0, 6)
+  if (!digits) return ''
+
+  if (digits.length < 2) {
+    return digits
+  }
+  if (digits.length === 2) {
+    return `${digits}/`
+  }
+  if (digits.length < 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`
+  }
+  if (digits.length === 4) {
+    return `${digits.slice(0, 2)}/${digits.slice(2)}/`
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
+}
+
+/**
  * Converte data em DD/MM/AAAA para YYYY-MM-DD (se aplicável), ou preserva.
  */
 export function brDateToIso(dateStr: string): string {
@@ -79,6 +111,17 @@ export function isValidBrDate(dateStr: unknown): boolean {
     const m = parseInt(mStr, 10)
     const d = parseInt(dStr, 10)
     return checkDateNumbers(d, m, y)
+  }
+
+  // Formato DD/MM/AA (ano com 2 dígitos, ex: 15/07/26)
+  const matchShort = str.match(/^(\d{2})\/(\d{2})\/(\d{2})$/)
+  if (matchShort) {
+    const day = parseInt(matchShort[1], 10)
+    const month = parseInt(matchShort[2], 10)
+    const shortYear = parseInt(matchShort[3], 10)
+    // Assume século 2000 para anos de 2 dígitos
+    const year = 2000 + shortYear
+    return checkDateNumbers(day, month, year)
   }
 
   // Espera DD/MM/AAAA

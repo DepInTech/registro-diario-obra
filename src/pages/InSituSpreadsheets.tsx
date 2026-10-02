@@ -23,7 +23,7 @@ import {
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
-import { applyDateMask, isValidBrDate } from '@/lib/dateMask'
+import { applyShortDateMask, isValidBrDate } from '@/lib/dateMask'
 import { inSituService } from '@/services/inSituAndNaService'
 import { auditExport } from '@/services/epa'
 import type { InSituSheet, InSituNutrientRowData } from '@/types/inSituAndNa'
@@ -43,13 +43,12 @@ export function InSituPage({ query = '' }: { query?: string }) {
     project_name: '21-0229',
     system_name: '',
     active_number: '',
-    date: '',
-    rev: '02',
-    rev_date: '15/07/26',
+    rev: '',
+    rev_date: '',
     status: 'draft',
     notes: '',
     records: [],
-    nutrient_rows: buildDefaultNutrientRows(),
+    nutrient_rows: [],
   })
 
   const isAdmin = user?.role === 'admin'
@@ -88,20 +87,17 @@ export function InSituPage({ query = '' }: { query?: string }) {
   }, [sheets, query])
 
   const handleStartNew = () => {
-    const initialNutrientRows = buildDefaultNutrientRows()
-
     setFormData({
       project_name: '21-0229',
       system_name: '',
       active_number: '',
-      date: '', // Vazio para preenchimento manual obrigatório (sem data automática de hoje)
-      rev: '02',
-      rev_date: '15/07/26',
+      rev: '', // Sem valor fixo no código, Técnico e Admin preenchem
+      rev_date: '', // Sem valor fixo no código, máscara com barras fixas
       responsible_name: user?.name || '',
       status: 'draft',
       notes: '',
       records: [],
-      nutrient_rows: initialNutrientRows,
+      nutrient_rows: [], // Nasce vazia
     })
     setSelectedSheet(null)
     setIsEditing(true)
@@ -109,12 +105,11 @@ export function InSituPage({ query = '' }: { query?: string }) {
 
   const handleOpenSheet = (sheet: InSituSheet) => {
     setSelectedSheet(sheet)
-    const nutrientRows = buildDefaultNutrientRows(sheet.nutrient_rows, sheet.records)
+    const nutrientRows = Array.isArray(sheet.nutrient_rows) ? sheet.nutrient_rows : []
     setFormData({
       ...sheet,
-      date: sheet.date || '',
-      rev: sheet.rev || '02',
-      rev_date: sheet.rev_date || '15/07/26',
+      rev: sheet.rev || '',
+      rev_date: sheet.rev_date || '',
       records: sheet.records || [],
       nutrient_rows: nutrientRows,
     })
@@ -124,17 +119,14 @@ export function InSituPage({ query = '' }: { query?: string }) {
   // Adiciona dinamicamente um novo conjunto completo (ENTRADA + SAÍDA + T. NUTRIENTES)
   const handleAddDayRecord = () => {
     setFormData((prev) => {
-      const currentRows =
-        prev.nutrient_rows && prev.nutrient_rows.length > 0
-          ? prev.nutrient_rows
-          : buildDefaultNutrientRows(prev.nutrient_rows, prev.records)
+      const currentRows = prev.nutrient_rows || []
 
       // Determina o próximo system_index a partir do maior existente
       const maxIndex = currentRows.reduce((acc, r) => Math.max(acc, r.system_index ?? 0), -1)
       const nextIndex = maxIndex + 1
 
-      // Herda a data da planilha se preenchida, para facilitar o registro do dia
-      const newTrio = createNutrientTrio(nextIndex, prev.date || '')
+      // Cria novo trio sem herança automática ou com data vazia
+      const newTrio = createNutrientTrio(nextIndex, '')
       return {
         ...prev,
         nutrient_rows: [...currentRows, ...newTrio],
@@ -153,16 +145,13 @@ export function InSituPage({ query = '' }: { query?: string }) {
     value: string,
   ) => {
     setFormData((prev) => {
-      const currentRows =
-        prev.nutrient_rows && prev.nutrient_rows.length > 0
-          ? prev.nutrient_rows
-          : buildDefaultNutrientRows(prev.nutrient_rows, prev.records)
+      const currentRows = prev.nutrient_rows || []
 
       const updatedNutrientRows = currentRows.map((r) => {
         if (r.id !== rowId) return r
         return {
           ...r,
-          [field]: field === 'date' ? applyDateMask(value) : value,
+          [field]: field === 'date' ? applyShortDateMask(value) : value,
         }
       })
 
@@ -183,26 +172,23 @@ export function InSituPage({ query = '' }: { query?: string }) {
       return
     }
 
-    if (formData.date && !isValidBrDate(formData.date)) {
+    if (formData.rev_date && !isValidBrDate(formData.rev_date)) {
       toast({
-        title: 'Data da Planilha inválida',
-        description: 'Informe uma data válida no formato DD/MM/AAAA.',
+        title: 'Data da Revisão inválida',
+        description: 'Informe uma data válida no formato DD/MM/AA (ex: 15/07/26).',
         variant: 'destructive',
       })
       return
     }
 
-    const currentRows =
-      formData.nutrient_rows && formData.nutrient_rows.length > 0
-        ? formData.nutrient_rows
-        : buildDefaultNutrientRows(formData.nutrient_rows, formData.records)
+    const currentRows = formData.nutrient_rows || []
 
     // Validação de datas preenchidas nas linhas
     for (const row of currentRows) {
       if (row.date && !isValidBrDate(row.date)) {
         toast({
           title: 'Data inválida na planilha',
-          description: `A data "${row.date}" na linha "${row.type}" é inválida. Utilize o formato DD/MM/AAAA.`,
+          description: `A data "${row.date}" na linha "${row.type}" é inválida. Utilize o formato DD/MM/AA (ex: 15/07/26).`,
           variant: 'destructive',
         })
         return
@@ -212,9 +198,9 @@ export function InSituPage({ query = '' }: { query?: string }) {
     try {
       const payload: Partial<InSituSheet> = {
         ...formData,
-        date: formData.date || '',
-        rev: formData.rev || '02',
-        rev_date: formData.rev_date || '15/07/26',
+        date: formData.rev_date || '', // mantém sincronizado para compatibilidade
+        rev: formData.rev || '',
+        rev_date: formData.rev_date || '',
         nutrient_rows: currentRows,
         id: selectedSheet?.id,
         status: newStatus || formData.status || 'draft',
@@ -224,7 +210,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
       setSelectedSheet(saved)
       setFormData({
         ...saved,
-        nutrient_rows: buildDefaultNutrientRows(saved.nutrient_rows, saved.records),
+        nutrient_rows: saved.nutrient_rows || [],
       })
       toast({
         title: 'Planilha In-Situ salva com sucesso!',
@@ -344,10 +330,14 @@ export function InSituPage({ query = '' }: { query?: string }) {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredSheets.map((sheet) => {
-              const rows = buildDefaultNutrientRows(sheet.nutrient_rows, sheet.records)
-              const filledCount = rows.filter(
+              const sheetRows = Array.isArray(sheet.nutrient_rows) ? sheet.nutrient_rows : []
+              const filledCount = sheetRows.filter(
                 (r) => r.ph || r.conductivity || r.od_mg_l || r.date,
               ).length
+              const revLabel = sheet.rev ? `REV ${sheet.rev}` : ''
+              const revDateLabel = sheet.rev_date ? sheet.rev_date : ''
+              const revFull = [revLabel, revDateLabel].filter(Boolean).join('. ')
+
               return (
                 <Card
                   key={sheet.id}
@@ -390,20 +380,22 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         {sheet.active_number || '—'}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span>Medições preenchidas:</span>
-                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">
-                        {filledCount} de {rows.length} medições ({Math.floor(rows.length / 3)} dias)
-                      </span>
-                    </div>
-                    {sheet.date && (
-                      <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-2 text-[11px]">
-                        <span>Data da Planilha:</span>
-                        <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
-                          {sheet.date}
+                    {revFull && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span>Identificação:</span>
+                        <span className="font-mono font-semibold text-emerald-800 dark:text-emerald-300">
+                          {revFull}
                         </span>
                       </div>
                     )}
+                    <div className="flex items-center justify-between">
+                      <span>Medições diárias:</span>
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                        {sheetRows.length === 0
+                          ? '0 registros'
+                          : `${filledCount} de ${sheetRows.length} medições (${Math.floor(sheetRows.length / 3)} dias)`}
+                      </span>
+                    </div>
                   </CardContent>
                 </Card>
               )
@@ -415,13 +407,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
   }
 
   // Preenchimento da planilha digital (fiel ao documento físico anexado IN SITU REV2)
-  const rows =
-    formData.nutrient_rows && formData.nutrient_rows.length > 0
-      ? formData.nutrient_rows
-      : buildDefaultNutrientRows(formData.nutrient_rows, formData.records)
-
-  const revDisplay = formData.rev?.trim() || '02'
-  const revDateDisplay = formData.rev_date?.trim() || '15/07/26'
+  const rows = formData.nutrient_rows || []
 
   return (
     <div className="space-y-4">
@@ -540,37 +526,48 @@ export function InSituPage({ query = '' }: { query?: string }) {
             </h1>
           </div>
 
-          <div className="w-full sm:w-64 flex justify-center sm:justify-end">
-            {/* Bloco de identificação da versão da planilha totalmente editável */}
+          <div className="w-full sm:w-72 flex justify-center sm:justify-end">
+            {/* Bloco de identificação oficial: Planilha in-situ — REV [XX]. [DD/MM/AA] (Editável por Admin e Técnico, sem valor fixo) */}
             <div className="bg-[#eaf6d8] dark:bg-lime-950/60 text-[#557924] dark:text-lime-300 border border-[#cbe5a3] dark:border-lime-800 px-3 py-1.5 rounded text-center text-[11px] font-bold leading-tight shadow-xs w-full sm:w-auto">
               <div className="tracking-wide">Planilha in-situ</div>
-              <div className="mt-1 flex items-center justify-center gap-1 text-[10px] font-semibold">
+              <div className="mt-1 flex items-center justify-center gap-1 text-[11px] font-semibold">
                 <span className="font-bold">REV</span>
                 <input
                   type="text"
-                  value={formData.rev ?? '02'}
+                  value={formData.rev ?? ''}
                   onChange={(e) => setFormData((p) => ({ ...p, rev: e.target.value }))}
-                  placeholder="02"
-                  title="Número da Revisão (ex: 01, 02, 03...)"
-                  className="w-8 h-5 text-center font-bold font-mono bg-white/80 dark:bg-slate-900/80 border border-lime-400 dark:border-lime-700 rounded px-0.5 text-[#557924] dark:text-lime-300 focus:outline-none focus:ring-1 focus:ring-lime-500"
+                  placeholder="XX"
+                  title="Número da Revisão (ex: 02)"
+                  className="w-9 h-5 text-center font-bold font-mono bg-white/90 dark:bg-slate-900/90 border border-lime-400 dark:border-lime-700 rounded px-0.5 text-[#557924] dark:text-lime-300 focus:outline-none focus:ring-1 focus:ring-lime-500"
                 />
-                <span>.</span>
+                <span className="font-bold">.</span>
                 <input
                   type="text"
-                  value={formData.rev_date ?? '15/07/26'}
-                  onChange={(e) => setFormData((p) => ({ ...p, rev_date: e.target.value }))}
-                  placeholder="15/07/26"
-                  title="Data da Revisão (ex: 15/07/26)"
-                  className="w-20 h-5 text-center font-bold font-mono bg-white/80 dark:bg-slate-900/80 border border-lime-400 dark:border-lime-700 rounded px-1 text-[#557924] dark:text-lime-300 focus:outline-none focus:ring-1 focus:ring-lime-500"
+                  value={formData.rev_date ?? ''}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      rev_date: applyShortDateMask(e.target.value),
+                    }))
+                  }
+                  placeholder="DD/MM/AA"
+                  maxLength={8}
+                  title="Data da Revisão no formato DD/MM/AA com barras automáticas (ex: 15/07/26)"
+                  className={cn(
+                    'w-20 h-5 text-center font-bold font-mono bg-white/90 dark:bg-slate-900/90 border border-lime-400 dark:border-lime-700 rounded px-1 text-[#557924] dark:text-lime-300 focus:outline-none focus:ring-1 focus:ring-lime-500',
+                    formData.rev_date &&
+                      !isValidBrDate(formData.rev_date) &&
+                      'border-rose-500 text-rose-600',
+                  )}
                 />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Faixa Oficial: PROJETO | SISTEMA | NÚMERO ATIVO | DATA (editável por Admin e Técnico, sem pré-preenchimento automático) */}
+        {/* Faixa Oficial: PROJETO | SISTEMA | NÚMERO ATIVO (sem campo de data separado conforme requisito 1) */}
         <div className="grid grid-cols-1 md:grid-cols-12 border-2 border-[#5b738e] dark:border-slate-700 bg-white dark:bg-slate-900 mb-3 text-xs divide-y md:divide-y-0 md:divide-x divide-[#5b738e] dark:divide-slate-700">
-          <div className="md:col-span-3 p-2 flex items-center gap-2">
+          <div className="md:col-span-4 p-2 flex items-center gap-2">
             <span className="font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
               PROJETO:
             </span>
@@ -583,7 +580,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
             />
           </div>
 
-          <div className="md:col-span-4 p-2 flex items-center gap-2">
+          <div className="md:col-span-5 p-2 flex items-center gap-2">
             <span className="font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
               SISTEMA:
             </span>
@@ -606,24 +603,6 @@ export function InSituPage({ query = '' }: { query?: string }) {
               onChange={(e) => setFormData((p) => ({ ...p, active_number: e.target.value }))}
               placeholder="Ex.: AT-01"
               className="w-full font-mono font-medium text-slate-900 dark:text-slate-100 bg-transparent border-0 p-0 focus:outline-none focus:ring-0 text-xs"
-            />
-          </div>
-
-          <div className="md:col-span-2 p-2 flex items-center gap-2">
-            <span className="font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
-              DATA:
-            </span>
-            <input
-              type="text"
-              value={formData.date || ''}
-              onChange={(e) => setFormData((p) => ({ ...p, date: applyDateMask(e.target.value) }))}
-              placeholder="DD/MM/AAAA"
-              maxLength={10}
-              title="Data correspondente à planilha (preenchimento manual)"
-              className={cn(
-                'w-full font-mono font-medium text-slate-900 dark:text-slate-100 bg-transparent border-0 p-0 focus:outline-none focus:ring-0 text-xs',
-                formData.date && !isValidBrDate(formData.date) && 'text-rose-600',
-              )}
             />
           </div>
         </div>
@@ -708,153 +687,180 @@ export function InSituPage({ query = '' }: { query?: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#5b738e] dark:divide-slate-700 text-xs">
-              {rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="divide-x divide-[#5b738e] dark:divide-slate-700 hover:bg-sky-50/40 dark:hover:bg-slate-900/60"
-                >
-                  {/* PONTO DE MEDIÇÃO: ENTRADA / SAÍDA / T. NUTRIENTES em azul oficial */}
-                  <td className="px-2 py-1.5 text-center font-extrabold text-[#004b87] dark:text-sky-400 bg-white dark:bg-slate-950 select-none tracking-tight">
-                    {row.type}
+              {rows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={11}
+                    className="p-8 text-center text-slate-500 bg-slate-50/60 dark:bg-slate-900/40"
+                  >
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <p className="text-xs text-slate-600 dark:text-slate-400">
+                        Nenhum registro diário adicionado.
+                      </p>
+                      <Button
+                        type="button"
+                        onClick={handleAddDayRecord}
+                        size="sm"
+                        className="bg-sky-700 hover:bg-sky-800 text-white text-xs h-8 px-3"
+                      >
+                        <Plus className="mr-1.5 h-3.5 w-3.5" />
+                        Adicionar Primeiro Registro / Dia (ENTRADA + SAÍDA + T. NUTRIENTES)
+                      </Button>
+                    </div>
                   </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="divide-x divide-[#5b738e] dark:divide-slate-700 hover:bg-sky-50/40 dark:hover:bg-slate-900/60"
+                  >
+                    {/* PONTO DE MEDIÇÃO: ENTRADA / SAÍDA / T. NUTRIENTES em azul oficial */}
+                    <td className="px-2 py-1.5 text-center font-extrabold text-[#004b87] dark:text-sky-400 bg-white dark:bg-slate-950 select-none tracking-tight">
+                      {row.type}
+                    </td>
 
-                  {/* DATA */}
-                  <td className="p-1">
-                    <input
-                      type="text"
-                      value={row.date || ''}
-                      onChange={(e) => handleUpdateRowCell(row.id, 'date', e.target.value)}
-                      placeholder=""
-                      maxLength={10}
-                      className={cn(
-                        'w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500',
-                        row.date && !isValidBrDate(row.date) && 'bg-rose-50 text-rose-700',
-                      )}
-                    />
-                  </td>
+                    {/* DATA */}
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        value={row.date || ''}
+                        onChange={(e) => handleUpdateRowCell(row.id, 'date', e.target.value)}
+                        placeholder="DD/MM/AA"
+                        maxLength={8}
+                        className={cn(
+                          'w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500',
+                          row.date &&
+                            !isValidBrDate(row.date) &&
+                            'bg-rose-50 text-rose-700 font-semibold',
+                        )}
+                      />
+                    </td>
+                    {/* HORA */}
+                    <td className="p-1">
+                      <input
+                        type="time"
+                        value={row.time || ''}
+                        onChange={(e) => handleUpdateRowCell(row.id, 'time', e.target.value)}
+                        className="w-full h-7 px-0.5 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                      />
+                    </td>
 
-                  {/* HORA */}
-                  <td className="p-1">
-                    <input
-                      type="time"
-                      value={row.time || ''}
-                      onChange={(e) => handleUpdateRowCell(row.id, 'time', e.target.value)}
-                      className="w-full h-7 px-0.5 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
-                  </td>
-
-                  {/* pH */}
-                  <td className="p-1">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={row.ph || ''}
-                      onChange={(e) => handleUpdateRowCell(row.id, 'ph', e.target.value)}
-                      className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
-                  </td>
-
-                  {/* Cond. (com campo de unidade ao lado) */}
-                  <td className="p-1">
-                    <div className="flex items-center gap-0.5">
+                    {/* pH */}
+                    <td className="p-1">
                       <input
                         type="text"
                         inputMode="decimal"
-                        value={row.conductivity || ''}
+                        value={row.ph || ''}
+                        onChange={(e) => handleUpdateRowCell(row.id, 'ph', e.target.value)}
+                        className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                      />
+                    </td>
+
+                    {/* Cond. (com campo de unidade ao lado) */}
+                    <td className="p-1">
+                      <div className="flex items-center gap-0.5">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={row.conductivity || ''}
+                          onChange={(e) =>
+                            handleUpdateRowCell(row.id, 'conductivity', e.target.value)
+                          }
+                          placeholder=""
+                          className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        />
+                        <input
+                          type="text"
+                          value={row.conductivity_unit ?? 'µS/cm'}
+                          onChange={(e) =>
+                            handleUpdateRowCell(row.id, 'conductivity_unit', e.target.value)
+                          }
+                          placeholder="unid"
+                          title="Anote a unidade indicada no visor (ex: µS/cm, mS/cm)"
+                          className="w-12 h-6 text-[9px] font-mono text-center text-slate-500 bg-slate-100 dark:bg-slate-800 border-0 rounded"
+                        />
+                      </div>
+                    </td>
+
+                    {/* OD (mg/L) */}
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={row.od_mg_l || ''}
+                        onChange={(e) => handleUpdateRowCell(row.id, 'od_mg_l', e.target.value)}
+                        placeholder=""
+                        title="OD SEMPRE DEVE SER MEDIDO EM MG/L NUNCA EM %"
+                        className="w-full h-7 px-1 text-center font-mono font-semibold text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                      />
+                    </td>
+
+                    {/* Temp. (ºC) */}
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={row.temperature_c || ''}
                         onChange={(e) =>
-                          handleUpdateRowCell(row.id, 'conductivity', e.target.value)
+                          handleUpdateRowCell(row.id, 'temperature_c', e.target.value)
                         }
                         placeholder=""
                         className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
+                    </td>
+
+                    {/* ORP */}
+                    <td className="p-1">
                       <input
                         type="text"
-                        value={row.conductivity_unit ?? 'µS/cm'}
-                        onChange={(e) =>
-                          handleUpdateRowCell(row.id, 'conductivity_unit', e.target.value)
-                        }
-                        placeholder="unid"
-                        title="Anote a unidade indicada no visor (ex: µS/cm, mS/cm)"
-                        className="w-12 h-6 text-[9px] font-mono text-center text-slate-500 bg-slate-100 dark:bg-slate-800 border-0 rounded"
+                        inputMode="decimal"
+                        value={row.orp || ''}
+                        onChange={(e) => handleUpdateRowCell(row.id, 'orp', e.target.value)}
+                        placeholder=""
+                        className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* OD (mg/L) */}
-                  <td className="p-1">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={row.od_mg_l || ''}
-                      onChange={(e) => handleUpdateRowCell(row.id, 'od_mg_l', e.target.value)}
-                      placeholder=""
-                      title="OD SEMPRE DEVE SER MEDIDO EM MG/L NUNCA EM %"
-                      className="w-full h-7 px-1 text-center font-mono font-semibold text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
-                  </td>
+                    {/* TURVA (sim/não) */}
+                    <td className="p-1">
+                      <select
+                        value={row.turbidity || ''}
+                        onChange={(e) =>
+                          handleUpdateRowCell(row.id, 'turbidity', e.target.value as any)
+                        }
+                        className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:bg-slate-950"
+                      >
+                        <option value="">—</option>
+                        <option value="não">não</option>
+                        <option value="sim">sim</option>
+                      </select>
+                    </td>
 
-                  {/* Temp. (ºC) */}
-                  <td className="p-1">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={row.temperature_c || ''}
-                      onChange={(e) => handleUpdateRowCell(row.id, 'temperature_c', e.target.value)}
-                      placeholder=""
-                      className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
-                  </td>
+                    {/* CLIMA */}
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        value={row.weather || ''}
+                        onChange={(e) => handleUpdateRowCell(row.id, 'weather', e.target.value)}
+                        placeholder=""
+                        className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                      />
+                    </td>
 
-                  {/* ORP */}
-                  <td className="p-1">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={row.orp || ''}
-                      onChange={(e) => handleUpdateRowCell(row.id, 'orp', e.target.value)}
-                      placeholder=""
-                      className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
-                  </td>
-
-                  {/* TURVA (sim/não) */}
-                  <td className="p-1">
-                    <select
-                      value={row.turbidity || ''}
-                      onChange={(e) =>
-                        handleUpdateRowCell(row.id, 'turbidity', e.target.value as any)
-                      }
-                      className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:bg-slate-950"
-                    >
-                      <option value="">—</option>
-                      <option value="não">não</option>
-                      <option value="sim">sim</option>
-                    </select>
-                  </td>
-
-                  {/* CLIMA */}
-                  <td className="p-1">
-                    <input
-                      type="text"
-                      value={row.weather || ''}
-                      onChange={(e) => handleUpdateRowCell(row.id, 'weather', e.target.value)}
-                      placeholder=""
-                      className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
-                  </td>
-
-                  {/* RESPONSÁVEL PELAS MEDIÇÕES */}
-                  <td className="p-1">
-                    <input
-                      type="text"
-                      value={row.responsible || ''}
-                      onChange={(e) => handleUpdateRowCell(row.id, 'responsible', e.target.value)}
-                      placeholder=""
-                      className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
-                  </td>
-                </tr>
-              ))}
+                    {/* RESPONSÁVEL PELAS MEDIÇÕES */}
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        value={row.responsible || ''}
+                        onChange={(e) => handleUpdateRowCell(row.id, 'responsible', e.target.value)}
+                        placeholder=""
+                        className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                      />
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
