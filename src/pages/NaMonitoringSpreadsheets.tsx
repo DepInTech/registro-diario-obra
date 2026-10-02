@@ -747,7 +747,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
         {/* DIGITALIZAÇÃO DA PLANILHA FÍSICA (LAYOUT OFICIAL DO EXCEL)     */}
         {/* 16 Colunas: 4 blocos de [Poço | NA (m) | NO (m) | Obs.]        */}
         {/* ============================================================== */}
-        <div className="rounded-lg border-2 border-slate-400 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-sm overflow-hidden">
+        <div className="rounded-lg border-2 border-slate-500 dark:border-slate-700 bg-white dark:bg-slate-950 shadow-sm overflow-hidden">
           {/* Container com scroll horizontal em telas menores para NUNCA quebrar a estrutura em cards */}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] border-collapse text-xs table-fixed">
@@ -778,7 +778,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                 <tr className="border-b border-slate-300 dark:border-slate-800">
                   <td
                     colSpan={16}
-                    className="px-3 py-1.5 font-bold uppercase text-[12px] tracking-wide text-slate-900 dark:text-slate-100 bg-slate-50 dark:bg-slate-900/80 border-r border-slate-300 dark:border-slate-800"
+                    className="px-3 py-1.5 font-bold uppercase text-[12px] tracking-wide text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-900/80 border-r border-slate-300 dark:border-slate-800"
                   >
                     CONTRATO
                   </td>
@@ -797,9 +797,9 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                           setSheetFormData((p) => ({ ...p, contract_number: e.target.value }))
                         }
                         placeholder="Ex.: CT 5900089378"
-                        className="h-8 w-80 font-bold font-mono text-xs border-slate-300 dark:border-slate-700"
+                        className="h-8 w-80 font-bold font-mono text-xs border-slate-400 dark:border-slate-700"
                       />
-                      <span className="text-[11px] text-slate-400 italic">
+                      <span className="text-[11px] text-slate-500 italic">
                         (Identificação do contrato da área/projeto)
                       </span>
                     </div>
@@ -813,7 +813,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                     className="p-1 px-3 bg-slate-50/60 dark:bg-slate-900/60 border-r border-slate-300 dark:border-slate-800"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-bold uppercase text-slate-500 shrink-0">
+                      <span className="text-[11px] font-bold uppercase text-slate-700 dark:text-slate-300 shrink-0">
                         Localidade / Área:
                       </span>
                       <Input
@@ -822,17 +822,17 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                           setSheetFormData((p) => ({ ...p, area_name: e.target.value }))
                         }
                         placeholder="Ex.: KM244 - ALTO ALEGRE DO PINDARÉ/MA"
-                        className="h-8 max-w-lg font-bold uppercase text-xs sm:text-sm border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                        className="h-8 max-w-lg font-bold uppercase text-xs sm:text-sm border-slate-400 dark:border-slate-700 bg-white dark:bg-slate-950"
                       />
                     </div>
                   </td>
                 </tr>
 
                 {/* LINHA 4: PLANILHA DIÁRIA DE CAMPO */}
-                <tr className="border-b border-slate-300 dark:border-slate-800">
+                <tr className="border-b border-slate-400 dark:border-slate-800">
                   <td
                     colSpan={16}
-                    className="px-3 py-1.5 font-bold uppercase text-xs sm:text-sm text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-900 border-r border-slate-300 dark:border-slate-800"
+                    className="px-3 py-1.5 font-bold uppercase text-xs sm:text-sm text-slate-900 dark:text-slate-100 bg-slate-200/80 dark:bg-slate-900 border-r border-slate-400 dark:border-slate-800"
                   >
                     PLANILHA DIÁRIA DE CAMPO
                   </td>
@@ -842,7 +842,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                 <tr className="border-b-2 border-slate-400 dark:border-slate-700">
                   <td
                     colSpan={16}
-                    className="px-3 py-1.5 font-semibold text-xs text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-900/60 border-r border-slate-300 dark:border-slate-800"
+                    className="px-3 py-1.5 font-semibold text-xs text-slate-800 dark:text-slate-200 bg-slate-100/80 dark:bg-slate-900/60 border-r border-slate-300 dark:border-slate-800"
                   >
                     Monitoramento do Nível d'Água
                   </td>
@@ -866,13 +866,13 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                         placeholder="DD/MM/AAAA"
                         maxLength={10}
                         className={cn(
-                          'h-7 w-32 font-mono text-center text-xs border-slate-300 dark:border-slate-700',
+                          'h-7 w-32 font-mono text-center text-xs border-slate-400 dark:border-slate-700',
                           sheetFormData.date &&
                             !isValidBrDate(sheetFormData.date) &&
                             'border-rose-500 bg-rose-50 dark:bg-rose-950/40',
                         )}
                       />
-                      <span className="text-[11px] text-slate-400 ml-4 hidden sm:inline">
+                      <span className="text-[11px] text-slate-600 dark:text-slate-400 ml-4 hidden sm:inline">
                         Responsável:
                       </span>
                       <Input
@@ -881,7 +881,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                           setSheetFormData((p) => ({ ...p, responsible_name: e.target.value }))
                         }
                         placeholder="Técnico responsável"
-                        className="h-7 w-48 text-xs border-slate-300 dark:border-slate-700 hidden sm:inline-flex"
+                        className="h-7 w-48 text-xs border-slate-400 dark:border-slate-700 hidden sm:inline-flex"
                       />
                     </div>
                   </td>
@@ -898,7 +898,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                               setSheetFormData((p) => ({ ...p, weather: e.target.value }))
                             }
                             placeholder="Descreva o clima..."
-                            className="h-7 text-xs flex-1 border-slate-300 dark:border-slate-700"
+                            className="h-7 text-xs flex-1 border-slate-400 dark:border-slate-700"
                           />
                           <Button
                             type="button"
@@ -921,7 +921,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                               weather: e.target.value === 'Outros' ? 'Outros' : e.target.value,
                             }))
                           }
-                          className="h-7 flex-1 rounded border border-slate-300 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
+                          className="h-7 flex-1 rounded border border-slate-400 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
                         >
                           <option value="Ensolarado">Ensolarado</option>
                           <option value="Chuvoso">Chuvoso</option>
@@ -934,57 +934,57 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                 </tr>
 
                 {/* LINHA 7: CABEÇALHOS DAS COLUNAS (4 BLOCOS IDÊNTICOS: Poço | NA (m) | NO (m) | Obs.) */}
-                <tr className="bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold text-[11px] border-b-2 border-slate-400 dark:border-slate-700 select-none">
+                <tr className="bg-slate-300/80 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-bold text-[11px] border-b-2 border-slate-500 dark:border-slate-700 select-none">
                   {/* Bloco 1 */}
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     Poço
                   </th>
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     NA (m)
                   </th>
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     NO (m)
                   </th>
-                  <th className="p-1 text-center border-r-2 border-slate-400 dark:border-slate-600">
+                  <th className="p-1.5 text-center border-r-2 border-slate-500 dark:border-slate-600">
                     Obs.
                   </th>
                   {/* Bloco 2 */}
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     Poço
                   </th>
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     NA (m)
                   </th>
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     NO (m)
                   </th>
-                  <th className="p-1 text-center border-r-2 border-slate-400 dark:border-slate-600">
+                  <th className="p-1.5 text-center border-r-2 border-slate-500 dark:border-slate-600">
                     Obs.
                   </th>
                   {/* Bloco 3 */}
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     Poço
                   </th>
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     NA (m)
                   </th>
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     NO (m)
                   </th>
-                  <th className="p-1 text-center border-r-2 border-slate-400 dark:border-slate-600">
+                  <th className="p-1.5 text-center border-r-2 border-slate-500 dark:border-slate-600">
                     Obs.
                   </th>
                   {/* Bloco 4 */}
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     Poço
                   </th>
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     NA (m)
                   </th>
-                  <th className="p-1 text-center border-r border-slate-300 dark:border-slate-700">
+                  <th className="p-1.5 text-center border-r border-slate-400 dark:border-slate-700">
                     NO (m)
                   </th>
-                  <th className="p-1 text-center">Obs.</th>
+                  <th className="p-1.5 text-center">Obs.</th>
                 </tr>
 
                 {/* LINHAS DE DADOS (4 BLOCOS LADO A LADO) */}
@@ -994,8 +994,8 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                     <tr
                       key={rowIdx}
                       className={cn(
-                        'border-b border-slate-200 dark:border-slate-800 hover:bg-emerald-50/20 dark:hover:bg-slate-900/40',
-                        rowIdx % 2 === 1 && 'bg-slate-50/40 dark:bg-slate-900/20',
+                        'border-b border-slate-300 dark:border-slate-800 hover:bg-emerald-50/30 dark:hover:bg-slate-900/40',
+                        rowIdx % 2 === 1 && 'bg-slate-100/50 dark:bg-slate-900/20',
                       )}
                     >
                       {row.blocks.flatMap(({ blockIdx, item, originalIdx }) => {
@@ -1006,19 +1006,19 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                           return [
                             <td
                               key={`${keyPrefix}-poco`}
-                              className="p-1 text-center border-r border-slate-200 dark:border-slate-800 text-slate-300 select-none"
+                              className="p-1 text-center border-r border-slate-300 dark:border-slate-800 text-slate-400 select-none"
                             >
                               &nbsp;
                             </td>,
                             <td
                               key={`${keyPrefix}-na`}
-                              className="p-1 border-r border-slate-200 dark:border-slate-800 select-none"
+                              className="p-1 border-r border-slate-300 dark:border-slate-800 select-none"
                             >
                               &nbsp;
                             </td>,
                             <td
                               key={`${keyPrefix}-no`}
-                              className="p-1 border-r border-slate-200 dark:border-slate-800 select-none"
+                              className="p-1 border-r border-slate-300 dark:border-slate-800 select-none"
                             >
                               &nbsp;
                             </td>,
@@ -1037,7 +1037,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                         return [
                           <td
                             key={`${keyPrefix}-poco`}
-                            className="p-0.5 text-center font-mono font-bold text-[11px] bg-emerald-50/30 dark:bg-slate-900/80 border-r border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 group/cell relative"
+                            className="p-0.5 text-center font-mono font-bold text-[11px] bg-emerald-50/50 dark:bg-slate-900/80 border-r border-slate-300 dark:border-slate-800 text-slate-900 dark:text-slate-100 group/cell relative"
                           >
                             <div className="flex items-center justify-between w-full h-full gap-0.5 px-0.5">
                               <Input
@@ -1065,7 +1065,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                           </td>,
                           <td
                             key={`${keyPrefix}-na`}
-                            className="p-0.5 border-r border-slate-200 dark:border-slate-800"
+                            className="p-0.5 border-r border-slate-300 dark:border-slate-800"
                           >
                             <Input
                               inputMode="decimal"
@@ -1079,7 +1079,7 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
                           </td>,
                           <td
                             key={`${keyPrefix}-no`}
-                            className="p-0.5 border-r border-slate-200 dark:border-slate-800"
+                            className="p-0.5 border-r border-slate-300 dark:border-slate-800"
                           >
                             <Input
                               inputMode="decimal"

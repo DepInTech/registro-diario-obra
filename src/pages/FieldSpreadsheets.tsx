@@ -2798,7 +2798,7 @@ function FieldFullEditor({
           </span>
         </p>
 
-        <div className="mt-3 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner">
+        <div className="mt-3 table-scroll-container rounded-xl border-2 border-slate-400 dark:border-slate-800 shadow-inner">
           <table className="w-full min-w-[760px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
@@ -2826,7 +2826,7 @@ function FieldFullEditor({
                       disabled={isLocked || isFieldLockedByAdmin('morning_time')}
                       readOnly={isFieldLockedByAdmin('morning_time')}
                       className={cn(
-                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-300 dark:border-0 py-0 px-1',
                         isFieldLockedByAdmin('morning_time') &&
                           'bg-slate-200 text-slate-700 cursor-not-allowed',
                         isReturnedField('hidrometro') &&
@@ -2856,7 +2856,7 @@ function FieldFullEditor({
                       disabled={isLocked || isFieldLockedByAdmin('afternoon_time')}
                       readOnly={isFieldLockedByAdmin('afternoon_time')}
                       className={cn(
-                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-300 dark:border-0 py-0 px-1',
                         isFieldLockedByAdmin('afternoon_time') &&
                           'bg-slate-200 text-slate-700 cursor-not-allowed',
                         isReturnedField('hidrometro') &&
@@ -2883,7 +2883,7 @@ function FieldFullEditor({
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-300 dark:divide-slate-800">
               {formData.extraction_data?.map((row, index) => {
                 const snapRow = snapshotWells?.[index]
                 const persistedRow = initialSheet?.extraction_data?.[index]
@@ -2906,7 +2906,7 @@ function FieldFullEditor({
 
                 return (
                   <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                    <td className="p-2 border border-slate-300 dark:border-slate-800">
                       {hasLockedWell ? (
                         <div className="flex items-center justify-center gap-1.5 py-2 px-2 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800/80 rounded min-h-[40px] cursor-not-allowed select-none">
                           <span>{effectiveWell}</span>
@@ -2919,11 +2919,11 @@ function FieldFullEditor({
                           }
                           disabled={isLocked}
                           placeholder="Ex.: PR-01"
-                          className="h-10 font-semibold text-xs sm:text-sm text-center"
+                          className="h-10 font-semibold text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700"
                         />
                       )}
                     </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                    <td className="p-2 border border-slate-300 dark:border-slate-800">
                       <Input
                         inputMode="decimal"
                         value={row.morning}
@@ -2934,13 +2934,13 @@ function FieldFullEditor({
                         disabled={isLocked}
                         placeholder="0,00"
                         className={cn(
-                          'h-10 font-mono text-xs sm:text-sm text-right',
+                          'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
                           isReturnedField('hidrometro') &&
                             'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                         )}
                       />
                     </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                    <td className="p-2 border border-slate-300 dark:border-slate-800">
                       <Input
                         inputMode="decimal"
                         value={row.afternoon}
@@ -2951,15 +2951,15 @@ function FieldFullEditor({
                         disabled={isLocked}
                         placeholder="0,00"
                         className={cn(
-                          'h-10 font-mono text-xs sm:text-sm text-right',
+                          'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
                           isReturnedField('hidrometro') &&
                             'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                         )}
                       />
                     </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                    <td className="p-2 border border-slate-300 dark:border-slate-800">
                       {hasLockedPump ? (
-                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
                           <span>{`${effectivePump} m`}</span>
                         </div>
                       ) : (
@@ -2971,11 +2971,11 @@ function FieldFullEditor({
                           }
                           disabled={isLocked}
                           placeholder="0,00"
-                          className="h-10 font-mono text-xs sm:text-sm text-center"
+                          className="h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700"
                         />
                       )}
                     </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                    <td className="p-2 border border-slate-300 dark:border-slate-800">
                       {(() => {
                         const fixedChoices = ['Limpa', 'Turva', 'Oleosa']
                         const rawVal = row.autopump || row.autopump_condition || ''
@@ -3078,7 +3078,7 @@ function FieldFullEditor({
                       })()}
                     </td>
                     {!isLocked && (isAdmin || isExtractionRowEmpty(lockedRow || row)) && (
-                      <td className="p-2 border border-slate-200 dark:border-slate-800 text-center">
+                      <td className="p-2 border border-slate-300 dark:border-slate-800 text-center">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -3134,7 +3134,7 @@ function FieldFullEditor({
           </div>
         </div>
 
-        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner overflow-x-auto">
+        <div className="mt-4 table-scroll-container rounded-xl border-2 border-slate-400 dark:border-slate-800 shadow-inner overflow-x-auto">
           <table className="w-full min-w-[500px] border-collapse text-left text-xs">
             <thead>
               <tr className="bg-emerald-900 text-white dark:bg-emerald-950 text-[11px]">
@@ -3154,7 +3154,7 @@ function FieldFullEditor({
                       disabled={isLocked || isFieldLockedByAdmin('infiltration_morning_time')}
                       readOnly={isFieldLockedByAdmin('infiltration_morning_time')}
                       className={cn(
-                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-300 dark:border-0 py-0 px-1',
                         isFieldLockedByAdmin('infiltration_morning_time') &&
                           'bg-slate-200 text-slate-700 cursor-not-allowed',
                       )}
@@ -3174,7 +3174,7 @@ function FieldFullEditor({
                       disabled={isLocked || isFieldLockedByAdmin('infiltration_afternoon_time')}
                       readOnly={isFieldLockedByAdmin('infiltration_afternoon_time')}
                       className={cn(
-                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border-0 py-0 px-1',
+                        'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-300 dark:border-0 py-0 px-1',
                         isFieldLockedByAdmin('infiltration_afternoon_time') &&
                           'bg-slate-200 text-slate-700 cursor-not-allowed',
                       )}
@@ -3183,7 +3183,7 @@ function FieldFullEditor({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-300 dark:divide-slate-800">
               {[
                 { label: 'Geral', mKey: 'geralMorning', aKey: 'geralAfternoon' },
                 ...activeInfiltrationExitNumbers.map((num) => ({
@@ -3196,12 +3196,12 @@ function FieldFullEditor({
                 const isALocked = isSubFieldLockedByAdmin('infiltration_data', row.aKey)
                 return (
                   <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                    <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-semibold text-slate-700 dark:text-slate-300">
+                    <td className="p-2.5 border border-slate-300 dark:border-slate-800 font-semibold text-slate-800 dark:text-slate-300">
                       {row.label}
                     </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                    <td className="p-2 border border-slate-300 dark:border-slate-800">
                       {isMLocked ? (
-                        <div className="flex items-center justify-end px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                        <div className="flex items-center justify-end px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
                           <span>{formData.infiltration_data?.[row.mKey] || '—'}</span>
                         </div>
                       ) : (
@@ -3218,16 +3218,16 @@ function FieldFullEditor({
                           disabled={isLocked}
                           placeholder="0,00"
                           className={cn(
-                            'h-10 font-mono text-xs sm:text-sm text-right',
+                            'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
                             isReturnedField('infiltracao') &&
                               'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                           )}
                         />
                       )}
                     </td>
-                    <td className="p-2 border border-slate-200 dark:border-slate-800">
+                    <td className="p-2 border border-slate-300 dark:border-slate-800">
                       {isALocked ? (
-                        <div className="flex items-center justify-end px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                        <div className="flex items-center justify-end px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
                           <span>{formData.infiltration_data?.[row.aKey] || '—'}</span>
                         </div>
                       ) : (
@@ -3244,7 +3244,7 @@ function FieldFullEditor({
                           disabled={isLocked}
                           placeholder="0,00"
                           className={cn(
-                            'h-10 font-mono text-xs sm:text-sm text-right',
+                            'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
                             isReturnedField('infiltracao') &&
                               'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                           )}
@@ -3409,7 +3409,7 @@ function FieldFullEditor({
         )}
 
         {/* Tabela de Parâmetros dos Compressores */}
-        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner overflow-x-auto">
+        <div className="mt-4 table-scroll-container rounded-xl border-2 border-slate-400 dark:border-slate-800 shadow-inner overflow-x-auto">
           <table
             className="w-full border-collapse text-left text-xs"
             style={{ minWidth: `${Math.max(500, 240 + activeCompressorIndices.length * 150)}px` }}
@@ -3429,7 +3429,7 @@ function FieldFullEditor({
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+            <tbody className="divide-y divide-slate-300 dark:divide-slate-800">
               {[
                 { label: 'Horímetro (hr)', prefix: 'horimetro', ph: 'Ex.: 5448.81' },
                 {
@@ -3461,7 +3461,7 @@ function FieldFullEditor({
                 },
               ].map((row) => (
                 <tr key={row.label} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
-                  <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                  <td className="p-2.5 border border-slate-300 dark:border-slate-800 font-medium text-slate-800 dark:text-slate-300">
                     {row.label}
                   </td>
                   {activeCompressorIndices.map((c) => {
@@ -3479,10 +3479,10 @@ function FieldFullEditor({
                     return (
                       <td
                         key={c}
-                        className="p-2 border border-slate-200 dark:border-slate-800 min-w-[140px]"
+                        className="p-2 border border-slate-300 dark:border-slate-800 min-w-[140px]"
                       >
                         {isLockedByAdmin ? (
-                          <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                          <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
                             <span>{currentVal || '—'}</span>
                           </div>
                         ) : (
@@ -3497,7 +3497,7 @@ function FieldFullEditor({
                             }
                             disabled={isLocked}
                             placeholder={row.ph}
-                            className="h-10 font-mono text-xs sm:text-sm text-center"
+                            className="h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700"
                           />
                         )}
                       </td>
@@ -3510,7 +3510,7 @@ function FieldFullEditor({
         </div>
 
         {/* Segunda tabela: LINHA DE AR (sincronizada automaticamente com compressores) */}
-        <div className="mt-4 table-scroll-container rounded-xl border border-slate-200 dark:border-slate-800 shadow-inner overflow-x-auto">
+        <div className="mt-4 table-scroll-container rounded-xl border-2 border-slate-400 dark:border-slate-800 shadow-inner overflow-x-auto">
           <table
             className="w-full border-collapse text-left text-xs"
             style={{ minWidth: `${Math.max(500, 240 + activeCompressorIndices.length * 150)}px` }}
@@ -3532,7 +3532,7 @@ function FieldFullEditor({
             </thead>
             <tbody>
               <tr>
-                <td className="p-2.5 border border-slate-200 dark:border-slate-800 font-medium text-slate-700 dark:text-slate-300">
+                <td className="p-2.5 border border-slate-300 dark:border-slate-800 font-medium text-slate-800 dark:text-slate-300">
                   Pressão da Linha de Ar (ex.: PSI)
                 </td>
                 {activeCompressorIndices.map((c) => {
@@ -3542,10 +3542,10 @@ function FieldFullEditor({
                   return (
                     <td
                       key={c}
-                      className="p-2 border border-slate-200 dark:border-slate-800 min-w-[140px]"
+                      className="p-2 border border-slate-300 dark:border-slate-800 min-w-[140px]"
                     >
                       {isArLocked ? (
-                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
+                        <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
                           <span>{currentArVal || '—'}</span>
                         </div>
                       ) : (
@@ -3560,7 +3560,7 @@ function FieldFullEditor({
                           }
                           disabled={isLocked}
                           placeholder="Ex.: 85 PSI"
-                          className="h-10 font-mono text-xs sm:text-sm text-center"
+                          className="h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700"
                         />
                       )}
                     </td>

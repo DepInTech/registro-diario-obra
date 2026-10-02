@@ -566,7 +566,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
         </div>
 
         {/* Faixa Oficial: PROJETO | SISTEMA | NÚMERO ATIVO (sem campo de data separado conforme requisito 1) */}
-        <div className="grid grid-cols-1 md:grid-cols-12 border-2 border-[#5b738e] dark:border-slate-700 bg-white dark:bg-slate-900 mb-3 text-xs divide-y md:divide-y-0 md:divide-x divide-[#5b738e] dark:divide-slate-700">
+        <div className="grid grid-cols-1 md:grid-cols-12 border-2 border-[#334155] dark:border-slate-700 bg-white dark:bg-slate-900 mb-3 text-xs divide-y md:divide-y-0 md:divide-x divide-slate-400 dark:divide-slate-700">
           <div className="md:col-span-4 p-2 flex items-center gap-2">
             <span className="font-extrabold text-slate-900 dark:text-slate-100 whitespace-nowrap">
               PROJETO:
@@ -636,7 +636,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
         </p>
 
         {/* Tabela Oficial Única: 11 colunas x N linhas dinâmicas (conjuntos de ENTRADA/SAÍDA/T. NUTRIENTES) */}
-        <div className="overflow-x-auto border-2 border-[#5b738e] dark:border-slate-700 mb-3">
+        <div className="overflow-x-auto border-2 border-[#334155] dark:border-slate-700 mb-3 shadow-xs">
           <table className="w-full min-w-[1100px] border-collapse text-left text-xs bg-white dark:bg-slate-950">
             <colgroup>
               <col style={{ width: '13%' }} />
@@ -652,7 +652,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
               <col style={{ width: '15%' }} />
             </colgroup>
             <thead>
-              <tr className="bg-[#bde4f7] text-[#0b4e7b] dark:bg-sky-950 dark:text-sky-200 font-extrabold text-[11px] text-center divide-x divide-[#5b738e] dark:divide-slate-700 border-b-2 border-[#5b738e] dark:border-slate-700">
+              <tr className="bg-[#bde4f7] text-[#0b4e7b] dark:bg-sky-950 dark:text-sky-200 font-extrabold text-[11px] text-center divide-x-2 divide-[#475569] dark:divide-slate-700 border-b-2 border-[#334155] dark:border-slate-700">
                 <th className="p-2 leading-tight">
                   PONTO DE
                   <br />
@@ -686,7 +686,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#5b738e] dark:divide-slate-700 text-xs">
+            <tbody className="divide-y divide-slate-300 dark:divide-slate-700 text-xs">
               {rows.length === 0 ? (
                 <tr>
                   <td
@@ -713,10 +713,10 @@ export function InSituPage({ query = '' }: { query?: string }) {
                 rows.map((row) => (
                   <tr
                     key={row.id}
-                    className="divide-x divide-[#5b738e] dark:divide-slate-700 hover:bg-sky-50/40 dark:hover:bg-slate-900/60"
+                    className="divide-x divide-slate-300 dark:divide-slate-700 hover:bg-sky-50/40 dark:hover:bg-slate-900/60"
                   >
-                    {/* PONTO DE MEDIÇÃO: ENTRADA / SAÍDA / T. NUTRIENTES em azul oficial */}
-                    <td className="px-2 py-1.5 text-center font-extrabold text-[#004b87] dark:text-sky-400 bg-white dark:bg-slate-950 select-none tracking-tight">
+                    {/* PONTO DE MEDIÇÃO: ENTRADA / SAÍDA / T. NUTRIENTES em azul oficial com borda destacada */}
+                    <td className="px-2 py-1.5 text-center font-extrabold text-[#004b87] dark:text-sky-400 bg-slate-50/80 dark:bg-slate-950 select-none tracking-tight">
                       {row.type}
                     </td>
 
@@ -729,10 +729,10 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         placeholder="DD/MM/AA"
                         maxLength={8}
                         className={cn(
-                          'w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500',
+                          'w-full h-7 px-1 text-center font-mono text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500',
                           row.date &&
                             !isValidBrDate(row.date) &&
-                            'bg-rose-50 text-rose-700 font-semibold',
+                            'bg-rose-50 text-rose-700 font-semibold border-rose-300',
                         )}
                       />
                     </td>
@@ -742,7 +742,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         type="time"
                         value={row.time || ''}
                         onChange={(e) => handleUpdateRowCell(row.id, 'time', e.target.value)}
-                        className="w-full h-7 px-0.5 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full h-7 px-0.5 text-center font-mono text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </td>
 
@@ -753,7 +753,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         inputMode="decimal"
                         value={row.ph || ''}
                         onChange={(e) => handleUpdateRowCell(row.id, 'ph', e.target.value)}
-                        className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full h-7 px-1 text-center font-mono text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </td>
 
@@ -768,7 +768,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                             handleUpdateRowCell(row.id, 'conductivity', e.target.value)
                           }
                           placeholder=""
-                          className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                          className="w-full h-7 px-1 text-center font-mono text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500"
                         />
                         <input
                           type="text"
@@ -778,7 +778,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                           }
                           placeholder="unid"
                           title="Anote a unidade indicada no visor (ex: µS/cm, mS/cm)"
-                          className="w-12 h-6 text-[9px] font-mono text-center text-slate-500 bg-slate-100 dark:bg-slate-800 border-0 rounded"
+                          className="w-12 h-6 text-[9px] font-mono text-center text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded"
                         />
                       </div>
                     </td>
@@ -792,7 +792,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         onChange={(e) => handleUpdateRowCell(row.id, 'od_mg_l', e.target.value)}
                         placeholder=""
                         title="OD SEMPRE DEVE SER MEDIDO EM MG/L NUNCA EM %"
-                        className="w-full h-7 px-1 text-center font-mono font-semibold text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full h-7 px-1 text-center font-mono font-semibold text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </td>
 
@@ -806,7 +806,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                           handleUpdateRowCell(row.id, 'temperature_c', e.target.value)
                         }
                         placeholder=""
-                        className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full h-7 px-1 text-center font-mono text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </td>
 
@@ -818,7 +818,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         value={row.orp || ''}
                         onChange={(e) => handleUpdateRowCell(row.id, 'orp', e.target.value)}
                         placeholder=""
-                        className="w-full h-7 px-1 text-center font-mono text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full h-7 px-1 text-center font-mono text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </td>
 
@@ -829,7 +829,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         onChange={(e) =>
                           handleUpdateRowCell(row.id, 'turbidity', e.target.value as any)
                         }
-                        className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:bg-slate-950"
+                        className="w-full h-7 px-1 text-center text-xs bg-white dark:bg-slate-950 rounded-xs border border-slate-300 dark:border-slate-700 focus:outline-none focus:ring-1 focus:ring-sky-500"
                       >
                         <option value="">—</option>
                         <option value="não">não</option>
@@ -844,7 +844,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         value={row.weather || ''}
                         onChange={(e) => handleUpdateRowCell(row.id, 'weather', e.target.value)}
                         placeholder=""
-                        className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full h-7 px-1 text-center text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </td>
 
@@ -855,7 +855,7 @@ export function InSituPage({ query = '' }: { query?: string }) {
                         value={row.responsible || ''}
                         onChange={(e) => handleUpdateRowCell(row.id, 'responsible', e.target.value)}
                         placeholder=""
-                        className="w-full h-7 px-1 text-center text-xs bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                        className="w-full h-7 px-1 text-center text-xs bg-white dark:bg-transparent rounded-xs border border-slate-300 dark:border-transparent focus:outline-none focus:ring-1 focus:ring-sky-500"
                       />
                     </td>
                   </tr>

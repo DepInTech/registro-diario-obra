@@ -78,11 +78,11 @@
     @apply text-[10px] font-semibold uppercase tracking-[.12em] text-slate-500 dark:text-slate-400;
   }
   .epa-input {
-    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-base sm:text-sm text-slate-800 transition focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-emerald-400;
+    @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-base sm:text-sm text-slate-800 transition focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-emerald-400;
   }
 
   .epa-textarea {
-    @apply w-full rounded-lg border border-slate-200 bg-white p-3 text-base sm:text-sm text-slate-800 transition focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-emerald-400;
+    @apply w-full rounded-lg border border-slate-300 bg-white p-3 text-base sm:text-sm text-slate-800 transition focus:border-emerald-600 focus:outline-none focus:ring-1 focus:ring-emerald-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 dark:focus:border-emerald-400;
   }
 
   /* Previne zoom involuntário no iOS Safari em inputs e selects em dispositivos móveis */
@@ -106,6 +106,36 @@
   .table-scroll-container::-webkit-scrollbar-thumb {
     background-color: rgba(16, 185, 129, 0.4);
     border-radius: 9999px;
+  }
+
+  /* Aprimoramento de Contraste para Tabelas e Planilhas no TEMA CLARO */
+  /* Mantém o tema escuro (.dark) intacto */
+  :root:not(.dark) table {
+    border-color: #94a3b8; /* slate-400 legível e nítido */
+  }
+
+  :root:not(.dark) table th,
+  :root:not(.dark) table td {
+    border-color: #cbd5e1; /* slate-300 bem visível nas divisões de células */
+  }
+
+  :root:not(.dark) .table-scroll-container {
+    border-color: #94a3b8 !important; /* borda externa forte do container de tabela */
+  }
+
+  :root:not(.dark) table thead th {
+    border-color: #94a3b8;
+  }
+
+  /* Inputs de células de tabelas/planilhas com bordas bem nítidas */
+  :root:not(.dark) table input:not([type='checkbox']):not([type='radio']),
+  :root:not(.dark) table select {
+    border-color: #cbd5e1;
+  }
+
+  :root:not(.dark) table input:not([type='checkbox']):not([type='radio']):focus,
+  :root:not(.dark) table select:focus {
+    border-color: #059669;
   }
 }
 

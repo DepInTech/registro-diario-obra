@@ -145,7 +145,7 @@ export function printNaSheet(sheet: NaSheet): void {
   }
 
   table.excel-sheet td, table.excel-sheet th {
-    border: 1px solid #777;
+    border: 1px solid #333;
     padding: 2px 4px;
     font-size: 8pt;
     vertical-align: middle;
@@ -161,21 +161,21 @@ export function printNaSheet(sheet: NaSheet): void {
     font-size: 8.5pt;
     background: #fff;
     text-align: left;
-    border-bottom: 1px solid #777 !important;
+    border-bottom: 1px solid #333 !important;
   }
   .hdr-contrato-val {
     font-weight: bold;
     font-size: 9pt;
     background: #fff;
     text-align: left;
-    border-bottom: 1px solid #777 !important;
+    border-bottom: 1px solid #333 !important;
   }
   .hdr-local {
     font-weight: bold;
     font-size: 9pt;
     background: #fff;
     text-align: left;
-    border-bottom: 1px solid #777 !important;
+    border-bottom: 1px solid #333 !important;
   }
   .hdr-title-diaria {
     font-weight: bold;
@@ -183,7 +183,7 @@ export function printNaSheet(sheet: NaSheet): void {
     background: #fff;
     text-align: left;
     text-transform: uppercase;
-    border-bottom: 1px solid #777 !important;
+    border-bottom: 1px solid #333 !important;
   }
   .hdr-subtitle-na {
     font-weight: bold;
