@@ -56,6 +56,7 @@ interface SyncContextType {
   conflicts: ConflictItem[]
   syncNow: () => Promise<void>
   retryFailed: () => Promise<void>
+  discardFailed: () => Promise<void>
   retrySyncItem?: (id: string, type: 'rdo' | 'field' | 'project') => Promise<void>
   resolveConflict: (
     conflict: ConflictItem,
@@ -74,6 +75,7 @@ const SyncContext = createContext<SyncContextType>({
   conflicts: [],
   syncNow: async () => {},
   retryFailed: async () => {},
+  discardFailed: async () => {},
   retrySyncItem: async () => {},
   resolveConflict: async () => {},
 })
@@ -509,6 +511,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             totalSynced++
           } catch (err: any) {
             console.error('Project update sync failed for', proj.id, err)
+            if (err?.status === 404) {
+              console.warn('Server project not found (404), discarding local item:', proj.id)
+              await offlineStorage.deleteProject(proj.id)
+              continue
+            }
             totalErrors++
             const friendly = translateServerErrorMessage(err, 'project')
             const errMsg = friendly || err?.message || 'Falha ao sincronizar alteração de projeto'
@@ -822,13 +829,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               serverRecord = await pb.collection('reports_rdo').getOne(rdo.id)
             } catch (fetchErr: any) {
               if (fetchErr?.status === 404) {
-                // Server record was deleted; recreate with new ID
-                console.warn('Server record not found, converting to pending_create:', rdo.id)
-                rdo.syncStatus = 'pending_create'
-                await offlineStorage.saveRdo(rdo)
+                // Registro foi excluído permanentemente no servidor: remove da fila e do armazenamento local
+                console.warn('Server RDO not found (404), discarding local item:', rdo.id)
+                await offlineStorage.deleteRdo(rdo.id)
                 continue
               }
               throw fetchErr
+            }
+
+            // Se o registro no servidor já foi marcado com soft-delete (deleted = true)
+            if (serverRecord?.deleted) {
+              console.warn('Server RDO marked as deleted=true, discarding local item:', rdo.id)
+              await offlineStorage.deleteRdo(rdo.id)
+              continue
             }
 
             // Trava de integridade offline para Técnico: se no servidor o RDO já está 'submitted' ou 'approved',
@@ -1094,6 +1107,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (err: any) {
             console.error('Error syncing offline RDO update:', err)
+            if (err?.status === 404) {
+              console.warn('Server RDO update 404, discarding local item:', rdo.id)
+              await offlineStorage.deleteRdo(rdo.id)
+              continue
+            }
             totalErrors++
             const is400 = err?.status === 400 || err?.statusCode === 400
             const friendly = translateServerErrorMessage(err, 'rdo')
@@ -1347,12 +1365,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               serverRecord = await pb.collection('field_spreadsheets').getOne(sheet.id)
             } catch (fetchErr: any) {
               if (fetchErr?.status === 404) {
-                console.warn('Server sheet not found, converting to pending_create:', sheet.id)
-                sheet.syncStatus = 'pending_create'
-                await offlineStorage.saveFieldSheet(sheet)
+                // Planilha foi excluída no servidor: remove da fila e do armazenamento local
+                console.warn('Server sheet not found (404), discarding local item:', sheet.id)
+                await offlineStorage.deleteFieldSheet(sheet.id)
                 continue
               }
               throw fetchErr
+            }
+
+            // Se a planilha no servidor já foi marcada com soft-delete (deleted = true)
+            if (serverRecord?.deleted) {
+              console.warn('Server sheet marked as deleted=true, discarding local item:', sheet.id)
+              await offlineStorage.deleteFieldSheet(sheet.id)
+              continue
             }
 
             // Trava de integridade offline para Técnico: se no servidor a Planilha já está 'submitted' ou 'approved',
@@ -1476,6 +1501,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             totalSynced++
           } catch (err: any) {
             console.error('Error syncing offline FieldSheet update:', err)
+            if (err?.status === 404) {
+              console.warn('Server FieldSheet update 404, discarding local item:', sheet.id)
+              await offlineStorage.deleteFieldSheet(sheet.id)
+              continue
+            }
             totalErrors++
             const is400 = err?.status === 400 || err?.statusCode === 400
             const friendly = translateServerErrorMessage(err, 'field')
@@ -1609,6 +1639,27 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       console.error('Error retrying failed items:', err)
     }
   }, [checkPending, syncNow])
+
+  // Descartar todas as falhas com segurança
+  const discardFailed = useCallback(async () => {
+    try {
+      const res = await offlineStorage.discardAllFailedItems()
+      const totalDiscarded = res.discardedRdos + res.discardedSheets + res.discardedProjects
+      setSyncError(null)
+      await checkPending()
+      toast({
+        title: 'Falhas descartadas',
+        description: `${totalDiscarded} item(ns) com falha foram removidos com segurança do dispositivo.`,
+      })
+    } catch (err) {
+      console.error('Erro ao descartar falhas:', err)
+      toast({
+        title: 'Erro ao descartar',
+        description: 'Não foi possível limpar os itens com falha.',
+        variant: 'destructive',
+      })
+    }
+  }, [checkPending, toast])
 
   const resolveConflict = async (
     conflict: ConflictItem,
@@ -3234,6 +3285,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         conflicts,
         syncNow,
         retryFailed,
+        discardFailed,
         retrySyncItem,
         resolveConflict,
       }}

@@ -498,18 +498,42 @@ export const offlineStorage = {
     let purgedSheets = 0
 
     for (const r of rdos) {
-      // Se não for ID válido PocketBase e estiver falhado com tentativas esgotadas ou marcado como corrupto/órfão
-      if (!isPbId(r.id) && (r.syncStatus === 'failed' || (r.syncAttempts || 0) >= 3)) {
+      const isFailedOrExhausted = r.syncStatus === 'failed' || (r.syncAttempts || 0) >= 3
+      const isExclusionMessage =
+        r.syncError &&
+        (r.syncError.includes('excluído') ||
+          r.syncError.includes('excluido') ||
+          r.syncError.includes('não existe mais') ||
+          r.syncError.includes('Registro não encontrado no servidor') ||
+          r.syncError.includes('404'))
+
+      // Remove rascunhos provisórios falhados e registros excluídos no servidor ou marcados deleted=true
+      if (
+        (!isPbId(r.id) && isFailedOrExhausted) ||
+        r.deleted ||
+        (isFailedOrExhausted && isExclusionMessage)
+      ) {
         await this.deleteRdo(r.id)
         purgedRdos++
       }
     }
 
     for (const s of sheets) {
-      // Inclui expressamente o órfão travado field_1790364259892 e qualquer rascunho com ID não-PB com falha persistente
+      const isFailedOrExhausted = s.syncStatus === 'failed' || (s.syncAttempts || 0) >= 3
+      const isExclusionMessage =
+        s.syncError &&
+        (s.syncError.includes('excluído') ||
+          s.syncError.includes('excluido') ||
+          s.syncError.includes('não existe mais') ||
+          s.syncError.includes('Registro não encontrado no servidor') ||
+          s.syncError.includes('404'))
+
+      // Inclui expressamente o órfão travado field_1790364259892 e planilhas excluídas no servidor ou marcadas deleted=true
       if (
         s.id === 'field_1790364259892' ||
-        (!isPbId(s.id) && (s.syncStatus === 'failed' || (s.syncAttempts || 0) >= 3))
+        (!isPbId(s.id) && isFailedOrExhausted) ||
+        s.deleted ||
+        (isFailedOrExhausted && isExclusionMessage)
       ) {
         await this.deleteFieldSheet(s.id)
         purgedSheets++
@@ -517,6 +541,47 @@ export const offlineStorage = {
     }
 
     return { purgedRdos, purgedSheets }
+  },
+
+  /**
+   * Descarta todos os itens que estejam atualmente em estado 'failed' no IndexedDB.
+   */
+  async discardAllFailedItems(): Promise<{
+    discardedRdos: number
+    discardedSheets: number
+    discardedProjects: number
+  }> {
+    const [rdos, sheets, projects] = await Promise.all([
+      this.getAllRdos(),
+      this.getAllFieldSheets(),
+      this.getAllProjects(),
+    ])
+
+    let discardedRdos = 0
+    for (const r of rdos) {
+      if (r.syncStatus === 'failed') {
+        await this.deleteRdo(r.id)
+        discardedRdos++
+      }
+    }
+
+    let discardedSheets = 0
+    for (const s of sheets) {
+      if (s.syncStatus === 'failed') {
+        await this.deleteFieldSheet(s.id)
+        discardedSheets++
+      }
+    }
+
+    let discardedProjects = 0
+    for (const p of projects) {
+      if (p.syncStatus === 'failed') {
+        await this.deleteProject(p.id)
+        discardedProjects++
+      }
+    }
+
+    return { discardedRdos, discardedSheets, discardedProjects }
   },
 
   async purgePreWipeOperationalData(

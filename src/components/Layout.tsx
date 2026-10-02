@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Activity,
   Waves,
+  Trash2,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -135,9 +136,12 @@ export function Layout({
     lastSyncTime,
     syncNow,
     retryFailed,
+    discardFailed,
     conflicts,
     resolveConflict,
   } = useSync()
+
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
 
   const navigate = (id: Page) => {
     setPage(id)
@@ -246,14 +250,25 @@ export function Layout({
 
           {/* Detailed status lines in sidebar */}
           {failedCount > 0 ? (
-            <div className="flex items-center justify-between gap-1 text-[11px] text-rose-200 bg-rose-950/40 border border-rose-500/30 rounded-lg px-2 py-1">
-              <span className="truncate">Falhou ({failedCount})</span>
+            <div className="space-y-1.5 text-[11px] text-rose-200 bg-rose-950/40 border border-rose-500/30 rounded-lg p-2">
+              <div className="flex items-center justify-between gap-1">
+                <span className="font-semibold truncate">Falhou ({failedCount})</span>
+                <button
+                  onClick={() => retryFailed()}
+                  disabled={isSyncing}
+                  className="font-semibold underline hover:text-white shrink-0 disabled:opacity-50"
+                  title="Tentar novamente sincronização"
+                >
+                  Tentar novamente
+                </button>
+              </div>
               <button
-                onClick={() => retryFailed()}
+                type="button"
+                onClick={() => setDiscardConfirmOpen(true)}
                 disabled={isSyncing}
-                className="font-semibold underline hover:text-white shrink-0 disabled:opacity-50"
+                className="w-full text-center py-0.5 rounded bg-rose-900/40 hover:bg-rose-900/70 border border-rose-500/40 text-[10px] text-rose-100 transition disabled:opacity-50 font-medium"
               >
-                Tentar novamente
+                Descartar falhas
               </button>
             </div>
           ) : pendingCount > 0 ? (
@@ -335,21 +350,32 @@ export function Layout({
           {/* SEÇÃO DIREITA: pílula de sincronização, busca mobile, botão de tema, avatar do usuário */}
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             {/* Sync Status Interactive Pill Indicator */}
-            <div className="flex items-center">
+            <div className="flex items-center gap-1.5">
               {failedCount > 0 ? (
-                <button
-                  onClick={() => retryFailed()}
-                  disabled={isSyncing}
-                  title="Clique para tentar novamente a sincronização dos itens com falha"
-                  className="flex cursor-pointer items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-800 transition hover:bg-rose-100 sm:px-2.5 dark:border-rose-800/50 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-900/50"
-                >
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400" />
-                  <span className="hidden sm:inline">
-                    Falhou ({failedCount}) — Tentar novamente
-                  </span>
-                  <span className="font-bold sm:hidden">({failedCount})</span>
-                  <RefreshCw className={cn('ml-0.5 h-3 w-3', isSyncing && 'animate-spin')} />
-                </button>
+                <>
+                  <button
+                    onClick={() => retryFailed()}
+                    disabled={isSyncing}
+                    title="Clique para tentar novamente a sincronização dos itens com falha"
+                    className="flex cursor-pointer items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-medium text-rose-800 transition hover:bg-rose-100 sm:px-2.5 dark:border-rose-800/50 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-900/50"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400" />
+                    <span className="hidden sm:inline">
+                      Falhou ({failedCount}) — Tentar novamente
+                    </span>
+                    <span className="font-bold sm:hidden">({failedCount})</span>
+                    <RefreshCw className={cn('ml-0.5 h-3 w-3', isSyncing && 'animate-spin')} />
+                  </button>
+                  <button
+                    onClick={() => setDiscardConfirmOpen(true)}
+                    disabled={isSyncing}
+                    title="Descartar itens locais que falharam na sincronização"
+                    className="flex cursor-pointer items-center gap-1 rounded-full border border-rose-400/60 bg-rose-100/80 px-2 py-1 text-xs font-semibold text-rose-900 transition hover:bg-rose-200 dark:border-rose-700/60 dark:bg-rose-900/60 dark:text-rose-200 dark:hover:bg-rose-800/60"
+                  >
+                    <Trash2 className="h-3 w-3 text-rose-700 dark:text-rose-300" />
+                    <span className="hidden md:inline">Descartar falhas</span>
+                  </button>
+                </>
               ) : pendingCount > 0 ? (
                 <button
                   onClick={() => isOnline && syncNow()}
@@ -619,6 +645,34 @@ export function Layout({
           )
         })}
       </nav>
+
+      {/* Discard failed sync items confirmation dialog */}
+      <AlertDialog open={discardConfirmOpen} onOpenChange={setDiscardConfirmOpen}>
+        <AlertDialogContent className="dark:border-slate-800 dark:bg-slate-900">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+              <AlertTriangle className="h-5 w-5" />
+              Descartar alterações com falha?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso descartará as alterações locais que não puderam ser sincronizadas com o servidor.
+              Continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                setDiscardConfirmOpen(false)
+                await discardFailed()
+              }}
+              className="bg-rose-600 text-white hover:bg-rose-700"
+            >
+              Sim, descartar falhas
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Unsaved changes logout confirmation dialog */}
       <AlertDialog open={logoutConfirmOpen} onOpenChange={setLogoutConfirmOpen}>

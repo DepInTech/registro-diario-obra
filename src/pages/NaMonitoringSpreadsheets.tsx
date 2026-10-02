@@ -242,46 +242,44 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
 
   // Ações dinâmicas de poços na planilha de NA
   const handleAddNewWellReading = () => {
-    setSheetFormData((prev) => {
-      const currentReadings = prev.readings || []
-      // Sugere próximo número sequencial (ex: se tem PM-01 a PM-04, sugere PM-05)
-      let nextWellCode = `PM-${String(currentReadings.length + 1).padStart(2, '0')}`
-      let counter = currentReadings.length + 1
-      while (
-        currentReadings.some((r) => r.well_code.trim().toUpperCase() === nextWellCode.toUpperCase())
-      ) {
-        counter++
-        nextWellCode = `PM-${String(counter).padStart(2, '0')}`
-      }
+    const currentReadings = sheetFormData.readings || []
+    // Sugere próximo número sequencial (ex: se tem PM-01 a PM-04, sugere PM-05)
+    let nextWellCode = `PM-${String(currentReadings.length + 1).padStart(2, '0')}`
+    let counter = currentReadings.length + 1
+    while (
+      currentReadings.some((r) => r.well_code.trim().toUpperCase() === nextWellCode.toUpperCase())
+    ) {
+      counter++
+      nextWellCode = `PM-${String(counter).padStart(2, '0')}`
+    }
 
-      const newRow: NaWellReadingRow = {
-        id: `well_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        well_code: nextWellCode,
-        na_m: '',
-        no_m: '',
-        observation: '',
-      }
+    const newRow: NaWellReadingRow = {
+      id: `well_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      well_code: nextWellCode,
+      na_m: '',
+      no_m: '',
+      observation: '',
+    }
 
-      try {
-        auditExport(
-          'add_well',
-          'na_sheets',
-          selectedSheet?.id || prev.area_name || 'na_sheet',
-          `poco_${nextWellCode}`,
-          {
-            well_code: nextWellCode,
-            label: `poço ${nextWellCode} à Planilha de NA (${prev.area_name || 'Geral'})`,
-          },
-        ).catch(() => {})
-      } catch {
-        /* intentionally ignored */
-      }
+    try {
+      auditExport(
+        'add_well',
+        'na_sheets',
+        selectedSheet?.id || sheetFormData.area_name || 'na_sheet',
+        `poco_${nextWellCode}`,
+        {
+          well_code: nextWellCode,
+          label: `poço ${nextWellCode} à Planilha de NA (${sheetFormData.area_name || 'Geral'})`,
+        },
+      ).catch(() => {})
+    } catch {
+      /* intentionally ignored */
+    }
 
-      return {
-        ...prev,
-        readings: [...currentReadings, newRow],
-      }
-    })
+    setSheetFormData((prev) => ({
+      ...prev,
+      readings: [...(prev.readings || []), newRow],
+    }))
   }
 
   const handleRemoveWellReading = (index: number) => {

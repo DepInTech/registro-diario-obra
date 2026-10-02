@@ -1,13 +1,17 @@
 import PocketBase from 'pocketbase'
 
-export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-export function forceRealtimeTeardown(): void {
+export { pb }
+
+export async function forceRealtimeTeardown(): Promise<void> {
   try {
-    pb.realtime?.unsubscribe()
-  } catch {
-    // defensive cleanup
+    if (pb?.realtime) {
+      await pb.realtime.unsubscribe()
+    }
+  } catch (err) {
+    console.warn('[pocketbase] forceRealtimeTeardown warning:', err)
   }
 }
 
