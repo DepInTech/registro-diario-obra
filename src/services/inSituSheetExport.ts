@@ -262,8 +262,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
     /* Faixa: PROJETO | SISTEMA | NÚMERO ATIVO */
     .meta-box {
       display: flex;
-      border: 1.5px solid #3b82f6;
-      border-color: #5b738e;
+      border: 1.5px solid #000;
       margin-bottom: 12px;
       background: #fff;
     }
@@ -278,11 +277,11 @@ export function printInSituSheet(sheet: InSituSheet): void {
     }
     .meta-col.col-projeto {
       width: 30%;
-      border-right: 1.5px solid #5b738e;
+      border-right: 1.5px solid #000;
     }
     .meta-col.col-sistema {
       width: 45%;
-      border-right: 1.5px solid #5b738e;
+      border-right: 1.5px solid #000;
     }
     .meta-col.col-ativo {
       width: 25%;
@@ -296,14 +295,14 @@ export function printInSituSheet(sheet: InSituSheet): void {
     table.in-situ-table {
       width: 100%;
       border-collapse: collapse;
-      border: 1.5px solid #5b738e;
+      border: 1.5px solid #000;
       table-layout: fixed;
       margin-bottom: 12px;
     }
     table.in-situ-table th {
       background-color: #bde4f7;
       color: #0b4e7b;
-      border: 1px solid #5b738e;
+      border: 1px solid #333;
       padding: 5px 3px;
       font-size: 7.8pt;
       font-weight: 800;
@@ -312,7 +311,7 @@ export function printInSituSheet(sheet: InSituSheet): void {
       line-height: 1.15;
     }
     table.in-situ-table td {
-      border: 1px solid #5b738e;
+      border: 1px solid #333;
       height: 22px;
       padding: 2px 4px;
       font-size: 7.5pt;

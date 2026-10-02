@@ -4089,12 +4089,12 @@ export function printFieldSheet(sheet: OfflineFieldSheetItem) {
   <style>
     @page { size: A4 portrait; margin: 8mm; }
     body { font-family: Calibri, Arial, sans-serif; font-size: 11px; margin: 0; color: #111; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-    th { background-color: #0b5345; color: #ffffff; border: 1px solid #555; padding: 5px; font-weight: bold; text-align: center; }
-    td { border: 1px solid #777; padding: 4px 6px; }
-    .header-title { background-color: #0b5345; color: #ffffff; font-size: 14px; font-weight: bold; text-align: center; }
-    .section-hdr { background-color: #d1e7dd; color: #0b5345; font-weight: bold; font-size: 11px; border: 1px solid #777; }
-    .label-col { background-color: #f2f7f5; font-weight: bold; border: 1px solid #777; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 12px; border: 1.5px solid #000; }
+    th { background-color: #0b5345; color: #ffffff; border: 1px solid #333; padding: 5px; font-weight: bold; text-align: center; }
+    td { border: 1px solid #333; padding: 4px 6px; }
+    .header-title { background-color: #0b5345; color: #ffffff; font-size: 14px; font-weight: bold; text-align: center; border: 1.5px solid #000; }
+    .section-hdr { background-color: #d1e7dd; color: #0b5345; font-weight: bold; font-size: 11px; border: 1.5px solid #000; }
+    .label-col { background-color: #f2f7f5; font-weight: bold; border: 1px solid #333; }
     .no-print-bar {
       background: #1e293b; color: #fff; padding: 10px 16px; display: flex;
       align-items: center; justify-content: space-between; font-size: 13px;
