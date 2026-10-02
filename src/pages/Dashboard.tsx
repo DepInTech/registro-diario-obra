@@ -937,8 +937,16 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                 Carregando atividades recentes...
               </div>
             ) : recentActivities.length === 0 ? (
-              <div className="p-8 text-center text-xs text-slate-400">
-                Nenhuma atividade recente registrada no sistema.
+              <div className="flex flex-col items-center justify-center p-8 text-center">
+                <div className="mb-2 grid h-9 w-9 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Nenhuma atividade registrada ainda
+                </p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  As novas ações reais executadas no sistema aparecerão aqui em tempo real.
+                </p>
               </div>
             ) : (
               recentActivities.slice(0, 6).map((item) => (

@@ -198,8 +198,19 @@ export function AuditPage() {
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-400 text-xs">
-                    Nenhum registro encontrado.
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center">
+                      <div className="mb-2 grid h-10 w-10 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
+                        <ShieldCheck className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                        Nenhuma atividade registrada ainda
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        A trilha passará a registrar automaticamente as novas ações reais executadas
+                        no sistema.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
