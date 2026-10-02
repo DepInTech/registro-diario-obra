@@ -84,6 +84,41 @@ function isProvisionalId(id?: string | null): boolean {
     id.startsWith('p_')
   )
 }
+
+/** Extrai lista ordenada de índices numéricos de compressores presentes em compressor_data (mínimo 1 e 2) */
+function getCompressorIndices(compData: Record<string, any> | null | undefined): number[] {
+  const set = new Set<number>([1, 2])
+  if (compData && typeof compData === 'object') {
+    for (const key of Object.keys(compData)) {
+      const match = key.match(/\d+$/)
+      if (match) {
+        const num = parseInt(match[0], 10)
+        if (!isNaN(num) && num >= 1 && num <= 100) {
+          set.add(num)
+        }
+      }
+    }
+  }
+  return Array.from(set).sort((a, b) => a - b)
+}
+
+/** Extrai lista ordenada de índices numéricos de saídas presentes em infiltration_data (mínimo 1, 2 e 3) */
+function getInfiltrationExitNumbers(infData: Record<string, any> | null | undefined): number[] {
+  const set = new Set<number>([1, 2, 3])
+  if (infData && typeof infData === 'object') {
+    for (const key of Object.keys(infData)) {
+      const match = key.match(/^out(\d+)(Morning|Afternoon)?$/)
+      if (match) {
+        const num = parseInt(match[1], 10)
+        if (!isNaN(num) && num >= 1 && num <= 100) {
+          set.add(num)
+        }
+      }
+    }
+  }
+  return Array.from(set).sort((a, b) => a - b)
+}
+
 import { CorrectionHistorySection } from '@/components/CorrectionHistorySection'
 
 export function FieldSpreadsheets({ query }: { query: string }) {
@@ -1394,7 +1429,10 @@ function FieldFullEditor({
   }, [formData.infiltration_data, extraInfExitCount])
 
   const handleAddCompressor = () => {
-    const nextIdx = Math.max(3, (activeCompressorIndices[activeCompressorIndices.length - 1] || 2) + 1)
+    const nextIdx = Math.max(
+      3,
+      (activeCompressorIndices[activeCompressorIndices.length - 1] || 2) + 1,
+    )
     setExtraCompCount(nextIdx)
     const currentComp = { ...(formData.compressor_data || {}) }
     currentComp[`horimetro${nextIdx}`] = currentComp[`horimetro${nextIdx}`] || ''
@@ -1406,7 +1444,10 @@ function FieldFullEditor({
   }
 
   const handleAddInfiltrationExit = () => {
-    const nextExit = Math.max(4, (activeInfiltrationExitNumbers[activeInfiltrationExitNumbers.length - 1] || 3) + 1)
+    const nextExit = Math.max(
+      4,
+      (activeInfiltrationExitNumbers[activeInfiltrationExitNumbers.length - 1] || 3) + 1,
+    )
     setExtraInfExitCount(nextExit)
     const currentInf = { ...(formData.infiltration_data || {}) }
     currentInf[`out${nextExit}Morning`] = currentInf[`out${nextExit}Morning`] || ''
@@ -3360,7 +3401,10 @@ function FieldFullEditor({
         {/* Dica de rolagem horizontal quando houver vários compressores */}
         {activeCompressorIndices.length > 2 && (
           <p className="mt-2 text-[11px] text-slate-400 flex items-center gap-1">
-            <span>👉 Deslize horizontalmente para visualizar e preencher todos os compressores adicionados</span>
+            <span>
+              👉 Deslize horizontalmente para visualizar e preencher todos os compressores
+              adicionados
+            </span>
           </p>
         )}
 
@@ -3388,7 +3432,12 @@ function FieldFullEditor({
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {[
                 { label: 'Horímetro (hr)', prefix: 'horimetro', ph: 'Ex.: 5448.81' },
-                { label: 'Pressão (bar)', prefix: 'pressao', fallbackPrefix: 'pressure', ph: 'Ex.: 6 bar' },
+                {
+                  label: 'Pressão (bar)',
+                  prefix: 'pressao',
+                  fallbackPrefix: 'pressure',
+                  ph: 'Ex.: 6 bar',
+                },
                 {
                   label: 'Drenagem de água (mL)',
                   prefix: 'drenagem',
@@ -3420,13 +3469,18 @@ function FieldFullEditor({
                     const fallbackKey = row.fallbackPrefix ? `${row.fallbackPrefix}${c}` : null
                     const isLockedByAdmin =
                       isSubFieldLockedByAdmin('compressor_data', key) ||
-                      (fallbackKey ? isSubFieldLockedByAdmin('compressor_data', fallbackKey) : false)
+                      (fallbackKey
+                        ? isSubFieldLockedByAdmin('compressor_data', fallbackKey)
+                        : false)
                     const currentVal =
                       formData.compressor_data?.[key] ||
                       (fallbackKey ? formData.compressor_data?.[fallbackKey] : '') ||
                       ''
                     return (
-                      <td key={c} className="p-2 border border-slate-200 dark:border-slate-800 min-w-[140px]">
+                      <td
+                        key={c}
+                        className="p-2 border border-slate-200 dark:border-slate-800 min-w-[140px]"
+                      >
                         {isLockedByAdmin ? (
                           <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
                             <span>{currentVal || '—'}</span>
@@ -3486,7 +3540,10 @@ function FieldFullEditor({
                   const isArLocked = isSubFieldLockedByAdmin('compressor_data', arKey)
                   const currentArVal = formData.compressor_data?.[arKey] || ''
                   return (
-                    <td key={c} className="p-2 border border-slate-200 dark:border-slate-800 min-w-[140px]">
+                    <td
+                      key={c}
+                      className="p-2 border border-slate-200 dark:border-slate-800 min-w-[140px]"
+                    >
                       {isArLocked ? (
                         <div className="flex items-center justify-center px-2 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-mono border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[40px] cursor-not-allowed select-none">
                           <span>{currentArVal || '—'}</span>
@@ -4004,7 +4061,10 @@ export function printFieldSheet(sheet: OfflineFieldSheetItem) {
   for (const spec of compParamSpecs) {
     let cells = ''
     for (const c of compressorIndices) {
-      const val = compData[`${spec.prefix}${c}`] || (spec.fallbackPrefix ? compData[`${spec.fallbackPrefix}${c}`] : '') || ''
+      const val =
+        compData[`${spec.prefix}${c}`] ||
+        (spec.fallbackPrefix ? compData[`${spec.fallbackPrefix}${c}`] : '') ||
+        ''
       cells += `<td style="text-align:center;">${val}</td>`
     }
     compParamRows += `<tr>
@@ -4291,7 +4351,10 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
   for (const spec of compParamSpecs) {
     let cells = ''
     for (const c of compressorIndices) {
-      const val = compData[`${spec.prefix}${c}`] || (spec.fallbackPrefix ? compData[`${spec.fallbackPrefix}${c}`] : '') || ''
+      const val =
+        compData[`${spec.prefix}${c}`] ||
+        (spec.fallbackPrefix ? compData[`${spec.fallbackPrefix}${c}`] : '') ||
+        ''
       cells += `<td style="text-align:center;">${val}</td>`
     }
     compParamRows += `<tr>
@@ -4480,64 +4543,6 @@ function generateLocalExcelExport(sheet: OfflineFieldSheetItem) {
       </tr>
       <tr>
         <td colspan="${tableColSpan}" style="padding: 10px; min-height: 50px;">${sheet.observations || '—'}</td>
-      </tr>
-    </table>
-  </body>
-  </html>`
-
-      <!-- 5. REMOÇÃO DE ÓLEO -->
-      <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">5. REMOÇÃO DE ÓLEO</td>
-      </tr>
-      <tr>
-        <td colspan="5" style="background-color:#f9fbf9; font-weight:bold; border:1px solid #777;">Caixa Separadora (SAO 01)</td>
-      </tr>
-      <tr>
-        <td class="label-col">Volume de óleo removido (mL):</td>
-        <td colspan="2" style="text-align:center;">${oilData.sao1Volume || ''}</td>
-        <td class="label-col">Data da última limpeza:</td>
-        <td style="text-align:center; font-weight:bold;">${oilData.sao1DataLimpeza || oilData.sao1Date || ''}</td>
-      </tr>
-      <tr>
-        <td colspan="5" style="background-color:#f9fbf9; font-weight:bold; border:1px solid #777;">Caixa Separadora (SAO 02)</td>
-      </tr>
-      <tr>
-        <td class="label-col">Volume de óleo removido (mL):</td>
-        <td colspan="2" style="text-align:center;">${oilData.sao2Volume || ''}</td>
-        <td class="label-col">Data da última limpeza:</td>
-        <td style="text-align:center; font-weight:bold;">${oilData.sao2DataLimpeza || oilData.sao2Date || ''}</td>
-      </tr>
-
-      <!-- 6. RESÍDUOS SÓLIDOS E LÍQUIDOS -->
-      <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">6. RESÍDUOS SÓLIDOS E LÍQUIDOS</td>
-      </tr>
-      <tr>
-        <td colspan="2" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Líquido</td>
-        <td colspan="3" class="label-col" style="text-align:center;">TAMBORES PARA RETIRADA (QNTD) - Sólido</td>
-      </tr>
-      <tr>
-        <td colspan="2" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_liquid_qty || '—'}</td>
-        <td colspan="3" style="text-align:center; font-size: 13px; font-weight:bold;">${sheet.waste_solid_qty || '—'}</td>
-      </tr>
-
-      <!-- 7. CONTROLES AMBIENTAIS E 5S -->
-      <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">7. CONTROLES AMBIENTAIS E 5S</td>
-      </tr>
-      <tr>
-        <td class="label-col">5S (S/N):</td>
-        <td style="text-align:center; font-weight:bold;">${sheet.env_5s_check ? 'Sim' : 'Não'}</td>
-        <td class="label-col">CHECKLIST MENSAL (S/N):</td>
-        <td colspan="2" style="text-align:center; font-weight:bold;">${sheet.env_checklist_monthly ? 'Sim' : 'Não'}</td>
-      </tr>
-
-      <!-- 8. OBSERVAÇÕES E MANUTENÇÕES -->
-      <tr>
-        <td colspan="5" class="section-hdr" style="padding: 7px;">8. OBSERVAÇÕES E MANUTENÇÕES</td>
-      </tr>
-      <tr>
-        <td colspan="5" style="padding: 10px; min-height: 50px;">${sheet.observations || '—'}</td>
       </tr>
     </table>
   </body>
