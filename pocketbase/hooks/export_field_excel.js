@@ -229,11 +229,11 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
         <th style="width: 20%;">Poço de Remediação</th>
         <th style="width: 20%;">
           Hidrômetro (Manhã)<br>
-          <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${morningTime || '—'}</span>
+          <span style="font-size: 9px; font-weight: normal; color: #111827;">Hora: ${morningTime || '—'}</span>
         </th>
         <th style="width: 20%;">
           Hidrômetro (Tarde)<br>
-          <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${afternoonTime || '—'}</span>
+          <span style="font-size: 9px; font-weight: normal; color: #111827;">Hora: ${afternoonTime || '—'}</span>
         </th>
         <th style="width: 18%;">Altura da bomba (m)</th>
         <th colspan="${tableColSpan - 4}" style="width: 22%;">Saída Autopump (500mL)*</th>
@@ -248,11 +248,11 @@ routerAdd('GET', '/backend/v1/epa/export/field/{id}', (c) => {
         <th style="width: 30%;">Hidrômetro</th>
         <th colspan="2" style="width: 35%;">
           Manhã<br>
-          <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${infMorningTime || '—'}</span>
+          <span style="font-size: 9px; font-weight: normal; color: #111827;">Hora: ${infMorningTime || '—'}</span>
         </th>
         <th colspan="${tableColSpan - 3}" style="width: 35%;">
           Tarde<br>
-          <span style="font-size: 9px; font-weight: normal; color: #d1fae5;">Hora: ${infAfternoonTime || '—'}</span>
+          <span style="font-size: 9px; font-weight: normal; color: #111827;">Hora: ${infAfternoonTime || '—'}</span>
         </th>
       </tr>
       <tr>
