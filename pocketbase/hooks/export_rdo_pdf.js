@@ -6,8 +6,8 @@ routerAdd('GET', '/backend/v1/epa/export/rdo/{id}', (c) => {
     return c.json(401, { error: 'Não autenticado' })
   }
   const role = auth.getString('role')
-  if (role !== 'admin' && role !== 'technician') {
-    return c.json(403, { error: 'Exportação permitida apenas para Administradores e Técnicos' })
+  if (role !== 'admin') {
+    return c.json(403, { error: 'Exportação permitida apenas para Administradores' })
   }
 
   const id = c.pathParam('id')

@@ -2402,15 +2402,17 @@ function FieldFullEditor({
             </Button>
           )}
 
-          <Button
-            variant="outline"
-            onClick={() => printFieldSheet(formData)}
-            className="min-h-[44px] text-xs font-semibold dark:border-slate-800 print:hidden"
-            title="Imprimir ou Salvar como PDF formatado"
-          >
-            <Printer className="mr-1.5 h-4 w-4 text-slate-600 dark:text-slate-400" />
-            Imprimir / PDF
-          </Button>
+          {isAdmin && (
+            <Button
+              variant="outline"
+              onClick={() => printFieldSheet(formData)}
+              className="min-h-[44px] text-xs font-semibold dark:border-slate-800 print:hidden"
+              title="Imprimir ou Salvar como PDF formatado"
+            >
+              <Printer className="mr-1.5 h-4 w-4 text-slate-600 dark:text-slate-400" />
+              Imprimir / PDF
+            </Button>
+          )}
 
           {canExportExcel && (
             <Button

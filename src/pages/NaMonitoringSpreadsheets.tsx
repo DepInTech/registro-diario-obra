@@ -585,29 +585,31 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
               <Plus className="mr-1.5 h-4 w-4" />＋ Adicionar Poço
             </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                try {
-                  auditExport(
-                    'export_pdf',
-                    'na_sheets',
-                    selectedSheet?.id || sheetFormData.area_name || 'na_sheet',
-                    `Planilha_NA_${sheetFormData.area_name || 'EPA'}.pdf`,
-                    { label: `Planilha de NA · ${sheetFormData.area_name || 'Geral'}` },
-                  ).catch(() => {})
-                } catch {
-                  /* intentionally ignored */
-                }
-                printNaSheet(sheetFormData as NaSheet)
-              }}
-              className="text-xs min-h-[38px] border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 font-semibold"
-              title="Exporta o PDF ou abre visualização para impressão fiel ao modelo oficial"
-            >
-              <FileDown className="mr-1.5 h-3.5 w-3.5" />
-              Exportar PDF / Imprimir
-            </Button>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    auditExport(
+                      'export_pdf',
+                      'na_sheets',
+                      selectedSheet?.id || sheetFormData.area_name || 'na_sheet',
+                      `Planilha_NA_${sheetFormData.area_name || 'EPA'}.pdf`,
+                      { label: `Planilha de NA · ${sheetFormData.area_name || 'Geral'}` },
+                    ).catch(() => {})
+                  } catch {
+                    /* intentionally ignored */
+                  }
+                  printNaSheet(sheetFormData as NaSheet)
+                }}
+                className="text-xs min-h-[38px] border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-700 dark:text-emerald-300 font-semibold"
+                title="Exporta o PDF ou abre visualização para impressão fiel ao modelo oficial"
+              >
+                <FileDown className="mr-1.5 h-3.5 w-3.5" />
+                Exportar PDF / Imprimir
+              </Button>
+            )}
 
             {isAdmin && selectedSheet?.id && (
               <Button
