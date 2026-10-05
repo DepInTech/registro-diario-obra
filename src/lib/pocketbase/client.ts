@@ -7,9 +7,11 @@ export { pb }
 
 export async function forceRealtimeTeardown(): Promise<void> {
   try {
-    await pb.realtime.unsubscribe()
-  } catch (_) {
-    // ignore teardown errors
+    if (pb.realtime) {
+      await pb.realtime.unsubscribe()
+    }
+  } catch {
+    /* intentionally ignored */
   }
 }
 

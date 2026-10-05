@@ -160,9 +160,29 @@
   border-radius: 999px;
 }
 
-/* Proteção defensiva de layout estrutural (EPA Sidebar e Header) */
+/* Proteção defensiva de layout estrutural (EPA Sidebar e Header Fixo no topo) */
 aside.epa-sidebar {
   box-sizing: border-box !important;
+}
+
+header.epa-header {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  height: 72px !important;
+  z-index: 30 !important;
+  width: auto !important;
+  display: flex !important;
+  box-sizing: border-box !important;
+}
+
+.epa-mobile-search-bar {
+  position: fixed !important;
+  top: 72px !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 29 !important;
 }
 
 @media (min-width: 1024px) {
@@ -173,12 +193,9 @@ aside.epa-sidebar {
   .epa-layout-content {
     padding-left: 252px !important;
   }
-}
-
-header.epa-header {
-  width: 100% !important;
-  display: flex !important;
-  box-sizing: border-box !important;
+  header.epa-header {
+    left: 252px !important;
+  }
 }
 
 /* Isolamento seguro e fixação do plugin de acessibilidade PrabothCharith */

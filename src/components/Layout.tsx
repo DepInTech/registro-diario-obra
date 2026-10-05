@@ -313,8 +313,8 @@ export function Layout({
           </aside>
         </div>
       )}
-      <div className="epa-layout-content lg:pl-[252px]">
-        <header className="epa-header sticky top-0 z-30 flex h-[72px] w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:px-6 dark:border-slate-800 dark:bg-slate-900/95">
+      <div className="epa-layout-content lg:pl-[252px] pt-[72px]">
+        <header className="epa-header fixed top-0 left-0 right-0 lg:left-[252px] z-30 flex h-[72px] items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 backdrop-blur md:px-6 dark:border-slate-800 dark:bg-slate-900/95">
           {/* SEÇÃO ESQUERDA: botão de menu (<1024px), título/subtítulo, busca desktop */}
           <div className="flex min-w-0 flex-1 items-center gap-3 pr-2 sm:pr-4">
             <Button
@@ -537,7 +537,7 @@ export function Layout({
 
         {/* Barra de busca retrátil no celular */}
         {mobileSearchOpen && (
-          <div className="border-b border-slate-200 bg-white p-3 sm:hidden dark:border-slate-800 dark:bg-slate-900">
+          <div className="epa-mobile-search-bar fixed top-[72px] left-0 right-0 z-29 border-b border-slate-200 bg-white p-3 sm:hidden dark:border-slate-800 dark:bg-slate-900 shadow-md">
             <div className="relative flex items-center">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
