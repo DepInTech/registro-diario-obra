@@ -1,20 +1,24 @@
 import PocketBase from 'pocketbase'
 
-export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
+export default pb
+export { pb }
+
 /**
- * Encerra à força qualquer canal realtime aberto (SSE) do PocketBase.
- * Necessária antes/depois de login, logout e troca de credenciais para evitar
- * reenvio do clientId antigo com novas credenciais.
+ * Derruba completamente o estado de realtime do SDK PocketBase.
+ * Usa apenas APIs públicas do js-sdk (unsubscribe / removeAllListeners de EventTarget).
  */
-export function forceRealtimeTeardown(): Promise<void> {
+export function forceRealtimeTeardown() {
   try {
-    return pb.realtime.unsubscribe()
-  } catch {
-    // Se não houver canal aberto, não há nada a fazer.
-    return Promise.resolve()
+    pb.realtime.unsubscribe()
+  } catch (_) {
+    /* noop */
+  }
+  try {
+    ;(pb.realtime as unknown as { removeAllListeners?: () => void }).removeAllListeners?.()
+  } catch (_) {
+    /* noop */
   }
 }
-
-export default pb
