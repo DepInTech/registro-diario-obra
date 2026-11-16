@@ -255,7 +255,18 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const syncNow = useCallback(async () => {
     // Prevent overlapping syncs across multiple triggers
     if (syncInProgressRef.current) return
-    if (!navigator.onLine || !pb.authStore.isValid) return
+    if (!navigator.onLine) return
+    // CORREÇÃO 1: se a sessão expirou, tenta renová-la (authRefresh) ANTES de abortar.
+    // Antes: gate silencioso em !pb.authStore.isValid fazia salvar/finalizar ficar
+    // eternamente 'pending' no IndexedDB sem nunca avisar nem enviar ao servidor.
+    if (!pb.authStore.isValid) {
+      try {
+        await pb.collection('users').authRefresh()
+      } catch (authErr) {
+        console.warn('syncNow abortado: sessão inválida e renovação falhou:', authErr)
+        return
+      }
+    }
 
     syncInProgressRef.current = true
     setIsSyncing(true)
