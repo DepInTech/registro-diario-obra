@@ -10,7 +10,11 @@
 // antes de enfileirar. E 'synced' só é devolvido após CONFIRMAÇÃO POR RECONSULTA
 // (getOne) — gravação confirmada pelo servidor, não apenas retorno 2xx do PATCH.
 import pb from '@/lib/pocketbase/client'
-import { isProvisionalId, sanitizeFieldSpreadsheetPayload } from '@/lib/payloadSanitizer'
+import {
+  isProvisionalId,
+  sanitizeFieldSpreadsheetPayload,
+  stripProtectedFieldsForUpdate,
+} from '@/lib/payloadSanitizer'
 import { offlineStorage, type OfflineFieldSheetItem } from '@/services/offlineStorage'
 import { translateServerErrorMessage } from '@/context/SyncContext'
 
@@ -234,7 +238,9 @@ export async function directSaveSheetToServer(
         payload.project = item.projectId
       }
 
-      const sanitized = sanitizeFieldSpreadsheetPayload(payload)
+      // CORREÇÃO RAIZ 404: a API rule de UPDATE exige que o corpo NÃO contenha
+      // project/deleted*/archived — strip antes de enviar (tentativa inicial E retry).
+      const sanitized = stripProtectedFieldsForUpdate(sanitizeFieldSpreadsheetPayload(payload))
       let updated: any
       try {
         updated = await pb.collection('field_spreadsheets').update(item.id, sanitized)

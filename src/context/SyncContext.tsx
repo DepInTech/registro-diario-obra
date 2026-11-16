@@ -18,6 +18,7 @@ import {
   sanitizeRdoPayload,
   sanitizeFieldSpreadsheetPayload,
   sanitizeWellCompletionDate,
+  stripProtectedFieldsForUpdate,
 } from '@/lib/payloadSanitizer'
 
 export const SYNC_BROADCAST_EVENT = 'epa_sync_complete'
@@ -1600,7 +1601,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               payload.project = sheet.projectId
             }
 
-            const sanitizedUpdateSheetPayload = sanitizeFieldSpreadsheetPayload(payload)
+            // CORREÇÃO RAIZ 404: a API rule de UPDATE exige que o corpo NÃO contenha
+            // project/deleted*/archived — strip antes de enviar (tentativa inicial E retry).
+            const sanitizedUpdateSheetPayload = stripProtectedFieldsForUpdate(
+              sanitizeFieldSpreadsheetPayload(payload),
+            )
             let updated: any
             try {
               updated = await pb

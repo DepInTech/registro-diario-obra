@@ -291,6 +291,48 @@ export function sanitizeRdoPayload(raw: Record<string, any>): Record<string, unk
 }
 
 /**
+ * Campos PROTEGIDOS pela API rule de UPDATE da coleção field_spreadsheets.
+ * A rule exige @request.body.X:isset = false para esses campos — enviá-los
+ * num PATCH faz o servidor recusar a operação (e o SDK resolve como 404),
+ * mesmo com sessão válida. Esta função remove-os do corpo de update,
+ * preservando TODOS os campos operacionais (extraction_data, infiltration_data,
+ * nutrient_*, compressor_data, oil_removal_data, env_*, observations, weather,
+ * morning_time, afternoon_time, infiltration_*_time, waste_*, pluviometer,
+ * status, submitted_at, client_token, area, date, review_notes).
+ */
+const FIELD_SHEET_UPDATE_PROTECTED_FIELDS = [
+  'id',
+  'project',
+  'operator',
+  'created',
+  'updated',
+  'deleted',
+  'deleted_reason',
+  'deleted_by',
+  'deleted_at',
+  'archived',
+  'change_history',
+  'admin_snapshot',
+  'returned_fields',
+  'number',
+  'collectionId',
+  'collectionName',
+  'expand',
+] as const
+
+export function stripProtectedFieldsForUpdate(
+  payload: Record<string, any>,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(payload)) {
+    if (!(FIELD_SHEET_UPDATE_PROTECTED_FIELDS as readonly string[]).includes(key)) {
+      body[key] = value
+    }
+  }
+  return body
+}
+
+/**
  * Sanitiza payload completo antes de enviar para `field_spreadsheets` (POST ou PATCH)
  */
 export function sanitizeFieldSpreadsheetPayload(raw: Record<string, any>): Record<string, unknown> {

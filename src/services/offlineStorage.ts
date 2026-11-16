@@ -79,6 +79,8 @@ export interface OfflineRdoItem {
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string
   syncAttempts?: number
+  nextAttemptAt?: number
+  lastSyncAttemptAt?: number
   lastModified: number
   serverUpdatedAt?: string
 }
@@ -154,6 +156,8 @@ export interface OfflineFieldSheetItem {
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string
   syncAttempts?: number
+  nextAttemptAt?: number
+  lastSyncAttemptAt?: number
   lastModified: number
   serverUpdatedAt?: string
 }
@@ -188,6 +192,8 @@ export interface OfflineProjectItem {
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string
   syncAttempts?: number
+  nextAttemptAt?: number
+  lastSyncAttemptAt?: number
   lastModified: number
   serverUpdatedAt?: string
 }
