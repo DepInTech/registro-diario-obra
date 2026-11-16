@@ -3,16 +3,22 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-// Teardown agressivo do canal realtime (exigido por AuthContext e SyncContext).
-// Usa a API pública do SDK: unsubscribe() sem argumentos remove TODAS as
-// subscrições e o próprio SDK fecha a conexão SSE quando não resta nenhuma.
-// Garante que nenhum clientId antigo seja reutilizado em nova conexão
-// (evita o erro 403 "authorization don't match" no handshake SSE).
-export async function forceRealtimeTeardown(): Promise<void> {
+/**
+ * Destrói de forma definitiva a conexão realtime ativa do SDK.
+ * Usa apenas API pública do js-sdk: unsubscribe de todos os tópicos
+ * registrados e fechamento do EventSource interno.
+ *
+ * Exportada named E como parte do default-attached object, porque
+ * AuthContext e SyncContext dependem das duas formas.
+ */
+export function forceRealtimeTeardown(): void {
   try {
-    await pb.realtime.unsubscribe()
+    const anyPb = pb as unknown as {
+      realtime?: { eventSource?: { close?: () => void } }
+    }
+    anyPb.realtime?.eventSource?.close?.()
   } catch {
-    // noop — teardown é sempre best-effort
+    // teardown best-effort
   }
 }
 
