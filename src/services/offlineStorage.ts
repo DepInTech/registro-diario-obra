@@ -593,7 +593,19 @@ export const offlineStorage = {
       forcePurgeAll?: boolean
     },
   ): Promise<{ purgedRdos: number; purgedSheets: number }> {
+    // CORREÇÃO 2 (fail-safe): sem referência temporal de servidor válida, o purge
+    // NÃO apaga nada — nunca confiar no relógio do dispositivo.
+    const isFiniteWipe = Number.isFinite(wipeTimestamp) && wipeTimestamp > 0
+    if (!isFiniteWipe && !options?.forcePurgeAll) {
+      console.warn(
+        '[purgePreWipeOperationalData] wipeTimestamp inválido/ausente — purge abortado (fail-safe).',
+      )
+      return { purgedRdos: 0, purgedSheets: 0 }
+    }
+
     const [rdos, sheets] = await Promise.all([this.getAllRdos(), this.getAllFieldSheets()])
+
+    const UNTOUCHABLE_STATUSES = ['pending_create', 'pending_update', 'conflict']
 
     let purgedRdos = 0
     for (const r of rdos) {
@@ -604,24 +616,32 @@ export const offlineStorage = {
       }
 
       // Data de referência do item: timestamp numérico de lastModified ou serverUpdatedAt
+      // CORREÇÃO 2: QUALQUER item pendente (pending_create/pending_update/conflict/failed sem
+      // limite de tentativas) é INTOCÁVEL pelo purge, INDEPENDENTE de timestamp — o relógio do
+      // dispositivo pode estar atrasado e faria isPendingPostWipe classificar pendências
+      // novas como "pré-zeragem", apagando dados nunca enviados ao servidor.
+      const UNTOUCHABLE_STATUSES = ['pending_create', 'pending_update', 'conflict']
+      const isUntouchable =
+        UNTOUCHABLE_STATUSES.includes(r.syncStatus) ||
+        (r.syncStatus === 'failed' && (r.syncAttempts || 0) < 3) ||
+        !r.syncStatus
+      if (isUntouchable) continue
+
+      // Apenas itens confirmadamente sincronizados podem ser alvo do purge.
+      const isSynced = r.syncStatus === 'synced'
+      if (!isSynced) continue
+
       const itemTimestamp = Math.max(
         r.lastModified || 0,
         r.serverUpdatedAt ? new Date(r.serverUpdatedAt).getTime() : 0,
       )
 
       const isOlderThanWipe = itemTimestamp <= wipeTimestamp
-      const isSynced = r.syncStatus === 'synced' || (!r.syncStatus && !r.id.startsWith('rdo_'))
       const notOnServer = options?.knownServerRdoIds
         ? !options.knownServerRdoIds.has(r.id)
         : options?.purgeAllSynced
 
-      // Se for anterior ou igual à zeragem OU se for um item sincronizado que não existe no servidor
-      // E NÃO for um rascunho pendente novo criado estritamente APÓS a zeragem
-      const isPendingPostWipe =
-        (r.syncStatus === 'pending_create' || r.syncStatus === 'pending_update') &&
-        r.lastModified > wipeTimestamp
-
-      if (!isPendingPostWipe && (isOlderThanWipe || (isSynced && notOnServer))) {
+      if (isOlderThanWipe || notOnServer) {
         await this.deleteRdo(r.id)
         purgedRdos++
       }
@@ -635,22 +655,27 @@ export const offlineStorage = {
         continue
       }
 
+      const isUntouchable =
+        UNTOUCHABLE_STATUSES.includes(s.syncStatus) ||
+        (s.syncStatus === 'failed' && (s.syncAttempts || 0) < 3) ||
+        !s.syncStatus
+      if (isUntouchable) continue
+
+      // Apenas itens confirmadamente sincronizados podem ser alvo do purge.
+      const isSynced = s.syncStatus === 'synced'
+      if (!isSynced) continue
+
       const itemTimestamp = Math.max(
         s.lastModified || 0,
         s.serverUpdatedAt ? new Date(s.serverUpdatedAt).getTime() : 0,
       )
 
       const isOlderThanWipe = itemTimestamp <= wipeTimestamp
-      const isSynced = s.syncStatus === 'synced' || (!s.syncStatus && !s.id.startsWith('field_'))
       const notOnServer = options?.knownServerSheetIds
         ? !options.knownServerSheetIds.has(s.id)
         : options?.purgeAllSynced
 
-      const isPendingPostWipe =
-        (s.syncStatus === 'pending_create' || s.syncStatus === 'pending_update') &&
-        s.lastModified > wipeTimestamp
-
-      if (!isPendingPostWipe && (isOlderThanWipe || (isSynced && notOnServer))) {
+      if (isOlderThanWipe || notOnServer) {
         await this.deleteFieldSheet(s.id)
         purgedSheets++
       }

@@ -57,6 +57,7 @@ import { authHeaders, exportUrl, updateFieldStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
 import { parseAdminSnapshot, isValidPocketBaseId } from '@/lib/payloadSanitizer'
+import { directSaveSheetToServer, type DirectSaveResult } from '@/services/directSheetSave'
 import { type Status } from '@/data/epa'
 import {
   parseHydrometerValue,
@@ -2008,6 +2009,15 @@ function FieldFullEditor({
     }
 
     try {
+      // CORREÇÃO 1 — Gravação direta ao servidor quando há internet e sessão válida.
+      // Antes: o save ia SOMENTE para a fila offline (pending_create/pending_update) e
+      // dependia de syncNow disparado por focus/visibility — se nada disparasse, a ficha
+      // nunca chegava ao banco central.
+      const directSaveResult: DirectSaveResult = await directSaveSheetToServer(updatedItem, {
+        isNew: isProvisional,
+        toast,
+      })
+
       await offlineStorage.saveFieldSheet(updatedItem)
       setFormData(updatedItem)
       setHasUnsavedChanges(false)
@@ -2121,22 +2131,28 @@ function FieldFullEditor({
         }
       }
 
-      toast({
-        title:
-          targetStatus === 'submitted'
-            ? isAdmin
-              ? 'Planilha disponibilizada ao Técnico'
-              : 'Planilha enviada para aprovação'
-            : 'Planilha salva com sucesso',
-        description:
-          targetStatus === 'submitted'
-            ? isAdmin
-              ? 'Planilha atribuída e liberada para preenchimento do Técnico.'
-              : 'A planilha foi enviada para validação e aprovação do Administrador.'
-            : isOnline
-              ? 'Dados sincronizados com o servidor.'
-              : 'Salvo localmente no dispositivo (IndexedDB).',
-      })
+      // CORREÇÃO 1: feedback fiel ao resultado real da gravação direta.
+      const directDesc =
+        targetStatus === 'submitted'
+          ? isAdmin
+            ? 'Planilha atribuída e liberada para preenchimento do Técnico.'
+            : 'A planilha foi enviada para validação e aprovação do Administrador.'
+          : directSaveResult === 'synced'
+            ? 'Dados gravados e sincronizados com o servidor.'
+            : directSaveResult === 'queued'
+              ? 'Sem comunicação com o servidor: salvo no dispositivo e será reenviado automaticamente.'
+              : 'Salvo no dispositivo (IndexedDB).'
+      if (directSaveResult !== 'queued') {
+        toast({
+          title:
+            targetStatus === 'submitted'
+              ? isAdmin
+                ? 'Planilha disponibilizada ao Técnico'
+                : 'Planilha enviada para aprovação'
+              : 'Planilha salva com sucesso',
+          description: directDesc,
+        })
+      }
       onSaved()
     } catch (err) {
       console.error('Save sheet error:', err)

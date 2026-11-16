@@ -1,24 +1,15 @@
 import PocketBase from 'pocketbase'
 
-const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
-pb.autoCancellation(false)
+export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 
 export default pb
-export { pb }
 
-/**
- * Derruba completamente o estado de realtime do SDK PocketBase.
- * Usa apenas APIs públicas do js-sdk (unsubscribe / removeAllListeners de EventTarget).
- */
+// Teardown completo do realtime (usado por AuthContext e SyncContext no logout).
+// API pública do SDK: pb.realtime.unsubscribe() sem argumentos remove todas as subscriptions.
 export function forceRealtimeTeardown() {
   try {
     pb.realtime.unsubscribe()
-  } catch (_) {
-    /* noop */
-  }
-  try {
-    ;(pb.realtime as unknown as { removeAllListeners?: () => void }).removeAllListeners?.()
-  } catch (_) {
-    /* noop */
+  } catch (e) {
+    console.warn('forceRealtimeTeardown:', e)
   }
 }

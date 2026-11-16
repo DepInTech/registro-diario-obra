@@ -100,7 +100,10 @@ function isProvisionalId(id?: string | null): boolean {
 }
 
 // Friendly translation for PocketBase server errors to Portuguese
-function translateServerErrorMessage(err: unknown, entity: 'rdo' | 'field' | 'project'): string {
+export function translateServerErrorMessage(
+  err: unknown,
+  entity: 'rdo' | 'field' | 'project',
+): string {
   if (!err) return 'Erro desconhecido durante a sincronização.'
   const rawMsg = err instanceof Error ? err.message : String(err)
   const errObj = (err as any)?.data?.data || {}
@@ -2442,7 +2445,28 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
     // Descarte inicial de rascunhos inválidos / travados e purga pré-zeragem
-    offlineStorage.purgeInvalidOrStuckDrafts().then(() => checkPending())
+    const purgeInitial = offlineStorage.purgeInvalidOrStuckDrafts().then(() => checkPending())
+
+    // CORREÇÃO 3: reenvio das pendências presas na fila logo na inicialização.
+    // Antes: o init fazia apenas purge + checkPending() sem syncNow(), então itens
+    // 'pending_create'/'pending_update' que nunca chegaram ao servidor ficavam presos
+    // até o usuário mexer na janela (focus/visibility). syncNow é idempotente por
+    // client_token e faz authRefresh se a sessão expirou, então o reenvio não duplica.
+    const ensureAuthAndResend = async () => {
+      try {
+        if (!pb.authStore.isValid) {
+          await pb.collection('users').authRefresh()
+        }
+      } catch {
+        // Sem sessão válida e sem como renová-la: nada a reenviar agora.
+        return
+      }
+      await purgeInitial
+      if (navigator.onLine && !syncInProgressRef.current) {
+        await syncNow()
+      }
+    }
+    ensureAuthAndResend()
 
     // Anti-ressincronização inicial no carregamento se online
     if (navigator.onLine && pb.authStore.isValid) {
