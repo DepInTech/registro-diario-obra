@@ -1,26 +1,20 @@
 import PocketBase from 'pocketbase'
 
-const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
 /**
- * Destrói de forma definitiva a conexão realtime ativa do SDK.
- * Usa apenas API pública do js-sdk: unsubscribe de todos os tópicos
- * registrados e fechamento do EventSource interno.
- *
- * Exportada named E como parte do default-attached object, porque
- * AuthContext e SyncContext dependem das duas formas.
+ * Encerra à força qualquer canal realtime aberto (SSE) do PocketBase.
+ * Necessária antes/depois de login, logout e troca de credenciais para evitar
+ * reenvio do clientId antigo com novas credenciais.
  */
-export function forceRealtimeTeardown(): void {
+export function forceRealtimeTeardown(): Promise<void> {
   try {
-    const anyPb = pb as unknown as {
-      realtime?: { eventSource?: { close?: () => void } }
-    }
-    anyPb.realtime?.eventSource?.close?.()
+    return pb.realtime.unsubscribe()
   } catch {
-    // teardown best-effort
+    // Se não houver canal aberto, não há nada a fazer.
+    return Promise.resolve()
   }
 }
 
-export { pb }
 export default pb
