@@ -1,16 +1,26 @@
 import PocketBase from 'pocketbase'
 
-// URL do backend Skip Cloud — injetada em tempo de build via VITE_POCKETBASE_URL (set_env).
-export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+pb.autoCancellation(false)
 
-export default pb
-
-// Teardown completo do realtime (usado por AuthContext e SyncContext no logout).
-// API pública do SDK: pb.realtime.unsubscribe() sem argumentos remove todas as subscriptions.
-export function forceRealtimeTeardown() {
+/**
+ * Encerra à força o canal SSE de tempo real: remove todas as subscrições e
+ * invalida o clientId atual, forçando um handshake novo (novo clientId) na
+ * próxima subscrição. Usado no login/logout/troca de usuário para nunca enviar
+ * um clientId antigo com credenciais novas.
+ */
+export async function forceRealtimeTeardown() {
   try {
-    pb.realtime.unsubscribe()
-  } catch (e) {
-    console.warn('forceRealtimeTeardown:', e)
+    await pb.realtime.unsubscribe()
+  } catch {
+    // ignore — canal pode nem existir ainda
+  }
+  try {
+    ;(pb as unknown as { realtime: { clientId: string | null } }).realtime.clientId = null
+  } catch {
+    // ignore
   }
 }
+
+export { pb }
+export default pb

@@ -177,8 +177,11 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
 
       if (navigator.onLine && pb.authStore.isValid && user?.role === 'admin') {
         try {
+          // A coleção users NÃO possui campo deleted (é auth): o filtro
+          // "deleted = false || deleted:isset = false" gerava 400 no servidor.
+          // Conta todos os usuários ativos.
           const users = await pb.collection('users').getList(1, 1, {
-            filter: 'deleted = false || deleted:isset = false',
+            filter: 'active = true',
           })
           if (users.totalItems > 0) {
             setUserCount(users.totalItems)
