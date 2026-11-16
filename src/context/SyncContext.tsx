@@ -176,6 +176,43 @@ async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
   return new File([blob], filename, { type: mime })
 }
 
+// Renova a sessão (authRefresh) e devolve true/false — usado quando o servidor
+// rejeita um token que o authStore local considera válido (404/401/403 num ID
+// não-provisório: o registro EXISTE, a regra de acesso falhou por sessão).
+async function refreshSessionOrFalse(): Promise<boolean> {
+  try {
+    await pb.collection('users').authRefresh()
+    return true
+  } catch (refreshErr) {
+    console.warn('authRefresh falhou (sessão não recuperável):', refreshErr)
+    return false
+  }
+}
+
+// CONFIRMAÇÃO POR RECONSULTA: relê o registro do servidor; 'synced' só pode ser
+// exibido quando esta leitura confirma que o registro existe com os dados gravados.
+async function confirmSheetSyncedOnServer(id: string): Promise<any | null> {
+  try {
+    return await pb.collection('field_spreadsheets').getOne(id)
+  } catch (confirmErr: any) {
+    const cStatus = confirmErr?.status ?? confirmErr?.statusCode ?? 0
+    if (cStatus === 404 || cStatus === 401 || cStatus === 403) {
+      // A leitura de confirmação também pode esbarrar em sessão rejeitada:
+      // renova e tenta reler UMA vez antes de declarar não confirmado.
+      if (await refreshSessionOrFalse()) {
+        try {
+          return await pb.collection('field_spreadsheets').getOne(id)
+        } catch (retryErr) {
+          console.warn('Confirmação por reconsulta falhou após renovação de sessão:', retryErr)
+          return null
+        }
+      }
+    }
+    console.warn('Confirmação por reconsulta (getOne) falhou:', confirmErr)
+    return null
+  }
+}
+
 export function SyncProvider({ children }: { children: React.ReactNode }) {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine)
   const [isSyncing, setIsSyncing] = useState<boolean>(false)
@@ -1318,22 +1355,51 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             const sanitizedCreateSheetPayload = sanitizeFieldSpreadsheetPayload(payload)
             // Garante que nenhum id provisório seja passado no create
             delete (sanitizedCreateSheetPayload as any).id
-            const created = await pb
-              .collection('field_spreadsheets')
-              .create(sanitizedCreateSheetPayload)
+            let created: any
+            try {
+              created = await pb
+                .collection('field_spreadsheets')
+                .create(sanitizedCreateSheetPayload)
+            } catch (crErr: any) {
+              const crStatus = crErr?.status ?? crErr?.statusCode ?? 0
+              // 401/403 no create também podem ser sessão rejeitada: renova e repete UMA vez.
+              if (crStatus === 401 || crStatus === 403) {
+                console.warn('POST 401/403 na fila de create — renovando sessão:', crErr)
+                const refreshed = await refreshSessionOrFalse()
+                if (!refreshed) throw crErr
+                created = await pb
+                  .collection('field_spreadsheets')
+                  .create(sanitizedCreateSheetPayload)
+              } else {
+                throw crErr
+              }
+            }
+
+            // CONFIRMAÇÃO POR RECONSULTA: 'synced' só após reler o registro do
+            // servidor e confirmar que ele existe com os dados gravados.
+            const confirmCreate = await confirmSheetSyncedOnServer(created.id)
+            if (!confirmCreate) {
+              throw Object.assign(
+                new Error('Falha ao confirmar gravação da planilha no servidor'),
+                { status: 0 },
+              )
+            }
 
             // Imediatamente adota o ID oficial do servidor na ficha local, eliminando o ID provisório
             await offlineStorage.deleteFieldSheet(oldSheetId)
-            sheet.id = created.id
-            sheet.number = created.number
+            sheet.id = confirmCreate.id
+            sheet.number = confirmCreate.number
             sheet.submittedAt =
-              created.submitted_at || (created.status === 'submitted' ? created.updated : undefined)
+              confirmCreate.submitted_at ||
+              (confirmCreate.status === 'submitted' ? confirmCreate.updated : undefined)
             sheet.approvedAt =
-              created.approved_at || (created.status === 'approved' ? created.updated : undefined)
+              confirmCreate.approved_at ||
+              (confirmCreate.status === 'approved' ? confirmCreate.updated : undefined)
             sheet.returnedAt =
-              created.returned_at || (created.status === 'returned' ? created.updated : undefined)
-            sheet.serverCreatedAt = created.created
-            sheet.serverUpdatedAt = created.updated
+              confirmCreate.returned_at ||
+              (confirmCreate.status === 'returned' ? confirmCreate.updated : undefined)
+            sheet.serverCreatedAt = confirmCreate.created
+            sheet.serverUpdatedAt = confirmCreate.updated
             sheet.syncStatus = 'synced'
             delete sheet.syncError
             sheet.syncAttempts = 0
@@ -1383,13 +1449,44 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             try {
               serverRecord = await pb.collection('field_spreadsheets').getOne(sheet.id)
             } catch (fetchErr: any) {
-              if (fetchErr?.status === 404) {
-                // Planilha foi excluída no servidor: remove da fila e do armazenamento local
-                console.warn('Server sheet not found (404), discarding local item:', sheet.id)
-                await offlineStorage.deleteFieldSheet(sheet.id)
-                continue
+              const fetchStatus = fetchErr?.status ?? fetchErr?.statusCode ?? 0
+              // 404/401/403 num ID não-provisório NÃO significam registro inexistente:
+              // podem ser sessão rejeitada pelo servidor. Renova a sessão e relê UMA vez.
+              // A ficha NUNCA é descartada da fila por esses erros.
+              if (fetchStatus === 404 || fetchStatus === 401 || fetchStatus === 403) {
+                const refreshed = await refreshSessionOrFalse()
+                if (refreshed) {
+                  try {
+                    serverRecord = await pb.collection('field_spreadsheets').getOne(sheet.id)
+                  } catch (reErr: any) {
+                    if ((reErr?.status ?? reErr?.statusCode ?? 0) === 404) {
+                      console.warn(
+                        'Planilha realmente inexistente no servidor (404 pós-renovação), mantendo na fila com falha:',
+                        sheet.id,
+                      )
+                      sheet.syncStatus = 'failed'
+                      sheet.syncError =
+                        'Registro não localizado no servidor. A ficha continua salva no dispositivo e na fila — não será descartada.'
+                      sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+                      await offlineStorage.saveFieldSheet(sheet)
+                      totalErrors++
+                      continue
+                    }
+                    throw reErr
+                  }
+                } else {
+                  // Sessão irrecuperável: mantém na fila (nunca descartar por 404/401/403)
+                  sheet.syncStatus = 'failed'
+                  sheet.syncError =
+                    'Não foi possível confirmar no servidor (falha de sessão). Faça login novamente se persistir — a ficha segue na fila e será reenviada.'
+                  sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+                  await offlineStorage.saveFieldSheet(sheet)
+                  totalErrors++
+                  continue
+                }
+              } else {
+                throw fetchErr
               }
-              throw fetchErr
             }
 
             // Se a planilha no servidor já foi marcada com soft-delete (deleted = true)
@@ -1504,25 +1601,73 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             }
 
             const sanitizedUpdateSheetPayload = sanitizeFieldSpreadsheetPayload(payload)
-            const updated = await pb
-              .collection('field_spreadsheets')
-              .update(sheet.id, sanitizedUpdateSheetPayload)
-            if (updated.number) sheet.number = updated.number
-            if (updated.submitted_at) sheet.submittedAt = updated.submitted_at
-            if (updated.approved_at) sheet.approvedAt = updated.approved_at
-            if (updated.returned_at) sheet.returnedAt = updated.returned_at
-            if (updated.created) sheet.serverCreatedAt = updated.created
+            let updated: any
+            try {
+              updated = await pb
+                .collection('field_spreadsheets')
+                .update(sheet.id, sanitizedUpdateSheetPayload)
+            } catch (upErr: any) {
+              const upStatus = upErr?.status ?? upErr?.statusCode ?? 0
+              // 404/401/403 num ID não-provisório = sessão rejeitada pelo servidor
+              // (o registro EXISTE no banco; o token local "parece" válido mas é
+              // recusado). Renova a sessão e repete o update UMA vez.
+              if (upStatus === 404 || upStatus === 401 || upStatus === 403) {
+                console.warn(
+                  `PATCH ${upStatus} na fila de update — renovando sessão e repetindo UMA vez:`,
+                  upErr,
+                )
+                const refreshed = await refreshSessionOrFalse()
+                if (!refreshed) throw upErr
+                updated = await pb
+                  .collection('field_spreadsheets')
+                  .update(sheet.id, sanitizedUpdateSheetPayload)
+              } else {
+                throw upErr
+              }
+            }
+
+            // CONFIRMAÇÃO POR RECONSULTA: 'synced' só após reler o registro do
+            // servidor e confirmar que ele existe com os dados gravados.
+            const confirmed = await confirmSheetSyncedOnServer(sheet.id)
+            if (!confirmed) {
+              throw Object.assign(
+                new Error('Falha ao confirmar gravação da planilha no servidor'),
+                { status: 0 },
+              )
+            }
+
+            if (confirmed.number) sheet.number = confirmed.number
+            if (confirmed.submitted_at) sheet.submittedAt = confirmed.submitted_at
+            if (confirmed.approved_at) sheet.approvedAt = confirmed.approved_at
+            if (confirmed.returned_at) sheet.returnedAt = confirmed.returned_at
+            if (confirmed.created) sheet.serverCreatedAt = confirmed.created
             sheet.syncStatus = 'synced'
-            sheet.serverUpdatedAt = updated.updated
+            sheet.serverUpdatedAt = confirmed.updated
             delete sheet.syncError
             sheet.syncAttempts = 0
             await offlineStorage.saveFieldSheet(sheet)
             totalSynced++
           } catch (err: any) {
             console.error('Error syncing offline FieldSheet update:', err)
-            if (err?.status === 404) {
-              console.warn('Server FieldSheet update 404, discarding local item:', sheet.id)
-              await offlineStorage.deleteFieldSheet(sheet.id)
+            const errStatusUpd = err?.status ?? err?.statusCode ?? 0
+            // 404/401/403 num ID não-provisório NÃO descartam a ficha da fila:
+            // são falha de sessão/autorização — a ficha segue na fila para novo envio.
+            if (
+              errStatusUpd === 404 ||
+              errStatusUpd === 401 ||
+              errStatusUpd === 403 ||
+              errStatusUpd === 0
+            ) {
+              totalErrors++
+              const sessionMsg =
+                errStatusUpd === 404
+                  ? 'Não foi possível confirmar no servidor (registro não localizado). A ficha continua salva no dispositivo e na fila — não será descartada.'
+                  : 'Não foi possível confirmar no servidor (falha de sessão). Faça login novamente se persistir — a ficha segue na fila e será reenviada.'
+              sheet.syncStatus = 'failed'
+              sheet.syncError = sessionMsg
+              sheet.syncAttempts = (sheet.syncAttempts || 0) + 1
+              errorsList.push(sessionMsg)
+              await offlineStorage.saveFieldSheet(sheet)
               continue
             }
             totalErrors++

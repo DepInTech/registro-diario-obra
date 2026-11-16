@@ -4,6 +4,11 @@
 // nunca chegava ao banco central. Aqui: quando há internet e sessão válida (ou
 // recuperável via authRefresh), grava DIRETO no servidor com idempotência por
 // client_token (mesma chave da fila); a fila continua como contingência offline.
+//
+// v0.0.175 — 404/401/403 num UPDATE de ID não-provisório = sessão rejeitada pelo
+// servidor (o registro EXISTE, a regra falhou). Tratamento: authRefresh + retry ÚNICO
+// antes de enfileirar. E 'synced' só é devolvido após CONFIRMAÇÃO POR RECONSULTA
+// (getOne) — gravação confirmada pelo servidor, não apenas retorno 2xx do PATCH.
 import pb from '@/lib/pocketbase/client'
 import { isProvisionalId, sanitizeFieldSpreadsheetPayload } from '@/lib/payloadSanitizer'
 import { offlineStorage, type OfflineFieldSheetItem } from '@/services/offlineStorage'
@@ -16,11 +21,36 @@ export interface DirectSaveOptions {
 
 export type DirectSaveResult = 'synced' | 'queued' | 'blocked'
 
+function errStatus(err: any): number {
+  return err?.status ?? err?.statusCode ?? err?.response?.status ?? 0
+}
+
+async function tryAuthRefresh(): Promise<boolean> {
+  try {
+    await pb.collection('users').authRefresh()
+    return true
+  } catch (refreshErr) {
+    console.warn('authRefresh falhou (sessão não recuperável):', refreshErr)
+    return false
+  }
+}
+
+async function confirmSheetOnServer(id: string): Promise<any | null> {
+  try {
+    // Confirmação por reconsulta: o registro precisa EXISTIR no servidor para que
+    // o indicador local mostre "Sincronizado". Um 404 aqui é falha real.
+    return await pb.collection('field_spreadsheets').getOne(id)
+  } catch (confirmErr) {
+    console.warn('Confirmação por reconsulta (getOne) falhou:', confirmErr)
+    return null
+  }
+}
+
 /**
- * Tenta gravar o item DIRETAMENTE no servidor. Em caso de sucesso marca o item
- * como 'synced' no cache offline e devolve 'synced'. Em caso de falha de
- * rede/servidor/devolve 'queued' — o item segue para a fila offline com o status
- * pendente apropriado (nunca é descartado silenciosamente).
+ * Tenta gravar o item DIRETAMENTE no servidor. Em caso de sucesso confirmado por
+ * reconsulta marca o item como 'synced' no cache offline e devolve 'synced'.
+ * Em caso de falha de rede/servidor devolve 'queued' — o item segue para a fila
+ * offline com o status pendente apropriado (nunca é descartado silenciosamente).
  */
 export async function directSaveSheetToServer(
   item: OfflineFieldSheetItem,
@@ -29,12 +59,7 @@ export async function directSaveSheetToServer(
   // 1. Gate de sessão: se o authStore expirou, tenta renovar antes de desistir.
   let sessionOk = pb.authStore.isValid
   if (!sessionOk && navigator.onLine) {
-    try {
-      await pb.collection('users').authRefresh()
-      sessionOk = true
-    } catch {
-      sessionOk = false
-    }
+    sessionOk = await tryAuthRefresh()
   }
 
   // 2. Sem rede ou sem sessão recuperável: cai no caminho da fila offline atual.
@@ -131,19 +156,25 @@ export async function directSaveSheetToServer(
       // com idempotência por client_token — o cliente NUNCA envia number no create.
       const created = await pb.collection('field_spreadsheets').create(sanitized)
 
+      // CONFIRMAÇÃO POR RECONSULTA: 'synced' só após reler o registro do servidor.
+      const confirmed = await confirmSheetOnServer(created.id)
+      if (!confirmed) {
+        throw Object.assign(new Error('Falha ao confirmar gravação no servidor'), { status: 0 })
+      }
+
       // Adoção atômica do ID oficial do servidor no cache offline
       const oldId = item.id
       await offlineStorage.deleteFieldSheet(oldId)
-      item.id = created.id
-      item.number = created.number
+      item.id = confirmed.id
+      item.number = confirmed.number
       item.submittedAt =
-        created.submitted_at || (created.status === 'submitted' ? created.updated : undefined)
+        confirmed.submitted_at || (confirmed.status === 'submitted' ? confirmed.updated : undefined)
       item.approvedAt =
-        created.approved_at || (created.status === 'approved' ? created.updated : undefined)
+        confirmed.approved_at || (confirmed.status === 'approved' ? confirmed.updated : undefined)
       item.returnedAt =
-        created.returned_at || (created.status === 'returned' ? created.updated : undefined)
-      item.serverCreatedAt = created.created
-      item.serverUpdatedAt = created.updated
+        confirmed.returned_at || (confirmed.status === 'returned' ? confirmed.updated : undefined)
+      item.serverCreatedAt = confirmed.created
+      item.serverUpdatedAt = confirmed.updated
       item.syncStatus = 'synced'
       delete item.syncError
       item.syncAttempts = 0
@@ -204,15 +235,40 @@ export async function directSaveSheetToServer(
       }
 
       const sanitized = sanitizeFieldSpreadsheetPayload(payload)
-      const updated = await pb.collection('field_spreadsheets').update(item.id, sanitized)
+      let updated: any
+      try {
+        updated = await pb.collection('field_spreadsheets').update(item.id, sanitized)
+      } catch (upErr: any) {
+        const status = errStatus(upErr)
+        // 404/401/403 num ID não-provisório = sessão rejeitada pelo servidor
+        // (o token local parece válido mas o servidor o recusa) — a evidência
+        // real do bug: 6 PATCH 404 seguidos num registro que EXISTE no banco.
+        if ((status === 404 || status === 401 || status === 403) && !isProvisionalId(item.id)) {
+          console.warn(
+            `PATCH ${status} em update direto — renovando sessão e repetindo UMA vez:`,
+            upErr,
+          )
+          const refreshed = await tryAuthRefresh()
+          if (!refreshed) throw upErr
+          updated = await pb.collection('field_spreadsheets').update(item.id, sanitized)
+        } else {
+          throw upErr
+        }
+      }
 
-      if (updated.number) item.number = updated.number
-      if (updated.submitted_at) item.submittedAt = updated.submitted_at
-      if (updated.approved_at) item.approvedAt = updated.approved_at
-      if (updated.returned_at) item.returnedAt = updated.returned_at
-      if (updated.created) item.serverCreatedAt = updated.created
+      // CONFIRMAÇÃO POR RECONSULTA: 'synced' só após reler o registro do servidor.
+      const confirmed = await confirmSheetOnServer(item.id)
+      if (!confirmed) {
+        throw Object.assign(new Error('Falha ao confirmar gravação no servidor'), { status: 0 })
+      }
+
+      if (confirmed.number) item.number = confirmed.number
+      if (confirmed.submitted_at) item.submittedAt = confirmed.submitted_at
+      if (confirmed.approved_at) item.approvedAt = confirmed.approved_at
+      if (confirmed.returned_at) item.returnedAt = confirmed.returned_at
+      if (confirmed.created) item.serverCreatedAt = confirmed.created
       item.syncStatus = 'synced'
-      item.serverUpdatedAt = updated.updated
+      item.serverUpdatedAt = confirmed.updated
       delete item.syncError
       item.syncAttempts = 0
       await offlineStorage.saveFieldSheet(item)
@@ -222,18 +278,31 @@ export async function directSaveSheetToServer(
     // Falhou rede/servidor/validação: NUNCA descartar — item cai na fila offline.
     console.warn('Gravação direta ao servidor falhou; enfileirando para retry:', err)
     item.syncStatus = isProvisionalId(item.id) ? 'pending_create' : 'pending_update'
-    if (err?.status === 400 || err?.statusCode === 400) {
+    const status = errStatus(err)
+    if (status === 400 || status === 0) {
       // 400 é erro de payload (não rede): guardamos a mensagem amigável para o painel de falhas.
+      // status 0 = falha de confirmação (getOne não leu de volta) — mesma pista de sessão.
       const friendly = translateServerErrorMessage(err, 'field')
       item.syncError =
         (friendly || err?.message || 'erro de validação') +
         ' (o registro segue na fila e será reenviado)'
       item.syncAttempts = (item.syncAttempts || 0) + 1
+    } else if (status === 401 || status === 403) {
+      // Falha de sessão/autorização após o retry — orientar o usuário a relogar.
+      item.syncError =
+        'Não foi possível confirmar no servidor (falha de sessão/autorização). Faça login novamente se persistir.'
+      item.syncAttempts = (item.syncAttempts || 0) + 1
+    } else if (status === 404) {
+      item.syncError =
+        'Não foi possível confirmar no servidor (registro não localizado). A ficha segue na fila e será reenviada.'
+      item.syncAttempts = (item.syncAttempts || 0) + 1
     }
     opts.toast({
-      title: 'Salvo localmente',
+      title: status === 401 || status === 403 ? 'Falha de sessão no servidor' : 'Salvo localmente',
       description:
-        'Sem comunicação com o servidor no momento. A ficha foi gravada no dispositivo e será sincronizada automaticamente.',
+        status === 401 || status === 403
+          ? 'Não foi possível confirmar no servidor — faça login novamente se persistir. A ficha foi gravada no dispositivo e seguirá na fila de sincronização.'
+          : 'Salvo localmente, será sincronizado. A ficha foi gravada no dispositivo e será reenviada automaticamente.',
       variant: 'destructive',
     })
     return 'queued'
