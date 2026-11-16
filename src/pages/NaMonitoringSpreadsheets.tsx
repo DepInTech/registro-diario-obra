@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Waves,
   Plus,
@@ -37,6 +37,8 @@ import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { applyDateMask, isValidBrDate } from '@/lib/dateMask'
 import { naConfigService, naSheetService } from '@/services/inSituAndNaService'
+import { useCollectionRealtime } from '@/hooks/use-sheet-realtime'
+import { REALTIME_RECORD_UPDATE } from '@/context/SyncContext'
 import { auditExport } from '@/services/epa'
 import type { NaAreaConfig, NaSheet, NaWellReadingRow } from '@/types/inSituAndNa'
 
@@ -110,6 +112,83 @@ export function NaMonitoringPage({ query = '' }: { query?: string }) {
   useEffect(() => {
     loadAll()
   }, [])
+
+  // Revalidação: recarrega quando a guia volta a ficar visível / conexão retorna
+  const skipFirstVisibilityRef = useRef(true)
+  useEffect(() => {
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') {
+        if (skipFirstVisibilityRef.current) {
+          skipFirstVisibilityRef.current = false
+          return
+        }
+        loadAll()
+      }
+    }
+    const handleOnline = () => loadAll()
+    document.addEventListener('visibilitychange', handleVisible)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisible)
+      window.removeEventListener('online', handleOnline)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // TEMPO REAL: replica o padrão do SyncContext (RDO/Planilha/Projetos) para na_sheets
+  // e na_area_configs. Outro dispositivo criou/editou/excluiu → estado sem F5.
+  useCollectionRealtime<NaSheet>('na_sheets', (event) => {
+    const rec = event.record
+    if (!rec?.id) return
+
+    window.dispatchEvent(
+      new CustomEvent(REALTIME_RECORD_UPDATE, {
+        detail: { collection: 'na_sheets', id: rec.id, action: event.action, record: rec },
+      }),
+    )
+
+    setSheets((prev) => {
+      if (event.action === 'delete') return prev.filter((s) => s.id !== rec.id)
+      const idx = prev.findIndex((s) => s.id === rec.id)
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = rec
+        return next
+      }
+      return [rec, ...prev]
+    })
+
+    // Editor aberto neste dispositivo: só espelha se NÃO houver edição em andamento
+    if (isEditingSheet) return
+    setSelectedSheet((prev) => {
+      if (!prev || prev.id !== rec.id) return prev
+      if (event.action === 'delete') return null
+      return rec
+    })
+  })
+
+  useCollectionRealtime<NaAreaConfig>('na_area_configs', (event) => {
+    const rec = event.record
+    if (!rec?.id) return
+
+    setConfigs((prev) => {
+      if (event.action === 'delete') return prev.filter((c) => c.id !== rec.id)
+      const idx = prev.findIndex((c) => c.id === rec.id)
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = rec
+        return next
+      }
+      return [...prev, rec]
+    })
+
+    if (isEditingConfig) return
+    setSelectedConfig((prev) => {
+      if (!prev || prev.id !== rec.id) return prev
+      if (event.action === 'delete') return null
+      return rec
+    })
+  })
 
   // Filtragem
   const filteredSheets = useMemo(() => {

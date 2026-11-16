@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Activity, Plus, Trash2, Save, ArrowLeft, Send, FileDown, Sparkles } from 'lucide-react'
 import {
   printInSituSheet,
@@ -25,6 +25,8 @@ import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { applyShortDateMask, isValidBrDate } from '@/lib/dateMask'
 import { inSituService } from '@/services/inSituAndNaService'
+import { useCollectionRealtime } from '@/hooks/use-sheet-realtime'
+import { REALTIME_RECORD_UPDATE } from '@/context/SyncContext'
 import { auditExport } from '@/services/epa'
 import type { InSituSheet, InSituNutrientRowData } from '@/types/inSituAndNa'
 
@@ -70,9 +72,63 @@ export function InSituPage({ query = '' }: { query?: string }) {
     }
   }
 
+  // Recarrega apenas quando a guia volta a ficar visível / conexão retorna
+  const reloadOnFocusRef = useRef(false)
+  useEffect(() => {
+    const handleVisible = () => {
+      if (document.visibilityState === 'visible') {
+        if (reloadOnFocusRef.current) {
+          loadSheets()
+        }
+        reloadOnFocusRef.current = true
+      }
+    }
+    const handleOnline = () => {
+      loadSheets()
+    }
+    document.addEventListener('visibilitychange', handleVisible)
+    window.addEventListener('online', handleOnline)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisible)
+      window.removeEventListener('online', handleOnline)
+    }
+  }, [])
+
   useEffect(() => {
     loadSheets()
   }, [])
+
+  // TEMPO REAL: replica o padrão do SyncContext (RDO/Planilha/Projetos) para in_situ_sheets.
+  // Outro dispositivo criou/editou/excluiu → estado atualizado sem F5.
+  useCollectionRealtime<InSituSheet>('in_situ_sheets', (event) => {
+    const rec = event.record
+    if (!rec?.id) return
+
+    window.dispatchEvent(
+      new CustomEvent(REALTIME_RECORD_UPDATE, {
+        detail: { collection: 'in_situ_sheets', id: rec.id, action: event.action, record: rec },
+      }),
+    )
+
+    setSheets((prev) => {
+      if (event.action === 'delete') return prev.filter((s) => s.id !== rec.id)
+      const idx = prev.findIndex((s) => s.id === rec.id)
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = rec
+        return next
+      }
+      return [rec, ...prev]
+    })
+
+    // Editor aberto neste dispositivo: só espelha se NÃO houver edição em andamento
+    if (isEditing) return
+    setSelectedSheet((prev) => {
+      if (!prev || prev.id !== rec.id) return prev
+      if (event.action === 'delete') return null
+      return rec
+    })
+  })
 
   const filteredSheets = useMemo(() => {
     if (!query) return sheets

@@ -13,6 +13,7 @@ import {
 } from '@/lib/hydrometerValidator'
 import { useToast } from '@/hooks/use-toast'
 import { brDateToIso } from '@/lib/dateMask'
+import { useCollectionRealtime } from '@/hooks/use-sheet-realtime'
 import {
   sanitizeRdoPayload,
   sanitizeFieldSpreadsheetPayload,
@@ -63,6 +64,10 @@ interface SyncContextType {
     resolution: 'keep_local' | 'keep_server',
   ) => Promise<void>
 }
+
+// Mensagem amigável exibida no widget de sync quando há itens com falha
+export const SYNC_FAILED_MESSAGE =
+  'Não foi possível sincronizar os dados. Os dados preenchidos foram mantidos e serão sincronizados automaticamente quando a conexão for restabelecida.'
 
 const SyncContext = createContext<SyncContextType>({
   isOnline: true,
