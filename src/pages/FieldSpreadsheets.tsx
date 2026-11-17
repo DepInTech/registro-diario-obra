@@ -1604,7 +1604,6 @@ function FieldFullEditor({
     }
   }, [formData.date, formData.projectId, formData.lastModified, formData.number])
 
-  const isAdmin = user?.role === 'admin'
   const isTechnician = user?.role === 'technician'
   const isDeleted = Boolean(formData.deleted)
   // O Técnico fica estritamente bloqueado (somente leitura) quando o status for 'submitted' ou 'approved'.
