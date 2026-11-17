@@ -640,29 +640,24 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         // ID com formato válido PocketBase sem lista remota disponível
         resolvedOperator = candidateOpId
         resolvedOperatorName = candidateOpName || user?.name || ''
-      } else if (user?.id && !isProvisionalId(user.id)) {
-        // Fallback seguro: usuário autenticado atual (Admin ou Técnico)
+      } else if (user?.role === 'technician' && user?.id && !isProvisionalId(user.id)) {
+        // Técnico criando a própria planilha: operator = identidade autenticada
         resolvedOperator = user.id
         resolvedOperatorName = (user.name || '').trim()
-      } else if (activeUsers.length > 0) {
-        const firstTech = activeUsers.find((u) => u.role === 'technician') || activeUsers[0]
-        resolvedOperator = firstTech.id
-        resolvedOperatorName = firstTech.name || ''
       }
+      // Admin: NUNCA atribuir automaticamente (nem cair em outro usuário/admin) —
+      // o campo fica vazio para escolha EXPLÍCITA no editor (select de técnicos reais).
     } catch {
-      if (user?.id && !isProvisionalId(user.id)) {
+      if (user?.role === 'technician' && user?.id && !isProvisionalId(user.id)) {
         resolvedOperator = user.id
         resolvedOperatorName = (user.name || '').trim()
       }
-    }
-
-    if (!resolvedOperator) {
-      resolvedOperator = user?.id || ''
-      resolvedOperatorName = (user?.name || '').trim()
     }
 
     const finalOperator = resolvedOperator.trim()
-    const finalOperatorName = (resolvedOperatorName || user?.name || '').trim()
+    const finalOperatorName = (
+      resolvedOperatorName || (user?.role === 'technician' ? user?.name || '' : '')
+    ).trim()
 
     // Herança completa dos valores cadastrados pelo Administrador na ficha base
     const baseFilled =
@@ -1397,6 +1392,30 @@ function FieldFullEditor({
     initialSheet.returned_fields || ['hidrometro'],
   )
   const [projectList, setProjectList] = useState<OfflineProjectItem[]>([])
+  // Técnicos reais (role='technician', active=true) vindos da coleção users
+  const [technicians, setTechnicians] = useState<Array<{ id: string; name: string }>>([])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadTechnicians = async () => {
+      try {
+        if (!navigator.onLine || !pb.authStore.isValid) return
+        const recs = await pb.collection('users').getFullList({
+          filter: "role = 'technician' && active = true",
+          sort: 'name',
+        })
+        if (!cancelled) {
+          setTechnicians(recs.map((r: any) => ({ id: r.id, name: r.name || r.email })))
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar técnicos (users):', err)
+      }
+    }
+    loadTechnicians()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const { user, setHasUnsavedChanges } = useAuth()
   const { isOnline, syncNow } = useSync()
@@ -1933,6 +1952,19 @@ function FieldFullEditor({
       } catch (e) {
         console.warn('Error resolving active project on FieldSheet save:', e)
       }
+    }
+
+    // Atribuição obrigatória: nunca salvar/enviar sem um técnico real selecionado.
+    // Sem isso o servidor recusaria o create (operator é relation obrigatória) e a
+    // ficha cairia na fila de sync com erro 400.
+    if (!(formData.operator || '').trim()) {
+      toast({
+        title: 'Selecione um técnico',
+        description:
+          'Escolha o Técnico / Responsável no campo de seleção antes de salvar ou enviar a planilha.',
+        variant: 'destructive',
+      })
+      return
     }
 
     const isProvisional = isNew || isProvisionalId(formData.id)
@@ -2637,13 +2669,41 @@ function FieldFullEditor({
                 )
               }
               return (
-                <Input
-                  value={formData.operatorName || ''}
-                  onChange={(e) => handleFieldChange('operatorName', e.target.value)}
-                  disabled={isLocked}
-                  placeholder="Ex.: Julio Cesar"
-                  className="mt-1"
-                />
+                <div className="mt-1">
+                  <select
+                    value={formData.operator || ''}
+                    onChange={(e) => {
+                      const sel = technicians.find((t) => t.id === e.target.value)
+                      handleFieldChange('operator', e.target.value)
+                      handleFieldChange('operatorName', sel?.name || '')
+                    }}
+                    disabled={isLocked}
+                    className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    <option value="">Selecione um técnico</option>
+                    {(() => {
+                      const currentOp = (formData.operator || '').trim()
+                      const opts = technicians.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))
+                      if (currentOp && !technicians.some((t) => t.id === currentOp)) {
+                        opts.unshift(
+                          <option key={currentOp} value={currentOp}>
+                            {(formData.operatorName || currentOp) + ' (atual)'}
+                          </option>,
+                        )
+                      }
+                      return opts
+                    })()}
+                  </select>
+                  {isAdmin && technicians.length === 0 && (
+                    <p className="mt-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                      Nenhum técnico cadastrado — cadastre em Gerenciamento de Usuários.
+                    </p>
+                  )}
+                </div>
               )
             })()}{' '}
           </div>

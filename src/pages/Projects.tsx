@@ -164,9 +164,7 @@ export function Projects({
                 : []
 
             const teamNames =
-              expAssigned && expAssigned.length > 0
-                ? expAssigned.map((u) => u.name)
-                : ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos']
+              expAssigned && expAssigned.length > 0 ? expAssigned.map((u) => u.name) : []
 
             return {
               id: rec.id,
@@ -285,11 +283,12 @@ export function Projects({
         return
       }
 
-      // Fallback to static mock projects
+      // Fallback offline: projetos em cache local (sem dados fictícios de equipe)
       setProjectsList(
         staticProjects.map((p) => ({
           ...p,
-          assignedUsersIds: ['mb059ge3zci2tzr', '4o5u72v8w6k277l', '2n6he1v3guzt3yt'],
+          team: [],
+          assignedUsersIds: [],
           archived: false,
         })),
       )
@@ -298,7 +297,8 @@ export function Projects({
       setProjectsList(
         staticProjects.map((p) => ({
           ...p,
-          assignedUsersIds: ['mb059ge3zci2tzr', '4o5u72v8w6k277l', '2n6he1v3guzt3yt'],
+          team: [],
+          assignedUsersIds: [],
           archived: false,
         })),
       )
@@ -699,7 +699,7 @@ export function Projects({
           area: trimmedArea,
           status: formStatus,
           progress: Number(formProgress) || 0,
-          team: ['Annik Almeida', 'Carlos Oliveira'],
+          team: formAssignedUsers.map((id) => usersList.find((u) => u.id === id)?.name || id),
           assignedUsersIds: formAssignedUsers,
           syncStatus: editingProject ? 'pending_update' : 'pending_create',
           lastModified: Date.now(),

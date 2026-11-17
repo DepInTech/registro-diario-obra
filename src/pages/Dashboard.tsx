@@ -214,7 +214,7 @@ export function Dashboard({ navigate }: { navigate: (page: Page) => void }) {
                     status: (p.status as any) || 'active',
                     progress: p.progress ?? 50,
                     contract: contractExp?.code || 'CT-2025',
-                    team: ['Annik Almeida', 'Carlos Oliveira', 'Marina Santos'],
+                    team: [],
                   }
                 }),
             )

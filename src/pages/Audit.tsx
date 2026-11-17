@@ -1,5 +1,4 @@
 import { CalendarDays, Download, Filter, Search, ShieldCheck } from 'lucide-react'
-import { auditEvents } from '@/data/epa'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -18,30 +17,8 @@ interface AuditItem {
   color: string
 }
 
-const defaultRows = [
-  ...auditEvents,
-  {
-    id: 'a6',
-    user: 'Carlos Oliveira',
-    initials: 'CO',
-    action: 'exportou a Planilha de Campo em Excel',
-    entity: 'Acompanhamento Ambiental Açailândia',
-    time: '26 mai, 14:20',
-    color: 'blue',
-  },
-  {
-    id: 'a7',
-    user: 'Annik Almeida',
-    initials: 'AA',
-    action: 'atualizou as atribuições do projeto',
-    entity: 'Recuperação Ambiental Lote A',
-    time: '26 mai, 10:02',
-    color: 'violet',
-  },
-]
-
 export function AuditPage() {
-  const [rows, setRows] = useState<AuditItem[]>(defaultRows)
+  const [rows, setRows] = useState<AuditItem[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
 
@@ -133,10 +110,10 @@ export function AuditPage() {
             return
           }
         }
-        setRows(defaultRows)
+        setRows([])
       } catch (err) {
         console.warn('Could not load audit logs:', err)
-        setRows(defaultRows)
+        setRows([])
       } finally {
         setLoading(false)
       }

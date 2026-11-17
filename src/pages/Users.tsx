@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/context/AuthContext'
 import pb from '@/lib/pocketbase/client'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
-import { users as staticUsers, type Role } from '@/data/epa'
+import { type Role } from '@/data/epa'
 
 interface UserItem {
   id: string
@@ -77,29 +77,12 @@ export function UsersPage() {
           })),
         )
       } else {
-        setUsersList(
-          staticUsers.map((u) => ({
-            id: u.id,
-            name: u.name,
-            email: u.email,
-            role: u.role,
-            active: u.active,
-            lastAccess: 'Hoje',
-          })),
-        )
+        // Offline: nenhum usuário fictício — lista vazia até sincronizar
+        setUsersList([])
       }
     } catch (err) {
       console.warn('Load users fallback:', err)
-      setUsersList(
-        staticUsers.map((u) => ({
-          id: u.id,
-          name: u.name,
-          email: u.email,
-          role: u.role,
-          active: u.active,
-          lastAccess: 'Hoje',
-        })),
-      )
+      setUsersList([])
     } finally {
       setLoading(false)
     }
