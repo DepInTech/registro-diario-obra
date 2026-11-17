@@ -3,13 +3,19 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-export default pb
-export { pb }
-
-export async function forceRealtimeTeardown() {
+/**
+ * Encerra todas as conexões realtime ativas (SSE) do cliente PocketBase.
+ * Usado por AuthContext (logout/troca de sessão) e SyncContext (teardown de subscriptions)
+ * para garantir que nenhum listener fique pendurado após a troca de usuário.
+ */
+export async function forceRealtimeTeardown(): Promise<void> {
   try {
-    pb.realtime.disconnect()
+    // Encerra a conexão SSE subjacente e remove todos os listeners de subscriptions.
+    await pb.realtime.unsubscribe()
   } catch {
-    // ignore teardown errors during logout/session refresh
+    // Nada a fazer: teardown é best-effort (pode já estar desconectado).
   }
 }
+
+export { pb }
+export default pb
