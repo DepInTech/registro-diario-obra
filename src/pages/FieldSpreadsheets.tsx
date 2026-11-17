@@ -218,6 +218,9 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 area: rec.area || 'Oficina Central',
                 operator: rec.operator,
                 operatorName: parsedSnapshot?.technician_name || op?.name || '',
+                assigned_technicians: Array.isArray((rec as any).assigned_technicians)
+                  ? ((rec as any).assigned_technicians as string[])
+                  : undefined,
                 weather: rec.weather || 'Ensolarado',
                 pluviometer:
                   rec.pluviometer === 0 || rec.pluviometer === '0' ? '' : (rec.pluviometer ?? ''),
@@ -904,6 +907,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       env_checklist_monthly: inheritedEnvMonthly,
       observations: inheritedObservations,
       status: 'draft',
+      assigned_technicians: [],
       syncStatus: 'pending_create',
       lastModified: Date.now(),
     }
@@ -1394,6 +1398,57 @@ function FieldFullEditor({
   const [projectList, setProjectList] = useState<OfflineProjectItem[]>([])
   // Técnicos reais (role='technician', active=true) vindos da coleção users
   const [technicians, setTechnicians] = useState<Array<{ id: string; name: string }>>([])
+  // Técnicos já selecionados para "Técnico/Responsável" (assigned_technicians) — multi-seleção
+  const [selectedTechnicians, setSelectedTechnicians] = useState<string[]>(
+    Array.isArray(initialSheet.assigned_technicians) ? [...initialSheet.assigned_technicians] : [],
+  )
+  const [techPickerOpen, setTechPickerOpen] = useState(false)
+  const techPickerRef = useRef<HTMLDivElement | null>(null)
+
+  // Sincroniza o estado local de técnicos quando a ficha troca (abrir outra planilha)
+  useEffect(() => {
+    setSelectedTechnicians(
+      Array.isArray(initialSheet.assigned_technicians)
+        ? [...initialSheet.assigned_technicians]
+        : [],
+    )
+    setTechPickerOpen(false)
+  }, [initialSheet.id])
+
+  // Fecha o seletor de técnicos ao clicar fora dele
+  useEffect(() => {
+    if (!techPickerOpen) return
+    const onDocClick = (e: MouseEvent) => {
+      if (techPickerRef.current && !techPickerRef.current.contains(e.target as Node)) {
+        setTechPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [techPickerOpen])
+
+  const handleToggleTechnician = (techId: string) => {
+    setSelectedTechnicians((prev) => {
+      const next = prev.includes(techId) ? prev.filter((id) => id !== techId) : [...prev, techId]
+      setFormData((p) => ({ ...p, assigned_technicians: next }))
+      return next
+    })
+  }
+
+  const handleRemoveTechnician = (techId: string) => {
+    setSelectedTechnicians((prev) => {
+      const next = prev.filter((id) => id !== techId)
+      setFormData((p) => ({ ...p, assigned_technicians: next }))
+      return next
+    })
+  }
+
+  const techNameOf = (id: string) => {
+    const found = technicians.find((t) => t.id === id)
+    if (found) return found.name
+    if (id === user?.id) return user?.name || id
+    return id
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -1420,6 +1475,7 @@ function FieldFullEditor({
   const { user, setHasUnsavedChanges } = useAuth()
   const { isOnline, syncNow } = useSync()
   const { toast } = useToast()
+  const isAdmin = user?.role === 'admin'
 
   // Helpers para compressores e saídas de infiltração dinâmicos
   // Estado local para permitir compressores e saídas extras mesmo antes de preencher valores
@@ -2025,9 +2081,20 @@ function FieldFullEditor({
           ? user.id
           : formData.operator
 
+    // Atribuição de técnicos: grava SEMPRE a lista (admin edita; técnico preserva o que veio do servidor)
+    const assignedTechs =
+      isAdmin && Array.isArray(selectedTechnicians)
+        ? selectedTechnicians.filter(
+            (id) => typeof id === 'string' && id.trim() !== '' && !isProvisionalId(id),
+          )
+        : Array.isArray(formData.assigned_technicians)
+          ? formData.assigned_technicians
+          : []
+
     const updatedItem: OfflineFieldSheetItem = {
       ...formData,
       operator: safeOperator,
+      assigned_technicians: assignedTechs,
       status: effectiveStatus,
       change_history: updatedHistory,
       admin_snapshot:
@@ -2706,6 +2773,97 @@ function FieldFullEditor({
                 </div>
               )
             })()}{' '}
+          </div>
+          <div className="sm:col-span-2 lg:col-span-4">
+            <label className="epa-label">TÉCNICOS RESPONSÁVEIS (ATRIBUIÇÃO DE ACESSO)</label>
+            {isAdmin ? (
+              <div ref={techPickerRef} className="relative mt-1">
+                <button
+                  type="button"
+                  onClick={() => setTechPickerOpen((v) => !v)}
+                  disabled={isLocked}
+                  className="flex h-10 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                >
+                  <span className={selectedTechnicians.length === 0 ? 'text-slate-400' : ''}>
+                    {selectedTechnicians.length === 0
+                      ? 'Selecione um ou vários técnicos'
+                      : `${selectedTechnicians.length} técnico(s) selecionado(s)`}
+                  </span>
+                  <span className="ml-2 text-xs">▾</span>
+                </button>
+                {techPickerOpen && (
+                  <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                    {technicians.length === 0 && (
+                      <p className="px-3 py-2 text-xs text-slate-500">
+                        Nenhum técnico ativo cadastrado — cadastre em Gerenciamento de Usuários.
+                      </p>
+                    )}
+                    {technicians.map((t) => {
+                      const checked = selectedTechnicians.includes(t.id)
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handleToggleTechnician(t.id)}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          <span
+                            className={cn(
+                              'flex h-4 w-4 items-center justify-center rounded border',
+                              checked
+                                ? 'border-emerald-600 bg-emerald-600 text-white'
+                                : 'border-slate-400 dark:border-slate-600',
+                            )}
+                          >
+                            {checked && '✓'}
+                          </span>
+                          <span className="text-slate-900 dark:text-slate-100">{t.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {selectedTechnicians.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedTechnicians.map((id) => (
+                      <span
+                        key={id}
+                        className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 border border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-200 dark:border-emerald-800"
+                      >
+                        {techNameOf(id)}
+                        {!isLocked && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTechnician(id)}
+                            className="ml-0.5 text-emerald-600 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100"
+                            aria-label={`Remover ${techNameOf(id)}`}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px]">
+                {selectedTechnicians.length === 0 ? (
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Nenhum técnico atribuído
+                  </span>
+                ) : (
+                  selectedTechnicians.map((id) => (
+                    <span
+                      key={id}
+                      className="inline-flex items-center rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 border border-slate-300 dark:bg-slate-900 dark:text-slate-200 dark:border-slate-600"
+                    >
+                      {techNameOf(id)}
+                    </span>
+                  ))
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="epa-label">DATA</label>

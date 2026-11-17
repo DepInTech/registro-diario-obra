@@ -96,6 +96,7 @@ export interface OfflineFieldSheetItem {
   area: string
   operator: string
   operatorName?: string
+  assigned_technicians?: string[]
   weather?: string
   pluviometer?: number | string
   morning_time?: string

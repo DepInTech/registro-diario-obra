@@ -151,6 +151,10 @@ export async function directSaveSheetToServer(
         deleted_by: item.deletedBy || undefined,
         deleted_at: item.deletedAt || undefined,
         client_token: clientToken,
+        // Atribuição de técnicos (admins gravam a lista; técnico preserva a que veio)
+        ...(Array.isArray(item.assigned_technicians) && item.assigned_technicians.length > 0
+          ? { assigned_technicians: item.assigned_technicians }
+          : {}),
         ...(item.admin_snapshot ? { admin_snapshot: item.admin_snapshot } : {}),
       }
 
@@ -236,6 +240,17 @@ export async function directSaveSheetToServer(
       }
       if (item.projectId && item.projectId.trim()) {
         payload.project = item.projectId
+      }
+      // Atribuição de técnicos: o técnico NUNCA envia o campo (a API rule de update
+      // o protege de qualquer forma, e um array vazio apagaria a lista do Admin).
+      // O Admin envia sempre — inclusive lista vazia, para poder remover todos.
+      const authRole = (pb.authStore.model as any)?.role
+      if (authRole === 'admin') {
+        payload.assigned_technicians = Array.isArray(item.assigned_technicians)
+          ? item.assigned_technicians
+          : []
+      } else if (Array.isArray(item.assigned_technicians) && item.assigned_technicians.length > 0) {
+        payload.assigned_technicians = item.assigned_technicians
       }
 
       // CORREÇÃO RAIZ 404: a API rule de UPDATE exige que o corpo NÃO contenha
