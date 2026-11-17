@@ -217,7 +217,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 date: rec.date ? rec.date.slice(0, 10) : '2025-05-28',
                 area: rec.area || 'Oficina Central',
                 operator: rec.operator,
-                operatorName: parsedSnapshot?.technician_name || op?.name || 'Carlos Oliveira',
+                operatorName: parsedSnapshot?.technician_name || op?.name || '',
                 weather: rec.weather || 'Ensolarado',
                 pluviometer:
                   rec.pluviometer === 0 || rec.pluviometer === '0' ? '' : (rec.pluviometer ?? ''),
@@ -2622,11 +2622,13 @@ function FieldFullEditor({
           <div>
             <label className="epa-label">TÉCNICO / RESPONSÁVEL</label>
             {(() => {
-              const isOperatorLocked =
-                isFieldLockedByAdmin('operatorName') ||
-                isFieldLockedByAdmin('operator') ||
-                (!isAdmin && Boolean((adminSnapshot?.technician_name || '').trim()))
-              const operatorDisplay = formData.operatorName || adminSnapshot?.technician_name || ''
+              // MELHORIA 3: o Técnico nunca edita "Técnico / Responsável" — sempre vem da
+              // identidade autenticada (novo) ou do responsável já registrado (existente).
+              const isOperatorLocked = !isAdmin
+              const operatorDisplay =
+                formData.operatorName ||
+                adminSnapshot?.technician_name ||
+                (!isAdmin ? user?.name || '' : '')
               if (isOperatorLocked) {
                 return (
                   <div className="mt-1 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">

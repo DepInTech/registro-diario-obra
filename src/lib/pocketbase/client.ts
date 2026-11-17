@@ -4,20 +4,16 @@ const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
 /**
- * Teardown forçado do canal realtime (SSE): derruba a conexão atual e limpa o
- * clientId antigo para evitar 403 "authorization don't match" ao relogar.
- * Exigido por AuthContext e SyncContext como export nomeado.
+ * Derruba forçadamente o canal SSE de realtime atual.
+ * Usado por AuthContext e SyncContext em login/logout/renovação de sessão
+ * para evitar envio de clientId antigo com novas credenciais.
  */
-export async function forceRealtimeTeardown(): Promise<void> {
+export function forceRealtimeTeardown() {
   try {
-    const rt = (pb as any).realtime
-    if (rt && typeof rt.unsubscribe === 'function') {
-      await rt.unsubscribe()
-    }
+    pb.realtime?.unsubscribe?.()
   } catch {
-    // ignore — teardown é best-effort
+    // silencioso: teardown é best-effort
   }
 }
 
 export default pb
-export { pb }

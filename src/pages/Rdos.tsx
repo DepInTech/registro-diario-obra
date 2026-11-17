@@ -216,10 +216,9 @@ export function RdosPage({ query }: { query: string }) {
                 reportDate: rec.report_date ? rec.report_date.slice(0, 10) : '2025-05-28',
                 weather: rec.weather || 'Ensolarado',
                 performedBy: rec.performed_by,
-                performedByName: performer?.name || 'Carlos Oliveira',
+                performedByName: performer?.name || parsedSnapshot?.performed_by_name || '',
                 supervisedBy: rec.supervised_by,
-                supervisedByName:
-                  parsedSnapshot?.supervised_by_name || supervisor?.name || 'Marina Santos',
+                supervisedByName: parsedSnapshot?.supervised_by_name || supervisor?.name || '',
                 activityTitle: rec.activity_title || '',
                 activityDescription: rec.activity_description || '',
                 timeDisplacement: rec.time_displacement || '',
@@ -2578,12 +2577,13 @@ function RdoFullPageEditor({
           <div className="sm:col-span-1 lg:col-span-1.5">
             <label className="epa-label">Realizado por (Técnico Executor)</label>
             {(() => {
-              const isPerformedLocked =
-                isFieldLockedByAdmin('performedByName') ||
-                isFieldLockedByAdmin('performedBy') ||
-                (!isAdmin && Boolean((adminSnapshot?.performed_by_name || '').trim()))
+              // MELHORIA 3: o Técnico nunca edita "Realizado por" — sempre vem da identidade
+              // autenticada (novo) ou do responsável já registrado (existente). Admin mantém edição.
+              const isPerformedLocked = !isAdmin
               const performedDisplay =
-                formData.performedByName || adminSnapshot?.performed_by_name || ''
+                formData.performedByName ||
+                adminSnapshot?.performed_by_name ||
+                (!isAdmin ? user?.name || '' : '')
               if (isPerformedLocked) {
                 return (
                   <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">

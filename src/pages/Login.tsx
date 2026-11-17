@@ -1,43 +1,28 @@
 import { useState } from 'react'
-import {
-  Eye,
-  EyeOff,
-  Lock,
-  User,
-  Loader2,
-  AlertCircle,
-  ShieldCheck,
-  Leaf,
-  BarChart3,
-  Users2,
-  Sun,
-  Moon,
-  Info,
-  ArrowRight,
-} from 'lucide-react'
+import { Eye, EyeOff, Lock, User, Loader2, AlertCircle, Sun, Moon, ArrowRight } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { logoEpa } from '@/components/EpaLogo'
 
 // Imagem estável de alta resolução: Lago límpido cercado por densa floresta e luz solar suave ao amanhecer
-const NATURE_BG = 'https://img.usecurling.com/p/1600/1200?q=lake+forest+sunrise&color=008F68'
+const NATURE_BG = 'https://img.usecurling.com/p/1600/1200?q=lake+forest+sunrise'
 
 export function LoginPage() {
-  const [identity, setIdentity] = useState('annik_almeida@grupoepa.com.br')
-  const [password, setPassword] = useState('Skip@Pass')
+  // Nenhum prefill de credencial: os campos começam sempre vazios.
+  // (Antes: identity 'annik_almeida@grupoepa.com.br' e password 'Skip@Pass' pré-preenchidos)
+  const [identity, setIdentity] = useState('')
+  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [rememberMe, setRememberMe] = useState(false)
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState<string | null>(null)
   const { login } = useAuth()
-  void rememberMe
   const { theme, toggleTheme } = useTheme()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!identity.trim() || !password) {
-      setError('Por favor, informe seu usuário ou e-mail e sua senha.')
+      setError('Por favor, informe seu e-mail e sua senha.')
       return
     }
     setError(null)
@@ -46,6 +31,7 @@ export function LoginPage() {
 
     try {
       await login(identity.trim(), password)
+      // Redirecionamento pós-login é automático via perfil do servidor (Index.tsx)
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message)
@@ -55,13 +41,6 @@ export function LoginPage() {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleQuickFill = (email: string) => {
-    setIdentity(email.trim())
-    setPassword('Skip@Pass')
-    setError(null)
-    setForgotPasswordMessage(null)
   }
 
   const handleForgotPassword = () => {
@@ -150,64 +129,12 @@ export function LoginPage() {
             </div>
           </div>
 
-          {/* Base: 4 Pilares Institucionais com ícones delineados e alto contraste */}
-          <div className="pb-2 pt-4">
-            <div className="grid grid-cols-2 sm:grid-cols-4 items-start gap-3 sm:gap-0 sm:divide-x sm:divide-white/25">
-              {/* Item 1 */}
-              <div className="flex flex-col items-center text-center px-2 py-1">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/15 backdrop-blur-sm text-white shadow-sm mb-2.5 transition-transform hover:scale-110">
-                  <ShieldCheck className="h-5 w-5 stroke-[1.75]" />
-                </div>
-                <span className="text-[11px] sm:text-xs font-semibold text-white leading-tight tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">
-                  Conformidade
-                  <br />
-                  ambiental
-                </span>
-              </div>
-
-              {/* Item 2 */}
-              <div className="flex flex-col items-center text-center px-2 py-1">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/15 backdrop-blur-sm text-white shadow-sm mb-2.5 transition-transform hover:scale-110">
-                  <Leaf className="h-5 w-5 stroke-[1.75]" />
-                </div>
-                <span className="text-[11px] sm:text-xs font-semibold text-white leading-tight tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">
-                  Gestão
-                  <br />
-                  inteligente
-                </span>
-              </div>
-
-              {/* Item 3 */}
-              <div className="flex flex-col items-center text-center px-2 py-1">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/15 backdrop-blur-sm text-white shadow-sm mb-2.5 transition-transform hover:scale-110">
-                  <BarChart3 className="h-5 w-5 stroke-[1.75]" />
-                </div>
-                <span className="text-[11px] sm:text-xs font-semibold text-white leading-tight tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">
-                  Resultados
-                  <br />
-                  sustentáveis
-                </span>
-              </div>
-
-              {/* Item 4 */}
-              <div className="flex flex-col items-center text-center px-2 py-1">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/80 bg-white/15 backdrop-blur-sm text-white shadow-sm mb-2.5 transition-transform hover:scale-110">
-                  <Users2 className="h-5 w-5 stroke-[1.75]" />
-                </div>
-                <span className="text-[11px] sm:text-xs font-semibold text-white leading-tight tracking-tight drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">
-                  Juntos por
-                  <br />
-                  um amanhã melhor
-                </span>
-              </div>
-            </div>
-          </div>
+          {/* Base: Pilares Institucionais removidos (distinção visual simplificada) */}
         </div>
       </aside>
 
       {/* ========================================================= */}
       {/* LADO DIREITO (~54%): Fundo claro #F7FAF9 fixo e Card Branco */}
-      {/* Visual aprovado mantido idêntico e consistente em ambos os temas */}
       {/* ========================================================= */}
       <main className="relative flex-1 flex flex-col justify-between items-center p-6 sm:p-10 lg:p-12 min-h-screen bg-[#F7FAF9] text-[#17324D] overflow-hidden">
         {/* Blobs orgânicos sutis em verde conforme referência visual */}
@@ -239,7 +166,7 @@ export function LoginPage() {
         {/* Espaçador flexível no topo */}
         <div className="w-full" />
 
-        {/* Card de Login Centralizado e Fiel à Imagem de Referência */}
+        {/* Card de Login Centralizado */}
         <div className="relative z-10 w-full max-w-[430px] sm:max-w-[450px] my-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
           <div className="rounded-2xl sm:rounded-3xl border border-slate-200/90 bg-white p-7 sm:p-10 shadow-[0_15px_45px_-10px_rgba(6,59,74,0.08)]">
             {/* Topo do Card: Logo Oficial EPA Centralizada */}
@@ -274,7 +201,6 @@ export function LoginPage() {
             {/* Mensagem de Instrução de Recuperação */}
             {forgotPasswordMessage && (
               <div className="mt-5 flex items-start gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-50 p-3 text-xs text-emerald-900 animate-in fade-in">
-                <Info className="h-4 w-4 shrink-0 text-[#008F68] mt-0.5" />
                 <div className="space-y-0.5">
                   <p className="font-semibold text-emerald-900">Recuperação de Senha</p>
                   <p className="leading-snug text-emerald-800">{forgotPasswordMessage}</p>
@@ -282,15 +208,15 @@ export function LoginPage() {
               </div>
             )}
 
-            {/* Formulário de Autenticação */}
+            {/* Formulário de Autenticação — somente e-mail, senha e Entrar */}
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              {/* Campo Usuário ou E-mail */}
+              {/* Campo E-mail */}
               <div className="space-y-1.5 text-left">
                 <label
                   htmlFor="identity-input"
                   className="block text-xs font-semibold text-[#17324D]"
                 >
-                  Usuário ou E-mail
+                  E-mail
                 </label>
                 <div className="relative group">
                   <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-[#008F68] transition-colors">
@@ -298,10 +224,10 @@ export function LoginPage() {
                   </div>
                   <input
                     id="identity-input"
-                    type="text"
+                    type="email"
                     value={identity}
                     onChange={(e) => setIdentity(e.target.value)}
-                    placeholder="Digite seu usuário ou e-mail"
+                    placeholder="Digite seu e-mail"
                     autoComplete="username"
                     required
                     disabled={loading}
@@ -345,18 +271,8 @@ export function LoginPage() {
                 </div>
               </div>
 
-              {/* Opções: Lembrar-me e Esqueceu sua senha? */}
-              <div className="flex items-center justify-between pt-0.5 text-xs">
-                <label className="flex items-center gap-2 cursor-pointer select-none text-[#334155] font-medium hover:text-[#17324D]">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-[#008F68] focus:ring-[#008F68]/25 cursor-pointer accent-[#008F68]"
-                  />
-                  <span>Lembrar-me</span>
-                </label>
-
+              {/* Recuperação de senha */}
+              <div className="flex items-center justify-end pt-0.5 text-xs">
                 <button
                   type="button"
                   onClick={handleForgotPassword}
@@ -386,44 +302,8 @@ export function LoginPage() {
               </button>
             </form>
 
-            {/* Separador EPA sutil e Acessos Rápidos de Demonstração */}
-            <div className="mt-7">
-              <div className="relative flex items-center justify-center">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200" />
-                </div>
-                <div className="relative bg-white px-3 text-[11px] font-bold tracking-wider text-[#64748B] uppercase">
-                  EPA
-                </div>
-              </div>
-
-              {/* Botões de Acesso Rápido com excelente legibilidade e contraste */}
-              <div className="mt-4 grid grid-cols-2 gap-2.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('annik_almeida@grupoepa.com.br')}
-                  title="Entrar como Annik Almeida (Administrador)"
-                  className="group rounded-xl border border-emerald-200/80 bg-emerald-50/40 py-2 px-2 text-center transition-all hover:border-[#008F68] hover:bg-emerald-50 hover:shadow-sm cursor-pointer"
-                >
-                  <p className="font-bold text-[#005B4F] text-xs">Admin</p>
-                  <p className="text-[10px] font-medium text-[#334155] truncate">Annik</p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickFill('tecnico@grupoepa.com.br')}
-                  title="Entrar como Marina Santos (Técnico)"
-                  className="group rounded-xl border border-blue-200/80 bg-blue-50/40 py-2 px-2 text-center transition-all hover:border-blue-600 hover:bg-blue-50 hover:shadow-sm cursor-pointer"
-                >
-                  <p className="font-bold text-blue-700 text-xs">Técnico</p>
-                  <p className="text-[10px] font-medium text-[#334155] truncate">Marina</p>
-                </button>
-              </div>
-
-              {/* Dica de demonstração do fluxo */}
-              <p className="mt-3 text-center text-[11px] text-[#64748B] font-medium">
-                Técnico preenche → Enviar para aprovação → Administrador analisa
-              </p>
-            </div>
+            {/* Nenhum botão de perfil, acesso rápido, credencial demo ou dica de fluxo. */}
+            {/* Redirecionamento pós-login é automático pelo perfil gravado no servidor. */}
           </div>
         </div>
 
