@@ -3,16 +3,18 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-// Sessão atual — exportada como default E nomeada (o projeto importa nos dois formatos)
-export default pb
-export { pb }
-
-// Encerra listeners de realtime sem descartar a sessão (usado pelo SyncContext
-// no teardown — logout/reset não pode deixar subscriptions penduradas)
+/**
+ * Desmonta forçadamente todas as assinaturas realtime ativas do PocketBase.
+ * Usado pelo SyncContext ao encerrar sessão/renovar token — sem isso, assinaturas
+ * órfãs da conta anterior continuam recebendo eventos.
+ */
 export function forceRealtimeTeardown() {
   try {
-    ;(pb.realtime as any).setEventListener(null)
+    void pb.realtime.unsubscribeByPrefix?.('')
   } catch {
-    /* noop */
+    // best effort — nenhum teardown deve derrubar a sessão
   }
 }
+
+export default pb
+export { pb }
