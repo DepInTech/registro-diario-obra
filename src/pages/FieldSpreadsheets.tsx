@@ -1629,6 +1629,27 @@ function FieldFullEditor({
   const isLocked =
     (!isAdmin && (formData.status === 'approved' || formData.status === 'submitted')) || isDeleted
 
+  // DEVOLUÇÃO POR CAMPO: quando o Admin devolve a planilha ('returned'), o Técnico
+  // só pode editar os campos listados em returned_fields (o servidor também valida:
+  // guard em pocketbase/hooks/rdo_status_guard.js). Lista vazia = legado, libera tudo.
+  const rawReturnedUi =
+    (formData as any).returned_fields ?? (formData as any).returnedFields ?? null
+  const returnedFieldsList: string[] = Array.isArray(rawReturnedUi)
+    ? (rawReturnedUi as unknown[]).map(String)
+    : []
+  const isReturnedCycle = !isAdmin && formData.status === 'returned'
+  const isFieldEditableForTechnician = (field: string) =>
+    !isReturnedCycle || returnedFieldsList.length === 0 || returnedFieldsList.includes(field)
+  const allowsExtractionEdits =
+    returnedFieldsList.some(
+      (f) => f === 'extraction_data' || f === 'hidrometro' || f.startsWith('extraction'),
+    ) || false
+  const isExtractionCellEditable = (col: string) =>
+    !isReturnedCycle ||
+    returnedFieldsList.length === 0 ||
+    allowsExtractionEdits ||
+    returnedFieldsList.includes(col)
+
   // Carrega projetos (local + PocketBase) para preenchimento de Cliente, Contrato e Projeto EPA
   useEffect(() => {
     let isMounted = true
@@ -1721,9 +1742,18 @@ function FieldFullEditor({
     if (isFieldLockedByAdmin(field as string)) {
       return
     }
+    if (!isFieldEditableForTechnician(field as string)) {
+      return
+    }
     setFormData((prev) => ({ ...prev, [field]: value }))
     setHasUnsavedChanges(true)
   }
+
+  // Destaque visual: campo solicitado pelo Admin no ciclo de correção corrente.
+  const isReturnedFieldRequested = (field: string) =>
+    isReturnedCycle && returnedFieldsList.includes(field)
+  const returnedFieldHighlight =
+    'border-amber-400 ring-2 ring-amber-300/70 bg-amber-50/60 dark:bg-amber-950/30'
 
   // Extraction wells handlers
   // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha (snapshotWells vazio e initialSheet.extraction_data vazio)
@@ -1791,6 +1821,10 @@ function FieldFullEditor({
   const handleExtractionCellChange = (index: number, col: string, val: string) => {
     const currentRow = formData.extraction_data?.[index]
     if (!currentRow) return
+
+    if (!isExtractionCellEditable(col)) {
+      return
+    }
 
     if (!isAdmin && (col === 'well' || col === 'pump')) {
       const snapRow = snapshotWells?.[index]
@@ -2694,6 +2728,29 @@ function FieldFullEditor({
                 {formData.reviewNotes ||
                   'Por favor, revise os campos indicados e reenvie para aprovação.'}
               </p>
+              {returnedFieldsList.length > 0 && (
+                <div className="mt-2">
+                  <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-300 block mb-1">
+                    Campos solicitados para correção:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {returnedFieldsList.map((f) => {
+                      const opt = (FIELD_SHEET_RETURN_OPTIONS as any[]).find(
+                        (o) => o && (o.value ?? o.id ?? o.key) === f,
+                      )
+                      const label = (opt && (opt.label ?? opt.name)) || f
+                      return (
+                        <span
+                          key={f}
+                          className="inline-flex items-center rounded-md bg-amber-200/80 dark:bg-amber-900/60 px-2 py-0.5 text-[10px] font-bold text-amber-900 dark:text-amber-100"
+                        >
+                          🟨 {label}
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               {(formData.returnedByName || formData.returnedAt) && (
                 <p className="text-[11px] text-amber-800/90 dark:text-amber-400 mt-2">
                   {formData.returnedByName && (
@@ -2712,11 +2769,13 @@ function FieldFullEditor({
         </div>
       )}
 
-      {/* Histórico das Alterações após Devolução (Seção visível com detalhes para Admin e Técnico) */}
-      {formData.change_history && formData.change_history.length > 0 && (
+      {/* Histórico das Alterações após Devolução — exibido SOMENTE para o Admin (diffs do ciclo).
+          O Técnico vê apenas o banner de solicitação de correção (campos + justificativa) acima. */}
+      {isAdmin && formData.change_history && formData.change_history.length > 0 && (
         <CorrectionHistorySection
           cycles={formData.change_history}
           currentStatus={formData.status}
+          isAdmin
           documentType="field_sheet"
         />
       )}

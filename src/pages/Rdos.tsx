@@ -1492,8 +1492,23 @@ function RdoFullPageEditor({
     return String(val).trim() !== ''
   }
 
+  // DEVOLUÇÃO POR CAMPO: quando o Admin devolve o RDO ('returned'), o Técnico só
+  // pode editar os campos listados em returned_fields (o servidor também valida:
+  // guard em pocketbase/hooks/rdo_status_guard.js). Lista vazia = legado, libera tudo.
+  const rawReturnedUi =
+    (formData as any).returned_fields ?? (formData as any).returnedFields ?? null
+  const returnedFieldsList: string[] = Array.isArray(rawReturnedUi)
+    ? (rawReturnedUi as unknown[]).map(String)
+    : []
+  const isReturnedCycle = !isAdmin && formData.status === 'returned'
+  const isFieldEditableForTechnician = (field: string) =>
+    !isReturnedCycle || returnedFieldsList.length === 0 || returnedFieldsList.includes(field)
+
   const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
     if (isFieldLockedByAdmin(field as string)) {
+      return
+    }
+    if (!isFieldEditableForTechnician(field as string)) {
       return
     }
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -2435,11 +2450,13 @@ function RdoFullPageEditor({
         </div>
       )}
 
-      {/* Histórico completo de correções pós-devolução (visível para Admin e Técnico quando houver histórico) */}
-      {formData.change_history && formData.change_history.length > 0 && (
+      {/* Histórico completo de correções pós-devolução — exibido SOMENTE para o Admin (diffs do ciclo).
+          O Técnico vê apenas o banner de solicitação de correção (campos + justificativa) acima. */}
+      {isAdmin && formData.change_history && formData.change_history.length > 0 && (
         <CorrectionHistorySection
           cycles={formData.change_history}
           currentStatus={formData.status}
+          isAdmin
           documentType="rdo"
         />
       )}
