@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { applyDateMask, isValidBrDate, INVALID_BR_DATE_MESSAGE } from '@/lib/dateMask'
 import {
   isValidDeletionJustification,
@@ -62,6 +62,7 @@ import {
   diffRdo,
   appendOrUpdateReturnCycle,
 } from '@/services/historyDiffService'
+import { RDO_RETURN_GROUPS, parseReturnedList, isRecordFieldAuthorized } from '@/lib/returnFields'
 
 function isProvisionalId(id?: string | null): boolean {
   if (!id) return false
@@ -1418,9 +1419,6 @@ function RdoFullPageEditor({
     initialReport.returned_fields || [],
   )
 
-  const isReturnedField = (fieldName: string) =>
-    formData.status === 'returned' && !!formData.returned_fields?.includes(fieldName)
-
   const clearReturnedField = (fieldName: string) => {
     if (formData.returned_fields?.includes(fieldName)) {
       setFormData((prev) => ({
@@ -1549,16 +1547,54 @@ function RdoFullPageEditor({
   }
 
   // DEVOLUÇÃO POR CAMPO: quando o Admin devolve o RDO ('returned'), o Técnico só
-  // pode editar os campos listados em returned_fields (o servidor também valida:
-  // guard em pocketbase/hooks/rdo_status_guard.js). Lista vazia = legado, libera tudo.
+  // pode editar os campos das seções listadas em returned_fields (o servidor também
+  // valida: guard em pocketbase/hooks/returned_fields_guard.js).
+  // O campo returned_fields é JSON no PocketBase e PODE chegar como STRING JSON — o
+  // parsing sempre passa por parseReturnedList (aceita array e string JSON).
+  // REGRA DE SEGURANÇA: lista vazia/inválida/ausente NÃO libera — bloqueia por padrão.
   const rawReturnedUi =
     (formData as any).returned_fields ?? (formData as any).returnedFields ?? null
-  const returnedFieldsList: string[] = Array.isArray(rawReturnedUi)
-    ? (rawReturnedUi as unknown[]).map(String)
-    : []
+  const returnedFieldsList: string[] = useMemo(() => {
+    const parsed = parseReturnedList(rawReturnedUi)
+    // Aceita apenas grupos válidos e/ou nomes de campo reais do registro
+    const knownGroups = Object.keys(RDO_RETURN_GROUPS)
+    const allGroupFields = Object.values(RDO_RETURN_GROUPS).flat()
+    return parsed.filter((entry) => knownGroups.includes(entry) || allGroupFields.includes(entry))
+  }, [rawReturnedUi])
   const isReturnedCycle = !isAdmin && formData.status === 'returned'
+  // Em ciclo de correção SEM lista válida: TUDO bloqueado (falha segura).
+  const returnedListIsValid = returnedFieldsList.length > 0
+  // Nomes de campo do cliente (camelCase do IndexedDB) → nomes reais do registro
+  // PocketBase (reports_rdo) — o mesmo mapeamento que o guard do servidor usa.
+  const RDO_DB_FIELD_OF_CLIENT: Record<string, string> = {
+    reportDate: 'report_date',
+    activityTitle: 'activity_title',
+    activityDescription: 'activity_description',
+    timeDisplacement: 'time_displacement',
+    timeWaiting: 'time_waiting',
+    planChanges: 'plan_changes',
+    wells: 'wells',
+    photos: 'photos',
+    // a foto do campo pertence à mesma seção 'fotos' das fotografias do relatório
+    fieldPhoto: 'photos',
+    weather: 'weather',
+    accidents: 'accidents',
+    interferences: 'interferences',
+  }
+  const rdoDbFieldOf = (field: string) => RDO_DB_FIELD_OF_CLIENT[field] || field
   const isFieldEditableForTechnician = (field: string) =>
-    !isReturnedCycle || returnedFieldsList.length === 0 || returnedFieldsList.includes(field)
+    !isReturnedCycle ||
+    (returnedListIsValid && isRecordFieldAuthorized('rdo', rdoDbFieldOf(field), returnedFieldsList))
+  // Bloqueio visual por campo na devolução: true somente quando o ciclo de correção está
+  // ativo e o campo NÃO está autorizado (lista vazia/inválida bloqueia tudo).
+  const isReturnBlocked = (field: string) => !isFieldEditableForTechnician(field)
+  // Destaque visual: campo solicitado pelo Admin no ciclo de correção corrente.
+  const isReturnedField = (fieldName: string) =>
+    formData.status === 'returned' &&
+    isRecordFieldAuthorized('rdo', rdoDbFieldOf(fieldName), returnedFieldsList)
+  // Aparência de campo bloqueado pela devolução (o input já vem desabilitado).
+  const returnBlockedClass =
+    'bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-slate-800/60 dark:text-slate-500'
 
   const handleFieldChange = (field: keyof OfflineRdoItem, value: any) => {
     if (isFieldLockedByAdmin(field as string)) {
@@ -2483,6 +2519,19 @@ function RdoFullPageEditor({
               <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
                 {formData.reviewNotes}
               </p>
+              {(formData.returnedByName || formData.returnedAt) && (
+                <p className="mt-1.5 text-[11px] text-amber-800/90 dark:text-amber-400">
+                  {formData.returnedByName && (
+                    <>
+                      Devolvido por: <b>{formData.returnedByName}</b>
+                    </>
+                  )}
+                  {formData.returnedByName && formData.returnedAt && ' · '}
+                  {formData.returnedAt && (
+                    <>em {new Date(formData.returnedAt).toLocaleString('pt-BR')}</>
+                  )}
+                </p>
+              )}
               {formData.returned_fields && formData.returned_fields.length > 0 && (
                 <div className="mt-2.5 flex flex-wrap gap-1.5 items-center">
                   <span className="text-[11px] font-semibold text-amber-900 dark:text-amber-200">
@@ -2540,12 +2589,15 @@ function RdoFullPageEditor({
                 clearReturnedField('reportDate')
               }}
               placeholder="DD/MM/AAAA"
-              disabled={isLocked || isFieldLockedByAdmin('reportDate')}
+              disabled={
+                isLocked || isFieldLockedByAdmin('reportDate') || isReturnBlocked('reportDate')
+              }
               readOnly={isFieldLockedByAdmin('reportDate')}
               className={cn(
                 'mt-1.5',
                 isFieldLockedByAdmin('reportDate') &&
                   'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 cursor-not-allowed select-none',
+                isReturnBlocked('reportDate') && returnBlockedClass,
                 isReturnedField('reportDate') &&
                   'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
               )}
@@ -2583,15 +2635,16 @@ function RdoFullPageEditor({
                           handleFieldChange('weather', e.target.value)
                           clearReturnedField('weather')
                         }}
-                        disabled={isLocked}
+                        disabled={isLocked || isReturnBlocked('weather')}
                         placeholder="Descreva a condição do clima..."
                         className={cn(
                           'min-h-[42px] text-xs sm:text-sm flex-1',
+                          isReturnBlocked('weather') && returnBlockedClass,
                           isReturnedField('weather') &&
                             'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                         )}
                       />
-                      {!isLocked && (
+                      {!isLocked && !isReturnBlocked('weather') && (
                         <Button
                           type="button"
                           variant="outline"
@@ -2618,9 +2671,10 @@ function RdoFullPageEditor({
                       handleFieldChange('weather', selected === 'Outros' ? 'Outros' : selected)
                       clearReturnedField('weather')
                     }}
-                    disabled={isLocked}
+                    disabled={isLocked || isReturnBlocked('weather')}
                     className={cn(
                       'epa-input mt-1.5 min-h-[42px]',
+                      isReturnBlocked('weather') && returnBlockedClass,
                       isReturnedField('weather') &&
                         'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                     )}
@@ -2672,8 +2726,8 @@ function RdoFullPageEditor({
                   placeholder="Nome do técnico executor"
                   value={formData.performedByName ?? ''}
                   onChange={(e) => handleFieldChange('performedByName', e.target.value)}
-                  disabled={isLocked}
-                  className="mt-1.5"
+                  disabled={isLocked || isReturnBlocked('performedByName')}
+                  className={cn('mt-1.5', isReturnBlocked('performedByName') && returnBlockedClass)}
                 />
               )
             })()}
@@ -2699,8 +2753,11 @@ function RdoFullPageEditor({
                   placeholder="Nome do responsável técnico ou supervisor"
                   value={formData.supervisedByName ?? ''}
                   onChange={(e) => handleFieldChange('supervisedByName', e.target.value)}
-                  disabled={isLocked}
-                  className="mt-1.5"
+                  disabled={isLocked || isReturnBlocked('supervisedByName')}
+                  className={cn(
+                    'mt-1.5',
+                    isReturnBlocked('supervisedByName') && returnBlockedClass,
+                  )}
                 />
               )
             })()}
@@ -2748,9 +2805,10 @@ function RdoFullPageEditor({
                     handleFieldChange('activityTitle', e.target.value)
                     clearReturnedField('activityTitle')
                   }}
-                  disabled={isLocked}
+                  disabled={isLocked || isReturnBlocked('activityTitle')}
                   className={cn(
                     'font-medium text-sm border-slate-300 dark:border-slate-700',
+                    isReturnBlocked('activityTitle') && returnBlockedClass,
                     isReturnedField('activityTitle') &&
                       'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30',
                   )}
@@ -2791,9 +2849,10 @@ function RdoFullPageEditor({
                       handleFieldChange('activityDescription', e.target.value)
                       clearReturnedField('activityDescription')
                     }}
-                    disabled={isLocked}
+                    disabled={isLocked || isReturnBlocked('activityDescription')}
                     className={cn(
                       'epa-textarea min-h-[120px] text-xs sm:text-sm',
+                      isReturnBlocked('activityDescription') && returnBlockedClass,
                       isReturnedField('activityDescription') &&
                         'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30',
                     )}
@@ -2828,7 +2887,7 @@ function RdoFullPageEditor({
                     </p>
                   </div>
 
-                  {!isLocked && (
+                  {!isLocked && !isReturnBlocked('fieldPhoto') && (
                     <div className="flex flex-wrap items-center gap-2">
                       {/* Input Galeria (sem capture) */}
                       <input
@@ -2879,9 +2938,12 @@ function RdoFullPageEditor({
                       <Input
                         value={formData.fieldPhoto.caption ?? ''}
                         onChange={(e) => handleFieldPhotoCaptionChange(e.target.value)}
-                        disabled={isLocked}
+                        disabled={isLocked || isReturnBlocked('fieldPhoto')}
                         placeholder="Ex.: Figura 01 – Mapa de localização da área de interesse."
-                        className="text-center font-bold text-xs sm:text-sm h-9 border-slate-300 dark:border-slate-700"
+                        className={cn(
+                          'text-center font-bold text-xs sm:text-sm h-9 border-slate-300 dark:border-slate-700',
+                          isReturnBlocked('fieldPhoto') && returnBlockedClass,
+                        )}
                       />
                     </div>
 
@@ -2903,7 +2965,7 @@ function RdoFullPageEditor({
                           />
                         )
                       })()}
-                      {!isLocked && (
+                      {!isLocked && !isReturnBlocked('fieldPhoto') && (
                         <div className="absolute right-2 top-2 flex flex-wrap items-center gap-1.5 bg-slate-950/80 backdrop-blur p-1 rounded-md shadow">
                           <Button
                             type="button"
@@ -2954,7 +3016,7 @@ function RdoFullPageEditor({
                       uma foto na câmera. Conforme o modelo oficial, ela será exibida centralizada
                       sob a descrição.
                     </p>
-                    {!isLocked && (
+                    {!isLocked && !isReturnBlocked('fieldPhoto') && (
                       <div className="mt-4 flex flex-wrap justify-center gap-2 w-full max-w-sm">
                         <Button
                           type="button"
@@ -2999,7 +3061,7 @@ function RdoFullPageEditor({
               </span>
             )}
           </div>
-          {!isLocked && canAddWell && (
+          {!isLocked && !isReturnBlocked('wells') && canAddWell && (
             <Button
               variant="outline"
               size="sm"
@@ -3090,9 +3152,12 @@ function RdoFullPageEditor({
                             onChange={(e) =>
                               handleWellFieldChange(index, 'well_id', e.target.value)
                             }
-                            disabled={isLocked}
+                            disabled={isLocked || isReturnBlocked('wells')}
                             placeholder="PM-01"
-                            className="h-10 text-xs sm:text-sm font-semibold uppercase font-mono"
+                            className={cn(
+                              'h-10 text-xs sm:text-sm font-semibold uppercase font-mono',
+                              isReturnBlocked('wells') && returnBlockedClass,
+                            )}
                           />
                         )}
                       </td>
@@ -3108,9 +3173,12 @@ function RdoFullPageEditor({
                             step="0.1"
                             value={well.depth ?? ''}
                             onChange={(e) => handleWellFieldChange(index, 'depth', e.target.value)}
-                            disabled={isLocked}
+                            disabled={isLocked || isReturnBlocked('wells')}
                             placeholder="8.5"
-                            className="h-10 text-xs sm:text-sm font-mono"
+                            className={cn(
+                              'h-10 text-xs sm:text-sm font-mono',
+                              isReturnBlocked('wells') && returnBlockedClass,
+                            )}
                           />
                         )}
                       </td>
@@ -3137,8 +3205,11 @@ function RdoFullPageEditor({
                               )
                             }
                             placeholder="DD/MM/AAAA"
-                            disabled={isLocked}
-                            className="h-10 text-xs sm:text-sm"
+                            disabled={isLocked || isReturnBlocked('wells')}
+                            className={cn(
+                              'h-10 text-xs sm:text-sm',
+                              isReturnBlocked('wells') && returnBlockedClass,
+                            )}
                           />
                         )}
                       </td>
@@ -3153,25 +3224,30 @@ function RdoFullPageEditor({
                             onChange={(e) =>
                               handleWellFieldChange(index, 'diameter', e.target.value)
                             }
-                            disabled={isLocked}
+                            disabled={isLocked || isReturnBlocked('wells')}
                             placeholder='2"'
-                            className="h-10 text-xs sm:text-sm font-mono"
+                            className={cn(
+                              'h-10 text-xs sm:text-sm font-mono',
+                              isReturnBlocked('wells') && returnBlockedClass,
+                            )}
                           />
                         )}
                       </td>
-                      {!isLocked && (isAdmin || isWellRowEmpty(lockedWell || well)) && (
-                        <td className="p-2 text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveWell(index)}
-                            className="h-9 w-9 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50"
-                            title={isAdmin ? 'Remover poço (Admin)' : 'Remover poço vazio'}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      )}
+                      {!isLocked &&
+                        !isReturnBlocked('wells') &&
+                        (isAdmin || isWellRowEmpty(lockedWell || well)) && (
+                          <td className="p-2 text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveWell(index)}
+                              className="h-9 w-9 text-red-500 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/50"
+                              title={isAdmin ? 'Remover poço (Admin)' : 'Remover poço vazio'}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </td>
+                        )}
                     </tr>
                   )
                 })}
@@ -3215,7 +3291,7 @@ function RdoFullPageEditor({
               </span>
             )}
           </div>
-          {!isLocked && (
+          {!isLocked && !isReturnBlocked('photos') && (
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="file"
@@ -3276,7 +3352,7 @@ function RdoFullPageEditor({
                     alt={photo.caption}
                     className="h-full w-full object-cover transition group-hover:scale-105"
                   />
-                  {!isLocked && (
+                  {!isLocked && !isReturnBlocked('photos') && (
                     <button
                       type="button"
                       onClick={() => handleRemovePhoto(index)}
@@ -3297,16 +3373,19 @@ function RdoFullPageEditor({
                   <Input
                     value={photo.caption ?? ''}
                     onChange={(e) => handlePhotoCaptionChange(index, e.target.value)}
-                    disabled={isLocked}
+                    disabled={isLocked || isReturnBlocked('photos')}
                     placeholder="Legenda descritiva da imagem..."
-                    className="mt-1 h-10 text-xs sm:text-sm"
+                    className={cn(
+                      'mt-1 h-10 text-xs sm:text-sm',
+                      isReturnBlocked('photos') && returnBlockedClass,
+                    )}
                   />
                 </div>
               </div>
             )
           })}
 
-          {!isLocked && (
+          {!isLocked && !isReturnBlocked('photos') && (
             <div className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 p-6 text-center text-slate-500 dark:border-slate-800 dark:bg-slate-900/40">
               <Camera className="h-8 w-8 mb-2 text-slate-400" />
               <span className="text-xs font-semibold">Adicionar nova fotografia</span>
@@ -3367,9 +3446,10 @@ function RdoFullPageEditor({
                   handleFieldChange('accidents', e.target.value)
                   clearReturnedField('accidents')
                 }}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('accidents')}
                 className={cn(
                   'mt-1.5',
+                  isReturnBlocked('accidents') && returnBlockedClass,
                   isReturnedField('accidents') &&
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
@@ -3397,9 +3477,10 @@ function RdoFullPageEditor({
                   handleFieldChange('interferences', e.target.value)
                   clearReturnedField('interferences')
                 }}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('interferences')}
                 className={cn(
                   'mt-1.5',
+                  isReturnBlocked('interferences') && returnBlockedClass,
                   isReturnedField('interferences') &&
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
@@ -3427,9 +3508,10 @@ function RdoFullPageEditor({
                   handleFieldChange('planChanges', e.target.value)
                   clearReturnedField('planChanges')
                 }}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('planChanges')}
                 className={cn(
                   'mt-1.5',
+                  isReturnBlocked('planChanges') && returnBlockedClass,
                   isReturnedField('planChanges') &&
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
@@ -3457,9 +3539,10 @@ function RdoFullPageEditor({
                   handleFieldChange('timeWaiting', e.target.value)
                   clearReturnedField('timeWaiting')
                 }}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('timeWaiting')}
                 className={cn(
                   'mt-1.5',
+                  isReturnBlocked('timeWaiting') && returnBlockedClass,
                   isReturnedField('timeWaiting') &&
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
@@ -3487,9 +3570,10 @@ function RdoFullPageEditor({
                   handleFieldChange('timeDisplacement', e.target.value)
                   clearReturnedField('timeDisplacement')
                 }}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('timeDisplacement')}
                 className={cn(
                   'mt-1.5',
+                  isReturnBlocked('timeDisplacement') && returnBlockedClass,
                   isReturnedField('timeDisplacement') &&
                     'border-amber-400 bg-amber-50/50 dark:bg-amber-950/30 ring-1 ring-amber-400',
                 )}
