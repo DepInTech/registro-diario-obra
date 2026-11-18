@@ -3,14 +3,15 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-export default pb
-
-export { pb }
-
+// Encerra assinaturas realtime ativas do SDK (logout/troca de sessão).
+// Exigido por AuthContext e SyncContext — não remover (falha recorrente de build).
 export async function forceRealtimeTeardown() {
   try {
-    pb.realtime?.unsubscribe()
-  } catch {
-    // noop
+    await pb.realtime.unsubscribe()
+  } catch (_) {
+    // SDK pode não ter assinatura ativa; ignorar
   }
 }
+
+export default pb
+export { pb }
