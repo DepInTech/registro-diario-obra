@@ -1688,6 +1688,9 @@ function FieldFullEditor({
         isRecordFieldAuthorized('field_sheet', 'afternoon_time', returnedFieldsList)))
   const isExtractionCellEditable = (col: string) =>
     !isReturnedCycle || (allowsExtractionEdits && isFieldEditableForTechnician(col))
+  // Bloqueio visual por campo na devolução: true somente quando o ciclo de correção está ativo
+  // e o campo NÃO está autorizado (lista vazia/inválida bloqueia tudo).
+  const isReturnBlocked = (field: string) => !isFieldEditableForTechnician(field)
 
   // Carrega projetos (local + PocketBase) para preenchimento de Cliente, Contrato e Projeto EPA
   useEffect(() => {
@@ -2946,11 +2949,11 @@ function FieldFullEditor({
               value={formData.date}
               onChange={(e) => handleFieldChange('date', applyDateMask(e.target.value))}
               placeholder="DD/MM/AAAA"
-              disabled={isLocked || isFieldLockedByAdmin('date')}
-              readOnly={isFieldLockedByAdmin('date')}
+              disabled={isLocked || isFieldLockedByAdmin('date') || isReturnBlocked('date')}
+              readOnly={isFieldLockedByAdmin('date') || isReturnBlocked('date')}
               className={cn(
                 'mt-1',
-                isFieldLockedByAdmin('date') &&
+                (isFieldLockedByAdmin('date') || isReturnBlocked('date')) &&
                   'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200 cursor-not-allowed select-none',
               )}
             />
@@ -2980,7 +2983,7 @@ function FieldFullEditor({
                           handleFieldChange('weather', e.target.value)
                           clearReturnedField('weather')
                         }}
-                        disabled={isLocked}
+                        disabled={isLocked || isReturnBlocked('weather')}
                         placeholder="Descreva a condição do clima..."
                         className={cn(
                           'min-h-[42px] text-xs sm:text-sm flex-1',
@@ -3015,9 +3018,11 @@ function FieldFullEditor({
                       handleFieldChange('weather', selected === 'Outros' ? 'Outros' : selected)
                       clearReturnedField('weather')
                     }}
-                    disabled={isLocked}
+                    disabled={isLocked || isReturnBlocked('weather')}
                     className={cn(
                       'epa-input mt-1 min-h-[42px]',
+                      isReturnBlocked('weather') &&
+                        'cursor-not-allowed opacity-60 bg-slate-100 dark:bg-slate-800',
                       isReturnedField('weather') &&
                         'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
                     )}
@@ -3046,7 +3051,7 @@ function FieldFullEditor({
                     : (formData.pluviometer ?? '')
                 }
                 onChange={(e) => handleFieldChange('pluviometer', e.target.value)}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('pluviometer')}
                 placeholder="Ex.: 0 ou 12.5"
                 className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
               />
@@ -3136,7 +3141,11 @@ function FieldFullEditor({
                         handleFieldChange('morning_time', e.target.value)
                         clearReturnedField('hidrometro')
                       }}
-                      disabled={isLocked || isFieldLockedByAdmin('morning_time')}
+                      disabled={
+                        isLocked ||
+                        isFieldLockedByAdmin('morning_time') ||
+                        isReturnBlocked('morning_time')
+                      }
                       readOnly={isFieldLockedByAdmin('morning_time')}
                       className={cn(
                         'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-300 dark:border-0 py-0 px-1',
@@ -3166,7 +3175,11 @@ function FieldFullEditor({
                         handleFieldChange('afternoon_time', e.target.value)
                         clearReturnedField('hidrometro')
                       }}
-                      disabled={isLocked || isFieldLockedByAdmin('afternoon_time')}
+                      disabled={
+                        isLocked ||
+                        isFieldLockedByAdmin('afternoon_time') ||
+                        isReturnBlocked('afternoon_time')
+                      }
                       readOnly={isFieldLockedByAdmin('afternoon_time')}
                       className={cn(
                         'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-300 dark:border-0 py-0 px-1',
@@ -3464,7 +3477,11 @@ function FieldFullEditor({
                       onChange={(e) =>
                         handleFieldChange('infiltration_morning_time', e.target.value)
                       }
-                      disabled={isLocked || isFieldLockedByAdmin('infiltration_morning_time')}
+                      disabled={
+                        isLocked ||
+                        isFieldLockedByAdmin('infiltration_morning_time') ||
+                        isReturnBlocked('infiltration_morning_time')
+                      }
                       readOnly={isFieldLockedByAdmin('infiltration_morning_time')}
                       className={cn(
                         'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-300 dark:border-0 py-0 px-1',
@@ -3484,7 +3501,11 @@ function FieldFullEditor({
                       onChange={(e) =>
                         handleFieldChange('infiltration_afternoon_time', e.target.value)
                       }
-                      disabled={isLocked || isFieldLockedByAdmin('infiltration_afternoon_time')}
+                      disabled={
+                        isLocked ||
+                        isFieldLockedByAdmin('infiltration_afternoon_time') ||
+                        isReturnBlocked('infiltration_afternoon_time')
+                      }
                       readOnly={isFieldLockedByAdmin('infiltration_afternoon_time')}
                       className={cn(
                         'h-7 w-24 text-[10px] font-mono bg-white text-slate-900 dark:bg-slate-900 dark:text-white border border-slate-300 dark:border-0 py-0 px-1',
@@ -3640,7 +3661,11 @@ function FieldFullEditor({
             <Switch
               checked={formData.nutrient_done || false}
               onCheckedChange={(c) => handleFieldChange('nutrient_done', c)}
-              disabled={isLocked || isFieldLockedByAdmin('nutrient_done')}
+              disabled={
+                isLocked ||
+                isFieldLockedByAdmin('nutrient_done') ||
+                isReturnBlocked('nutrient_done')
+              }
             />
           </div>
           <div>
@@ -3653,7 +3678,11 @@ function FieldFullEditor({
                   : (formData.nutrient_map_kg ?? '')
               }
               onChange={(e) => handleFieldChange('nutrient_map_kg', e.target.value)}
-              disabled={isLocked || isFieldLockedByAdmin('nutrient_map_kg')}
+              disabled={
+                isLocked ||
+                isFieldLockedByAdmin('nutrient_map_kg') ||
+                isReturnBlocked('nutrient_map_kg')
+              }
               readOnly={isFieldLockedByAdmin('nutrient_map_kg')}
               placeholder="Ex.: 10 ou 1.250,5"
               className={cn(
@@ -3673,7 +3702,11 @@ function FieldFullEditor({
                   : (formData.nutrient_ureia_kg ?? '')
               }
               onChange={(e) => handleFieldChange('nutrient_ureia_kg', e.target.value)}
-              disabled={isLocked || isFieldLockedByAdmin('nutrient_ureia_kg')}
+              disabled={
+                isLocked ||
+                isFieldLockedByAdmin('nutrient_ureia_kg') ||
+                isReturnBlocked('nutrient_ureia_kg')
+              }
               readOnly={isFieldLockedByAdmin('nutrient_ureia_kg')}
               placeholder="Ex.: 10 ou 1.250,5"
               className={cn(

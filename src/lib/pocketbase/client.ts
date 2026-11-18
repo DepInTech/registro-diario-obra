@@ -4,34 +4,16 @@ const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
 /**
- * Força o teardown de todas as subscriptions realtime do PocketBase.
- * Fecha o canal SSE aberto e limpa o clientId em memória, garantindo
- * que uma nova sessão/subscrição reabra o canal com estado limpo
- * (evita envio de clientId antigo com novas credenciais).
+ * Derruba a conexão realtime do SDK (SSE) à força, para encerrar assinaturas
+ * antigas no logout/troca de sessão. O método é interno ao SDK, por isso o
+ * acesso é feito por cast tipado e tolerante a ausência.
  */
-export async function forceRealtimeTeardown(): Promise<void> {
-  try {
-    // Acessa o serviço interno de realtime do SDK via cast para qualquer,
-    // pois seus métodos são privados na tipagem pública.
-    const realtime = (pb as any).realtime as
-      | {
-          unsubscribeByPrefix?: (prefix: string) => Promise<void>
-          disconnect?: () => void
-          clientId?: string
-        }
-      | undefined
-    if (!realtime) return
-    if (typeof realtime.unsubscribeByPrefix === 'function') {
-      await realtime.unsubscribeByPrefix('')
-    }
-    if (typeof realtime.disconnect === 'function') {
-      realtime.disconnect()
-    }
-    if (realtime.clientId) {
-      realtime.clientId = ''
-    }
-  } catch {
-    // Teardown é best-effort: nunca deve derrubar o fluxo chamador
+export const forceRealtimeTeardown = async (): Promise<void> => {
+  const realtime = pb.realtime as unknown as {
+    disconnect?: (subscriptionsCount?: number) => void | Promise<void>
+  }
+  if (typeof realtime?.disconnect === 'function') {
+    await realtime.disconnect()
   }
 }
 
