@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-17T18:59:05.799Z",
+  "generatedAt": "2026-11-17T19:23:56.401Z",
   "collections": [
     {
       "name": "users",
@@ -1431,6 +1431,88 @@
       "indexes": [
         "CREATE INDEX idx_na_sheets_area ON na_sheets (area_name)",
         "CREATE INDEX idx_na_sheets_date ON na_sheets (date)"
+      ]
+    },
+    {
+      "name": "notifications",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && recipient = @request.auth.id",
+        "view": "@request.auth.id != '' && recipient = @request.auth.id",
+        "create": null,
+        "update": "@request.auth.id != '' && recipient = @request.auth.id",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "recipient",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "body",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["submitted", "returned", "approved", "info"]
+        },
+        {
+          "name": "entity",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "entity_record",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "read",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created_by",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_notifications_recipient ON notifications (recipient)",
+        "CREATE INDEX idx_notifications_read ON notifications (read)"
       ]
     }
   ]
