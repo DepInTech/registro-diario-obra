@@ -165,7 +165,13 @@ onRecordUpdateRequest((e) => {
   if (currentStatus !== 'returned') return e.next()
 
   const returnedList = readReturnedFields(orig)
-  if (returnedList.length === 0) return e.next() // lista vazia = legado, libera tudo
+  // REGRA DE SEGURANÇA: lista vazia/ausente/inválida NÃO libera a planilha — bloqueia.
+  if (returnedList.length === 0) {
+    auditReturnedFieldViolation(e, 'returned_fields_vazio', '', '')
+    throw new BadRequestError(
+      'Nenhum campo foi liberado para correção nesta devolução. Solicite ao Administrador.',
+    )
+  }
 
   // ---- 2. returned_fields NÃO pode ser alterado pelo Técnico ----
   // O cliente legítimo reenvia a lista local (o Técnico remove da lista os grupos já
@@ -191,16 +197,39 @@ onRecordUpdateRequest((e) => {
   }
 
   // ---- 1 e 4. Campos de dados: comparar original vs payload, campo a campo ----
-  const origData = orig.data ? orig.data() : {}
-  const nextData = e.record.data ? e.record.data() : {}
+  // (JSVM do PocketBase: Record.data() NÃO EXISTE — leitura via record.get(k)
+  //  sobre o schema da coleção. Falha de leitura/comparação BLOQUEIA, nunca libera.)
+  const fsCol = $app.findCollectionByNameOrId('field_spreadsheets')
+  const dataFieldNames = fsCol.fields
+    .filter((f) => FS_SYSTEM_FIELDS.indexOf(f.name) === -1)
+    .map((f) => f.name)
   const changedFields = []
+  let compareFailed = false
 
-  Object.keys(nextData).forEach((key) => {
-    if (FS_SYSTEM_FIELDS.indexOf(key) !== -1) return // campos de controle, tratados acima
-    if (normalizeVal(origData[key]) !== normalizeVal(nextData[key])) {
+  dataFieldNames.forEach((key) => {
+    if (compareFailed) return
+    let origVal
+    let nextVal
+    try {
+      origVal = orig.get(key)
+      nextVal = e.record.get(key)
+    } catch (readErr) {
+      console.warn('returned_fields guard: falha ao ler campo "' + key + '":', readErr)
+      compareFailed = true
+      return
+    }
+    if (normalizeVal(origVal) !== normalizeVal(nextVal)) {
       changedFields.push(key)
     }
   })
+
+  // Falha de leitura/comparação bloqueia a operação inteira (seguro por padrão)
+  if (compareFailed) {
+    auditReturnedFieldViolation(e, 'erro_interno_de_comparacao', '', '')
+    throw new BadRequestError(
+      'Não foi possível validar a correção no servidor. Operação bloqueada por segurança.',
+    )
+  }
 
   const unauthorized = changedFields.filter((f) => !isFieldAuthorizedForTech(f, returnedList))
 
@@ -209,8 +238,8 @@ onRecordUpdateRequest((e) => {
     auditReturnedFieldViolation(
       e,
       unauthorized.join(', '),
-      origData[unauthorized[0]],
-      nextData[unauthorized[0]],
+      orig.get(unauthorized[0]),
+      e.record.get(unauthorized[0]),
     )
     throw new BadRequestError(
       `Campo ${detail} não está liberado para correção. Solicite ao Administrador.`,
@@ -359,7 +388,13 @@ onRecordUpdateRequest((e) => {
   if (currentStatus !== 'returned') return e.next()
 
   const returnedList = readReturnedFields(orig)
-  if (returnedList.length === 0) return e.next() // lista vazia = legado, libera tudo
+  // REGRA DE SEGURANÇA: lista vazia/ausente/inválida NÃO libera o RDO — bloqueia.
+  if (returnedList.length === 0) {
+    auditRdoReturnedFieldViolation(e, 'returned_fields_vazio', '', '')
+    throw new BadRequestError(
+      'Nenhum campo foi liberado para correção nesta devolução. Solicite ao Administrador.',
+    )
+  }
 
   // returned_fields NÃO pode ser alterado pelo Técnico (mesma semântica do guard de
   // field_spreadsheets acima: descarta a versão do Técnico e mantém a lista do Admin)
@@ -379,16 +414,39 @@ onRecordUpdateRequest((e) => {
   }
 
   // Campos de dados: comparação original vs payload
-  const origData = orig.data ? orig.data() : {}
-  const nextData = e.record.data ? e.record.data() : {}
+  // (JSVM do PocketBase: Record.data() NÃO EXISTE — leitura via record.get(k)
+  //  sobre o schema da coleção. Falha de leitura/comparação BLOQUEIA, nunca libera.)
+  const rdoCol = $app.findCollectionByNameOrId('reports_rdo')
+  const dataFieldNames = rdoCol.fields
+    .filter((f) => RDO_SYSTEM_FIELDS.indexOf(f.name) === -1)
+    .map((f) => f.name)
   const changedFields = []
+  let compareFailed = false
 
-  Object.keys(nextData).forEach((key) => {
-    if (RDO_SYSTEM_FIELDS.indexOf(key) !== -1) return
-    if (normalizeVal(origData[key]) !== normalizeVal(nextData[key])) {
+  dataFieldNames.forEach((key) => {
+    if (compareFailed) return
+    let origVal
+    let nextVal
+    try {
+      origVal = orig.get(key)
+      nextVal = e.record.get(key)
+    } catch (readErr) {
+      console.warn('returned_fields guard (rdo): falha ao ler campo "' + key + '":', readErr)
+      compareFailed = true
+      return
+    }
+    if (normalizeVal(origVal) !== normalizeVal(nextVal)) {
       changedFields.push(key)
     }
   })
+
+  // Falha de leitura/comparação bloqueia a operação inteira (seguro por padrão)
+  if (compareFailed) {
+    auditRdoReturnedFieldViolation(e, 'erro_interno_de_comparacao', '', '')
+    throw new BadRequestError(
+      'Não foi possível validar a correção no servidor. Operação bloqueada por segurança.',
+    )
+  }
 
   const unauthorized = changedFields.filter((f) => !isRdoFieldAuthorizedForTech(f, returnedList))
 
@@ -397,8 +455,8 @@ onRecordUpdateRequest((e) => {
     auditRdoReturnedFieldViolation(
       e,
       unauthorized.join(', '),
-      origData[unauthorized[0]],
-      nextData[unauthorized[0]],
+      orig.get(unauthorized[0]),
+      e.record.get(unauthorized[0]),
     )
     throw new BadRequestError(
       `Campo ${detail} não está liberado para correção. Solicite ao Administrador.`,

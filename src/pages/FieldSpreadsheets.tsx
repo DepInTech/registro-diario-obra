@@ -57,6 +57,11 @@ import { authHeaders, exportUrl, updateFieldStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
 import { parseAdminSnapshot, isValidPocketBaseId } from '@/lib/payloadSanitizer'
+import {
+  FIELD_SHEET_RETURN_GROUPS,
+  parseReturnedList,
+  isRecordFieldAuthorized,
+} from '@/lib/returnFields'
 import { directSaveSheetToServer, type DirectSaveResult } from '@/services/directSheetSave'
 import { type Status } from '@/data/epa'
 import {
@@ -180,7 +185,8 @@ export function FieldSpreadsheets({ query }: { query: string }) {
         try {
           const records = await pb.collection('field_spreadsheets').getFullList({
             sort: '-date',
-            expand: 'project,operator,deleted_by',
+            expand:
+              'project,project.client,project.contract,project.company,operator,assigned_technicians,deleted_by',
           })
 
           const serverSheetIds = new Set(records.map((r) => r.id))
@@ -220,6 +226,18 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 operatorName: parsedSnapshot?.technician_name || op?.name || '',
                 assigned_technicians: Array.isArray((rec as any).assigned_technicians)
                   ? ((rec as any).assigned_technicians as string[])
+                  : undefined,
+                // Fonte prioritária de nomes: registros expandidos do servidor.
+                expand_assigned_technicians: Array.isArray(
+                  (rec.expand as any)?.assigned_technicians,
+                )
+                  ? (
+                      (rec.expand as any).assigned_technicians as Array<{
+                        id: string
+                        name?: string
+                        email?: string
+                      }>
+                    ).map((u) => ({ id: u.id, name: u.name || u.email || '' }))
                   : undefined,
                 weather: rec.weather || 'Ensolarado',
                 pluviometer:
@@ -1462,10 +1480,19 @@ function FieldFullEditor({
   }
 
   const techNameOf = (id: string) => {
+    // 1) Fonte prioritária: expand assigned_technicians vindo do servidor (funciona offline,
+    //    pois fica persistido no IndexedDB junto com a planilha).
+    const expanded = (initialSheet as any).expand_assigned_technicians?.find(
+      (t: { id: string; name: string }) => t.id === id,
+    )
+    if (expanded?.name) return expanded.name
+    // 2) Cadastro de técnicos carregado online
     const found = technicians.find((t) => t.id === id)
-    if (found) return found.name
-    if (id === user?.id) return user?.name || id
-    return id
+    if (found?.name) return found.name
+    // 3) Usuário autenticado
+    if (id === user?.id && user?.name) return user.name
+    // ÚLTIMO RECURSO — NUNCA exibir o UUID cru
+    return 'Nome indisponível'
   }
 
   useEffect(() => {
@@ -1630,25 +1657,37 @@ function FieldFullEditor({
     (!isAdmin && (formData.status === 'approved' || formData.status === 'submitted')) || isDeleted
 
   // DEVOLUÇÃO POR CAMPO: quando o Admin devolve a planilha ('returned'), o Técnico
-  // só pode editar os campos listados em returned_fields (o servidor também valida:
-  // guard em pocketbase/hooks/rdo_status_guard.js). Lista vazia = legado, libera tudo.
+  // só pode editar os campos das seções listadas em returned_fields (o servidor também
+  // valida: guard em pocketbase/hooks/returned_fields_guard.js).
+  // O campo returned_fields é JSON no PocketBase e PODE chegar como STRING JSON — o
+  // parsing sempre passa por parseReturnedList (aceita array e string JSON).
+  // REGRA DE SEGURANÇA: lista vazia/inválida/ausente NÃO libera — bloqueia por padrão.
   const rawReturnedUi =
     (formData as any).returned_fields ?? (formData as any).returnedFields ?? null
-  const returnedFieldsList: string[] = Array.isArray(rawReturnedUi)
-    ? (rawReturnedUi as unknown[]).map(String)
-    : []
+  const returnedFieldsList: string[] = useMemo(() => {
+    const parsed = parseReturnedList(rawReturnedUi)
+    // Aceita apenas grupos válidos e/ou nomes de campo reais do registro
+    const knownGroups = Object.keys(FIELD_SHEET_RETURN_GROUPS)
+    const allGroupFields = Object.values(FIELD_SHEET_RETURN_GROUPS).flat()
+    const valid = parsed.filter(
+      (entry) => knownGroups.includes(entry) || allGroupFields.includes(entry),
+    )
+    return valid
+  }, [rawReturnedUi])
   const isReturnedCycle = !isAdmin && formData.status === 'returned'
+  // Em ciclo de correção SEM lista válida: TUDO bloqueado (falha segura).
+  const returnedListIsValid = returnedFieldsList.length > 0
   const isFieldEditableForTechnician = (field: string) =>
-    !isReturnedCycle || returnedFieldsList.length === 0 || returnedFieldsList.includes(field)
-  const allowsExtractionEdits =
-    returnedFieldsList.some(
-      (f) => f === 'extraction_data' || f === 'hidrometro' || f.startsWith('extraction'),
-    ) || false
-  const isExtractionCellEditable = (col: string) =>
     !isReturnedCycle ||
-    returnedFieldsList.length === 0 ||
-    allowsExtractionEdits ||
-    returnedFieldsList.includes(col)
+    (returnedListIsValid && isRecordFieldAuthorized('field_sheet', field, returnedFieldsList))
+  const allowsExtractionEdits =
+    !isReturnedCycle ||
+    (returnedListIsValid &&
+      (isRecordFieldAuthorized('field_sheet', 'extraction_data', returnedFieldsList) ||
+        isRecordFieldAuthorized('field_sheet', 'morning_time', returnedFieldsList) ||
+        isRecordFieldAuthorized('field_sheet', 'afternoon_time', returnedFieldsList)))
+  const isExtractionCellEditable = (col: string) =>
+    !isReturnedCycle || (allowsExtractionEdits && isFieldEditableForTechnician(col))
 
   // Carrega projetos (local + PocketBase) para preenchimento de Cliente, Contrato e Projeto EPA
   useEffect(() => {
@@ -2316,8 +2355,10 @@ function FieldFullEditor({
     }
   }
 
+  // Destaque ambar de campo solicitado na devolução corrente — usa a MESMA lista
+  // validada (returnedFieldsList) que o servidor usa no guard.
   const isReturnedField = (fieldName: string) =>
-    formData.status === 'returned' && !!formData.returned_fields?.includes(fieldName)
+    isReturnedCycle && isRecordFieldAuthorized('field_sheet', fieldName, returnedFieldsList)
 
   const clearReturnedField = (fieldName: string) => {
     if (formData.returned_fields?.includes(fieldName)) {

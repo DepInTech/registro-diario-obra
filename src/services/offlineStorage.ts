@@ -97,6 +97,8 @@ export interface OfflineFieldSheetItem {
   operator: string
   operatorName?: string
   assigned_technicians?: string[]
+  /** Nomes resolvidos via expand do servidor (fonte prioritária, inclui offline). */
+  expand_assigned_technicians?: Array<{ id: string; name: string }>
   weather?: string
   pluviometer?: number | string
   morning_time?: string
