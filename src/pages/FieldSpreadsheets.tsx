@@ -1796,6 +1796,9 @@ function FieldFullEditor({
     isReturnedCycle && returnedFieldsList.includes(field)
   const returnedFieldHighlight =
     'border-amber-400 ring-2 ring-amber-300/70 bg-amber-50/60 dark:bg-amber-950/30'
+  // Aparência de campo bloqueado pela devolução (o input já vem desabilitado).
+  const returnBlockedClass =
+    'bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-slate-800/60 dark:text-slate-500'
 
   // Extraction wells handlers
   // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha (snapshotWells vazio e initialSheet.extraction_data vazio)
@@ -3243,9 +3246,12 @@ function FieldFullEditor({
                           onChange={(e) =>
                             handleExtractionCellChange(index, 'well', e.target.value)
                           }
-                          disabled={isLocked}
+                          disabled={isLocked || !isExtractionCellEditable('extraction_data')}
                           placeholder="Ex.: PR-01"
-                          className="h-10 font-semibold text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700"
+                          className={cn(
+                            'h-10 font-semibold text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700',
+                            !isExtractionCellEditable('extraction_data') && returnBlockedClass,
+                          )}
                         />
                       )}
                     </td>
@@ -3257,10 +3263,11 @@ function FieldFullEditor({
                           handleExtractionCellChange(index, 'morning', e.target.value)
                           clearReturnedField('hidrometro')
                         }}
-                        disabled={isLocked}
+                        disabled={isLocked || !isExtractionCellEditable('morning_time')}
                         placeholder="0,00"
                         className={cn(
                           'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
+                          !isExtractionCellEditable('morning_time') && returnBlockedClass,
                           isReturnedField('hidrometro') &&
                             'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                         )}
@@ -3274,10 +3281,11 @@ function FieldFullEditor({
                           handleExtractionCellChange(index, 'afternoon', e.target.value)
                           clearReturnedField('hidrometro')
                         }}
-                        disabled={isLocked}
+                        disabled={isLocked || !isExtractionCellEditable('afternoon_time')}
                         placeholder="0,00"
                         className={cn(
                           'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
+                          !isExtractionCellEditable('afternoon_time') && returnBlockedClass,
                           isReturnedField('hidrometro') &&
                             'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                         )}
@@ -3295,9 +3303,12 @@ function FieldFullEditor({
                           onChange={(e) =>
                             handleExtractionCellChange(index, 'pump', e.target.value)
                           }
-                          disabled={isLocked}
+                          disabled={isLocked || !isExtractionCellEditable('extraction_data')}
                           placeholder="0,00"
-                          className="h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700"
+                          className={cn(
+                            'h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700',
+                            !isExtractionCellEditable('extraction_data') && returnBlockedClass,
+                          )}
                         />
                       )}
                     </td>
@@ -3331,15 +3342,16 @@ function FieldFullEditor({
                                   handleFieldChange('extraction_data', updated)
                                   clearReturnedField('autopump')
                                 }}
-                                disabled={isLocked}
+                                disabled={isLocked || !isExtractionCellEditable('autopump')}
                                 placeholder="Descreva a saída..."
                                 className={cn(
                                   'h-10 text-xs sm:text-sm flex-1',
+                                  !isExtractionCellEditable('autopump') && returnBlockedClass,
                                   isReturnedField('autopump') &&
                                     'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                                 )}
                               />
-                              {!isLocked && (
+                              {!isLocked && isExtractionCellEditable('autopump') && (
                                 <Button
                                   type="button"
                                   variant="outline"
@@ -3387,9 +3399,10 @@ function FieldFullEditor({
                               handleFieldChange('extraction_data', updated)
                               clearReturnedField('autopump')
                             }}
-                            disabled={isLocked}
+                            disabled={isLocked || !isExtractionCellEditable('autopump')}
                             className={cn(
                               'epa-input h-10 w-full text-xs sm:text-sm',
+                              !isExtractionCellEditable('autopump') && returnBlockedClass,
                               isReturnedField('autopump') &&
                                 'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
                             )}
@@ -3403,23 +3416,25 @@ function FieldFullEditor({
                         )
                       })()}
                     </td>
-                    {!isLocked && (isAdmin || isExtractionRowEmpty(lockedRow || row)) && (
-                      <td className="p-2 border border-slate-300 dark:border-slate-800 text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveExtractionWell(index)}
-                          className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          title={
-                            isAdmin
-                              ? 'Remover linha de poço (Admin)'
-                              : 'Remover linha de poço vazia'
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </td>
-                    )}
+                    {!isLocked &&
+                      isExtractionCellEditable('extraction_data') &&
+                      (isAdmin || isExtractionRowEmpty(lockedRow || row)) && (
+                        <td className="p-2 border border-slate-300 dark:border-slate-800 text-center">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveExtractionWell(index)}
+                            className="h-9 w-9 text-red-500 hover:text-red-700 hover:bg-red-50"
+                            title={
+                              isAdmin
+                                ? 'Remover linha de poço (Admin)'
+                                : 'Remover linha de poço vazia'
+                            }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      )}
                   </tr>
                 )
               })}
@@ -3549,10 +3564,11 @@ function FieldFullEditor({
                             })
                             clearReturnedField('infiltracao')
                           }}
-                          disabled={isLocked}
+                          disabled={isLocked || isReturnBlocked('infiltration_data')}
                           placeholder="0,00"
                           className={cn(
                             'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
+                            isReturnBlocked('infiltration_data') && returnBlockedClass,
                             isReturnedField('infiltracao') &&
                               'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                           )}
@@ -3575,10 +3591,11 @@ function FieldFullEditor({
                             })
                             clearReturnedField('infiltracao')
                           }}
-                          disabled={isLocked}
+                          disabled={isLocked || isReturnBlocked('infiltration_data')}
                           placeholder="0,00"
                           className={cn(
                             'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
+                            isReturnBlocked('infiltration_data') && returnBlockedClass,
                             isReturnedField('infiltracao') &&
                               'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
                           )}
@@ -3609,9 +3626,12 @@ function FieldFullEditor({
                     bombaInfiltracao: e.target.value,
                   })
                 }
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('infiltration_data')}
                 placeholder="Ex.: 3 bar / PSI"
-                className="mt-1 font-mono text-xs"
+                className={cn(
+                  'mt-1 font-mono text-xs',
+                  isReturnBlocked('infiltration_data') && returnBlockedClass,
+                )}
               />
             )}
           </div>
@@ -3630,9 +3650,12 @@ function FieldFullEditor({
                     bombaGeral: e.target.value,
                   })
                 }
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('infiltration_data')}
                 placeholder="Ex.: 4 bar / PSI"
-                className="mt-1 font-mono text-xs"
+                className={cn(
+                  'mt-1 font-mono text-xs',
+                  isReturnBlocked('infiltration_data') && returnBlockedClass,
+                )}
               />
             )}
           </div>
@@ -3841,9 +3864,12 @@ function FieldFullEditor({
                                 [key]: e.target.value,
                               })
                             }
-                            disabled={isLocked}
+                            disabled={isLocked || isReturnBlocked('compressor_data')}
                             placeholder={row.ph}
-                            className="h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700"
+                            className={cn(
+                              'h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700',
+                              isReturnBlocked('compressor_data') && returnBlockedClass,
+                            )}
                           />
                         )}
                       </td>
@@ -3904,9 +3930,12 @@ function FieldFullEditor({
                               [arKey]: e.target.value,
                             })
                           }
-                          disabled={isLocked}
+                          disabled={isLocked || isReturnBlocked('compressor_data')}
                           placeholder="Ex.: 85 PSI"
-                          className="h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700"
+                          className={cn(
+                            'h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700',
+                            isReturnBlocked('compressor_data') && returnBlockedClass,
+                          )}
                         />
                       )}
                     </td>
@@ -3951,9 +3980,12 @@ function FieldFullEditor({
                         sao1Volume: e.target.value,
                       })
                     }
-                    disabled={isLocked}
+                    disabled={isLocked || isReturnBlocked('oil_removal_data')}
                     placeholder="Ex.: 0"
-                    className="mt-1 font-mono text-xs"
+                    className={cn(
+                      'mt-1 font-mono text-xs',
+                      isReturnBlocked('oil_removal_data') && returnBlockedClass,
+                    )}
                   />
                 )}
               </div>
@@ -3972,9 +4004,12 @@ function FieldFullEditor({
                         sao1DataLimpeza: applyDateMask(e.target.value),
                       })
                     }
-                    disabled={isLocked}
+                    disabled={isLocked || isReturnBlocked('oil_removal_data')}
                     placeholder="DD/MM/AAAA"
-                    className="mt-1 font-mono text-xs"
+                    className={cn(
+                      'mt-1 font-mono text-xs',
+                      isReturnBlocked('oil_removal_data') && returnBlockedClass,
+                    )}
                   />
                 )}
               </div>
@@ -4002,9 +4037,12 @@ function FieldFullEditor({
                         sao2Volume: e.target.value,
                       })
                     }
-                    disabled={isLocked}
+                    disabled={isLocked || isReturnBlocked('oil_removal_data')}
                     placeholder="Ex.: 0"
-                    className="mt-1 font-mono text-xs"
+                    className={cn(
+                      'mt-1 font-mono text-xs',
+                      isReturnBlocked('oil_removal_data') && returnBlockedClass,
+                    )}
                   />
                 )}
               </div>
@@ -4023,9 +4061,12 @@ function FieldFullEditor({
                         sao2DataLimpeza: applyDateMask(e.target.value),
                       })
                     }
-                    disabled={isLocked}
+                    disabled={isLocked || isReturnBlocked('oil_removal_data')}
                     placeholder="DD/MM/AAAA"
-                    className="mt-1 font-mono text-xs"
+                    className={cn(
+                      'mt-1 font-mono text-xs',
+                      isReturnBlocked('oil_removal_data') && returnBlockedClass,
+                    )}
                   />
                 )}
               </div>
@@ -4067,9 +4108,12 @@ function FieldFullEditor({
                     : (formData.waste_liquid_qty ?? '')
                 }
                 onChange={(e) => handleFieldChange('waste_liquid_qty', e.target.value)}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('waste_liquid_qty')}
                 placeholder="Ex.: 02 ou 2 tambores"
-                className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
+                className={cn(
+                  'mt-1 font-mono text-xs sm:text-sm min-h-[42px]',
+                  isReturnBlocked('waste_liquid_qty') && returnBlockedClass,
+                )}
               />
             )}
           </div>
@@ -4094,9 +4138,12 @@ function FieldFullEditor({
                     : (formData.waste_solid_qty ?? '')
                 }
                 onChange={(e) => handleFieldChange('waste_solid_qty', e.target.value)}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('waste_solid_qty')}
                 placeholder="Ex.: 01 ou 1 bombona"
-                className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
+                className={cn(
+                  'mt-1 font-mono text-xs sm:text-sm min-h-[42px]',
+                  isReturnBlocked('waste_solid_qty') && returnBlockedClass,
+                )}
               />
             )}
           </div>
@@ -4132,7 +4179,7 @@ function FieldFullEditor({
               <Switch
                 checked={formData.env_5s_check || false}
                 onCheckedChange={(c) => handleFieldChange('env_5s_check', c)}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('env_5s_check')}
               />
             )}
           </div>
@@ -4153,7 +4200,7 @@ function FieldFullEditor({
               <Switch
                 checked={formData.env_checklist_monthly || false}
                 onCheckedChange={(c) => handleFieldChange('env_checklist_monthly', c)}
-                disabled={isLocked}
+                disabled={isLocked || isReturnBlocked('env_checklist_monthly')}
               />
             )}
           </div>
@@ -4178,9 +4225,12 @@ function FieldFullEditor({
           <Textarea
             value={formData.observations || ''}
             onChange={(e) => handleFieldChange('observations', e.target.value)}
-            disabled={isLocked}
+            disabled={isLocked || isReturnBlocked('observations')}
             placeholder="Ex.: * Foi realizado a manutenção do PR-49."
-            className="mt-4 min-h-[120px]"
+            className={cn(
+              'mt-4 min-h-[120px]',
+              isReturnBlocked('observations') && returnBlockedClass,
+            )}
           />
         )}
       </section>
