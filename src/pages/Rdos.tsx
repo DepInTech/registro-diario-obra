@@ -76,6 +76,41 @@ function isProvisionalId(id?: string | null): boolean {
   )
 }
 
+// Resolução do nome do Técnico/Responsável (assigned_technicians) apenas para EXIBIÇÃO.
+// Os cadastros expandidos vêm da consulta de reports_rdo (loadRdos) e ficam em memória
+// (rdoTechNamesById). NUNCA devolve UUID/código interno: sem cadastro disponível
+// (consulta falhou, offline, vínculo quebrado) retorna 'Nome indisponível'.
+const rdoTechNamesById = new Map<string, string[]>()
+
+function looksLikeInternalId(value: string): boolean {
+  const v = value.trim()
+  if (!v) return false
+  return /^[a-z0-9]{15}$/i.test(v) || /^(user_|rdo_|temp_)/i.test(v)
+}
+
+function techNameOf(report: {
+  id?: string
+  performedByName?: string
+  assigned_technicians?: unknown
+  assignedTechnicians?: unknown
+}): string {
+  // 1. Nomes resolvidos via expand de assigned_technicians (um ou vários responsáveis)
+  const fromMap = rdoTechNamesById.get(report?.id || '')
+  if (fromMap && fromMap.length > 0) return fromMap.join(', ')
+  // 2. Dados brutos no item (ex.: chegou por realtime sem expand): só exibe nome legível
+  const raw = report?.assigned_technicians ?? report?.assignedTechnicians
+  if (raw !== undefined && raw !== null) {
+    const rawNames = (Array.isArray(raw) ? raw : [raw])
+      .map((t: any) => String(t?.name ?? (typeof t === 'string' ? t : '')).trim())
+      .filter((n) => n && !looksLikeInternalId(n))
+    if (rawNames.length > 0) return rawNames.join(', ')
+  }
+  // 3. Fallback para o nome já persistido (nunca UUID)
+  const fallback = String(report?.performedByName || '').trim()
+  if (fallback && !looksLikeInternalId(fallback)) return fallback
+  return 'Nome indisponível'
+}
+
 export function RdosPage({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineRdoItem | null>(null)
   const [items, setItems] = useState<OfflineRdoItem[]>([])
@@ -137,7 +172,7 @@ export function RdosPage({ query }: { query: string }) {
           const records = await pb.collection('reports_rdo').getFullList({
             sort: '-number',
             expand:
-              'project,project.client,project.contract,project.company,performed_by,supervised_by,deleted_by',
+              'project,project.client,project.contract,project.company,performed_by,supervised_by,deleted_by,assigned_technicians',
           })
 
           const serverRdoIds = new Set(records.map((r) => r.id))
@@ -168,6 +203,20 @@ export function RdosPage({ query }: { query: string }) {
               const company = proj?.expand?.company as any
               const performer = rec.expand?.performed_by as any
               const supervisor = rec.expand?.supervised_by as any
+
+              // Técnicos atribuídos: nomes resolvidos via expand para techNameOf (exibição)
+              const assignedTechRaw = (rec.expand as any)?.assigned_technicians
+              const assignedTechRecs: any[] = Array.isArray(assignedTechRaw)
+                ? assignedTechRaw
+                : assignedTechRaw
+                  ? [assignedTechRaw]
+                  : []
+              const assignedTechNames = assignedTechRecs
+                .map((t: any) => String(t?.name || '').trim())
+                .filter(Boolean)
+              if (assignedTechNames.length > 0) {
+                rdoTechNamesById.set(rec.id, assignedTechNames)
+              }
 
               const fieldInspectionPhoto = photos.find(
                 (p) => (p as any).category === 'field_inspection',
@@ -1089,9 +1138,16 @@ export function RdosPage({ query }: { query: string }) {
                       </p>
                     </td>
                     <td className="px-5 py-4">
-                      <p className="text-xs font-medium">{report.performedByName || 'Técnico'}</p>
+                      <p className="text-xs font-medium">{techNameOf(report)}</p>
                       <p className="text-[10px] text-slate-400">
-                        {report.supervisedByName || 'Técnico'}
+                        {(() => {
+                          const supFromMap = rdoTechNamesById.get(`${report.id}::supervisor`)
+                          if (supFromMap && supFromMap.length > 0) return supFromMap.join(', ')
+                          const supName = String(report.supervisedByName || '').trim()
+                          return supName && !looksLikeInternalId(supName)
+                            ? supName
+                            : 'Nome indisponível'
+                        })()}
                       </p>
                     </td>
                     <td className="px-5 py-4">
@@ -2597,10 +2653,13 @@ function RdoFullPageEditor({
               // MELHORIA 3: o Técnico nunca edita "Realizado por" — sempre vem da identidade
               // autenticada (novo) ou do responsável já registrado (existente). Admin mantém edição.
               const isPerformedLocked = !isAdmin
+              const techResolvedDisplay = techNameOf(formData)
               const performedDisplay =
-                formData.performedByName ||
-                adminSnapshot?.performed_by_name ||
-                (!isAdmin ? user?.name || '' : '')
+                techResolvedDisplay !== 'Nome indisponível'
+                  ? techResolvedDisplay
+                  : adminSnapshot?.performed_by_name ||
+                    (!isAdmin ? user?.name || '' : '') ||
+                    'Nome indisponível'
               if (isPerformedLocked) {
                 return (
                   <div className="mt-1.5 flex items-center px-3 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-semibold border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 min-h-[42px] cursor-not-allowed select-none">
@@ -3676,7 +3735,7 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
           <td colspan="2"><b>Empresa:</b> ${report.companyName || 'EPA Engenharia de Proteção Ambiental'}</td>
         </tr>
         <tr>
-          <td colspan="2"><b>Realizado por:</b> ${report.performedByName || 'Rodrigo Bezerra e Evandlier Sampaio'}</td>
+          <td colspan="2"><b>Realizado por:</b> ${techNameOf(report)}</td>
         </tr>
         <tr>
           <td colspan="2"><b>Supervisionado por:</b> ${report.supervisedByName || 'Karoline Ferreira.'}</td>
@@ -4043,7 +4102,7 @@ function generateLocalPdfPrint(report: OfflineRdoItem) {
 
         <div style="display:flex;justify-content:space-between;margin-top:40px;gap:40px;">
           <div style="flex:1;text-align:center;border-top:1px solid #000;padding-top:6px;font-size:10px;">
-            <b>${report.performedByName || 'Rodrigo Bezerra e Evandlier Sampaio'}</b><br />
+            <b>${techNameOf(report)}</b><br />
             Realizado por
           </div>
           <div style="flex:1;text-align:center;border-top:1px solid #000;padding-top:6px;font-size:10px;">
