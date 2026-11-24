@@ -49,6 +49,13 @@ export interface AreaConfigRecord {
 
 export type PresetFields = Record<string, unknown>
 
+/** Linha da tabela dinâmica de poços (extraction_data) definida pelo Admin */
+export interface PresetWellRow {
+  well: string
+  pump: string
+  autopump: string
+}
+
 /** Grupos/sections reais da Planilha de Campo, na ordem do documento */
 export const FIELD_SHEET_CONFIG_GROUPS: readonly FieldSheetConfigGroup[] = [
   {
