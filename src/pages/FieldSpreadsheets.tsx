@@ -1766,14 +1766,6 @@ function FieldFullEditor({
   const selectedAreas = parseAreaList(
     typeof formData.area === 'string' ? formData.area : String(formData.area || ''),
   )
-  // Áreas vindas da FICHA BASE do Admin (snapshot filled_fields.area): configuração
-  // administrativa — o Técnico não as remove, apenas ADICIONA outras. Sem área do
-  // Admin na base, o Técnico tem liberdade total para montar a lista.
-  const adminBaseAreas = parseAreaList(
-    typeof snapshotFilledFields.area === 'string'
-      ? snapshotFilledFields.area
-      : String(snapshotFilledFields.area || ''),
-  )
   // Editável: não bloqueado por status/envio nem por devolução — mesmas regras dos
   // demais campos do cabeçalho. OBS.: a trava de conteúdo da ficha base
   // (isFieldLockedByAdmin) NÃO se aplica à ADIÇÃO de áreas (requisito da seleção
@@ -1871,6 +1863,16 @@ function FieldFullEditor({
       ? adminSnapshot.filled_fields
       : {}
   ) as Record<string, any>
+
+  // Áreas vindas da FICHA BASE do Admin (snapshot filled_fields.area): configuração
+  // administrativa — o Técnico não as remove, apenas ADICIONA outras. Sem área do
+  // Admin na base, o Técnico tem liberdade total para montar a lista.
+  // (Declarado após snapshotFilledFields — dependência de ordem corrigida em v0.0.201.)
+  const adminBaseAreas = parseAreaList(
+    typeof snapshotFilledFields.area === 'string'
+      ? snapshotFilledFields.area
+      : String(snapshotFilledFields.area || ''),
+  )
 
   const isFieldLockedByAdmin = (field: string) => {
     if (isAdmin) return false
