@@ -56,6 +56,7 @@ import {
 import { authHeaders, exportUrl, updateFieldStatus } from '@/services/workspace'
 import { cn } from '@/lib/utils'
 import pb from '@/lib/pocketbase/client'
+import { useAreaConfigPreset } from '@/lib/areaConfigPreset'
 import { parseAdminSnapshot, isValidPocketBaseId } from '@/lib/payloadSanitizer'
 import {
   FIELD_SHEET_RETURN_GROUPS,
@@ -1874,6 +1875,16 @@ function FieldFullEditor({
       : String(snapshotFilledFields.area || ''),
   )
 
+  // PARTE 1 — Configuração de Áreas: hook pré-existente (área única -> preset do Admin).
+  // Declarado APÓS formData/isAdmin/setFormData (regra de hooks). A trava é condicional
+  // ao CONTEÚDO (campo preenchido pelo Admin = travado; vazio = livre) — vive dentro do hook.
+  const { areaConfigSnapshot, isAreaPresetLocked } = useAreaConfigPreset({
+    formData: formData as unknown as Record<string, any>,
+    isAdmin,
+    setFormData,
+    pbClient: pb,
+  })
+
   const isFieldLockedByAdmin = (field: string) => {
     if (isAdmin) return false
     const val = snapshotFilledFields[field]
@@ -1902,6 +1913,10 @@ function FieldFullEditor({
 
   const handleFieldChange = (field: keyof OfflineFieldSheetItem, value: any) => {
     if (isFieldLockedByAdmin(field as string)) {
+      return
+    }
+    // Configuração da área: campo pré-preenchido pelo Admin não aceita edição do Técnico.
+    if (isAreaPresetLocked(field as string)) {
       return
     }
     if (!isFieldEditableForTechnician(field as string)) {
@@ -2323,12 +2338,17 @@ function FieldFullEditor({
           ? formData.assigned_technicians
           : []
 
-    const updatedItem: OfflineFieldSheetItem = {
+    const updatedItem = {
       ...formData,
       operator: safeOperator,
       assigned_technicians: assignedTechs,
       status: effectiveStatus,
       change_history: updatedHistory,
+      // PARTE 1 — snapshot da configuração de área viaja como um campo a mais no payload
+      // (o hook já grava/limpa a string em formData; aqui apenas garantimos o valor final).
+      area_config_snapshot: areaConfigSnapshot
+        ? (formData.area_config_snapshot ?? JSON.stringify(areaConfigSnapshot))
+        : undefined,
       admin_snapshot:
         currentAdminSnapshot &&
         typeof currentAdminSnapshot === 'object' &&
