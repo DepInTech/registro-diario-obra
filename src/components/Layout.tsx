@@ -20,6 +20,7 @@ import {
   Activity,
   Waves,
   Trash2,
+  MapPin,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -62,6 +63,7 @@ export type Page =
   | 'na_monitoring'
   | 'users'
   | 'audit'
+  | 'area_configs'
 
 const allPrimary = [
   { id: 'dashboard' as Page, label: 'Visão geral', icon: Home },
@@ -93,6 +95,7 @@ const allPrimary = [
 ]
 const admin = [
   { id: 'users' as Page, label: 'Gestão de usuários', icon: Users },
+  { id: 'area_configs' as Page, label: 'Configuração de Áreas da Planilha de Campo', icon: MapPin },
   { id: 'audit' as Page, label: 'Logs de auditoria', icon: ShieldCheck },
 ]
 const titles: Record<Page, { title: string; subtitle: string }> = {
@@ -109,6 +112,10 @@ const titles: Record<Page, { title: string; subtitle: string }> = {
     subtitle: 'Medições de NA e NO com poços por área',
   },
   users: { title: 'Gestão de usuários', subtitle: 'Acessos, perfis e atribuições por projeto' },
+  area_configs: {
+    title: 'Configuração de Áreas da Planilha de Campo',
+    subtitle: 'Cadastro de áreas, contratos e valores padronizados pré-preenchidos',
+  },
   audit: { title: 'Logs de auditoria', subtitle: 'Rastreabilidade completa de ações no sistema' },
 }
 
