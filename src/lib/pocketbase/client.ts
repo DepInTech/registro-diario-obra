@@ -3,30 +3,26 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-export default pb
-
 export { pb }
-
 export async function forceRealtimeTeardown() {
   try {
-    if (typeof pb.beforeSend === 'function') pb.beforeSend = undefined
-    if (typeof pb.afterSend === 'function') pb.afterSend = undefined
+    pb.beforeSend = undefined
   } catch {
-    // ignore
+    // noop
   }
   try {
-    void pb.collection('_superusers')
+    await pb
+      .collection('_superusers')
+      .authRefresh()
+      .catch(() => undefined)
   } catch {
-    // ignore
+    // noop — best effort teardown, nunca interrompe logout/switch
   }
   try {
-    if (
-      pb.realtime &&
-      typeof (pb.realtime as unknown as { unsubscribe?: () => void }).unsubscribe === 'function'
-    ) {
-      ;(pb.realtime as unknown as { unsubscribe: () => void }).unsubscribe()
-    }
+    pb.realtime?.unsubscribe?.()
   } catch {
-    // ignore
+    // noop
   }
 }
+
+export default pb
