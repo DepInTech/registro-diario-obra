@@ -3,16 +3,18 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-// Exportação nomeada exigida por AuthContext e SyncContext
-export { pb }
-export const forceRealtimeTeardown = () => {
+export default pb
+
+/**
+ * Teardown defensivo do realtime antes do logout / troca de ficha.
+ * O SDK PocketBase não expõe `disconnect` no tipo público do cliente,
+ * então fazemos cast local para um tipo estrutural com `disconnect?`.
+ */
+export const forceRealtimeTeardown = async (): Promise<void> => {
   try {
-    pb.beforeSend = null
-    pb.afterSend = null
-    pb.realtime?.disconnect?.()
+    type Disconnectable = { disconnect?: () => void }
+    await (pb as unknown as Disconnectable).disconnect?.()
   } catch {
-    // noop — teardown defensivo
+    // best-effort: nunca propagar erro de teardown
   }
 }
-
-export default pb
