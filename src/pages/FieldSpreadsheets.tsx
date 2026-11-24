@@ -91,6 +91,25 @@ function isProvisionalId(id?: string | null): boolean {
   )
 }
 
+/** SELEÇÃO MÚLTIPLA DE ÁREAS — a Planilha de Campo guarda as áreas no campo 'area'
+ *  (texto) já existente e já sincronizado, com os nomes separados por vírgula.
+ *  Planilhas antigas (uma área) viram uma lista de um item — nenhuma migração
+ *  necessária e nenhum campo novo no payload de sincronização. */
+function parseAreaList(area?: string | null): string[] {
+  if (!area || typeof area !== 'string') return []
+  return area
+    .split(',')
+    .map((a) => a.trim())
+    .filter((a) => a !== '')
+}
+
+function serializeAreaList(list: string[]): string {
+  return list
+    .map((a) => (a || '').trim())
+    .filter((a) => a !== '')
+    .join(', ')
+}
+
 /** Extrai lista ordenada de índices numéricos de compressores presentes em compressor_data (mínimo 1 e 2) */
 function getCompressorIndices(compData: Record<string, any> | null | undefined): number[] {
   const set = new Set<number>([1, 2])
@@ -1692,6 +1711,105 @@ function FieldFullEditor({
   // e o campo NÃO está autorizado (lista vazia/inválida bloqueia tudo).
   const isReturnBlocked = (field: string) => !isFieldEditableForTechnician(field)
 
+  // SELEÇÃO MÚLTIPLA DE ÁREAS: o Admin cadastra/disponibiliza as áreas (coleção 'areas');
+  // o Técnico apenas SELECIONA as disponibilizadas — cadastro/edição continua exclusivo do Admin.
+  const [availableAreas, setAvailableAreas] = useState<Array<{ id: string; name: string }>>(() => {
+    try {
+      const cached = localStorage.getItem('epa_areas_cache')
+      return cached ? (JSON.parse(cached) as Array<{ id: string; name: string }>) : []
+    } catch {
+      return []
+    }
+  })
+  const [areaPickerOpen, setAreaPickerOpen] = useState(false)
+  const areaPickerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const loadAreas = async () => {
+      try {
+        if (!navigator.onLine || !pb.authStore.isValid) return
+        const recs = await pb.collection('areas').getFullList({ sort: 'name' })
+        const list = (recs as any[])
+          .map((r) => ({ id: r.id, name: r.name || '' }))
+          .filter((a) => a.name)
+        if (!cancelled && list.length > 0) {
+          setAvailableAreas(list)
+          try {
+            localStorage.setItem('epa_areas_cache', JSON.stringify(list))
+          } catch {
+            // ignore erros de cota do localStorage
+          }
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar áreas (areas):', err)
+      }
+    }
+    loadAreas()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Fecha o seletor de áreas ao clicar fora dele
+  useEffect(() => {
+    if (!areaPickerOpen) return
+    const onDocClick = (e: MouseEvent) => {
+      if (areaPickerRef.current && !areaPickerRef.current.contains(e.target as Node)) {
+        setAreaPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [areaPickerOpen])
+
+  const selectedAreas = parseAreaList(
+    typeof formData.area === 'string' ? formData.area : String(formData.area || ''),
+  )
+  // Áreas vindas da FICHA BASE do Admin (snapshot filled_fields.area): configuração
+  // administrativa — o Técnico não as remove, apenas ADICIONA outras. Sem área do
+  // Admin na base, o Técnico tem liberdade total para montar a lista.
+  const adminBaseAreas = parseAreaList(
+    typeof snapshotFilledFields.area === 'string'
+      ? snapshotFilledFields.area
+      : String(snapshotFilledFields.area || ''),
+  )
+  // Editável: não bloqueado por status/envio nem por devolução — mesmas regras dos
+  // demais campos do cabeçalho. OBS.: a trava de conteúdo da ficha base
+  // (isFieldLockedByAdmin) NÃO se aplica à ADIÇÃO de áreas (requisito da seleção
+  // múltipla); ela vira trava apenas para REMOÇÃO da área pré-definida pelo Admin.
+  const areaEditable = !isLocked && isFieldEditableForTechnician('area') && !formData.archived
+
+  const persistAreas = (next: string[]) => {
+    // setFormData direto (e não handleFieldChange): isFieldLockedByAdmin('area')
+    // bloquearia a adição quando a base do Admin trouxer uma área — a seleção
+    // múltipla precisa permitir acrescentar áreas à lista vinda da base.
+    setFormData((prev) => ({ ...prev, area: serializeAreaList(next) }))
+    setHasUnsavedChanges(true)
+  }
+
+  const toggleArea = (name: string) => {
+    if (!areaEditable) return
+    const next = selectedAreas.includes(name)
+      ? selectedAreas.filter((a) => a !== name)
+      : [...selectedAreas, name]
+    persistAreas(next)
+  }
+
+  const removeArea = (name: string) => {
+    if (!areaEditable) return
+    if (adminBaseAreas.includes(name)) {
+      toast({
+        title: 'Área definida pelo Administrador',
+        description:
+          'Esta área faz parte da configuração da ficha base e não pode ser removida. Se necessário, solicite a alteração ao Administrador.',
+        variant: 'destructive',
+      })
+      return
+    }
+    persistAreas(selectedAreas.filter((a) => a !== name))
+  }
+
   // Carrega projetos (local + PocketBase) para preenchimento de Cliente, Contrato e Projeto EPA
   useEffect(() => {
     let isMounted = true
@@ -2114,6 +2232,22 @@ function FieldFullEditor({
         title: 'Selecione um técnico',
         description:
           'Escolha ao menos um técnico no campo "Técnico / Responsável" antes de salvar ou enviar a planilha.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Áreas: a Planilha de Campo exige ao menos uma área selecionada (campo 'area' é
+    // obrigatório no servidor). Com a seleção múltipla, 'area' guarda os nomes separados
+    // por vírgula — sem área o create seria recusado (400) e a ficha ficaria presa na fila.
+    if (
+      parseAreaList(typeof formData.area === 'string' ? formData.area : String(formData.area || ''))
+        .length === 0
+    ) {
+      toast({
+        title: 'Selecione ao menos uma área',
+        description:
+          'Escolha uma ou várias áreas no cabeçalho "ÁREAS ATENDIDAS NESTA PLANILHA" antes de salvar ou enviar a planilha.',
         variant: 'destructive',
       })
       return
@@ -3058,6 +3192,94 @@ function FieldFullEditor({
                 placeholder="Ex.: 0 ou 12.5"
                 className="mt-1 font-mono text-xs sm:text-sm min-h-[42px]"
               />
+            )}
+          </div>
+          <div className="sm:col-span-2 lg:col-span-4">
+            <label className="epa-label">ÁREAS ATENDIDAS NESTA PLANILHA</label>
+            {areaEditable ? (
+              <div ref={areaPickerRef} className="relative mt-1">
+                <div
+                  className="flex min-h-[42px] w-full flex-wrap items-center gap-1.5 cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-1.5 dark:border-slate-700 dark:bg-slate-800"
+                  onClick={() => setAreaPickerOpen((v) => !v)}
+                >
+                  {selectedAreas.length === 0 && !areaPickerOpen && (
+                    <span className="text-sm text-slate-400">Selecione uma ou várias áreas</span>
+                  )}
+                  {selectedAreas.map((name) => (
+                    <span
+                      key={name}
+                      className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200"
+                    >
+                      {name}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          removeArea(name)
+                        }}
+                        className="ml-0.5 text-emerald-600 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-100"
+                        aria-label={`Remover área ${name}`}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                  <span className="ml-auto text-xs text-slate-400">▾</span>
+                </div>
+                {areaPickerOpen && (
+                  <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                    {availableAreas.length === 0 && (
+                      <p className="px-3 py-2 text-xs text-slate-500">
+                        Nenhuma área cadastrada — solicite o cadastro ao Administrador.
+                      </p>
+                    )}
+                    {availableAreas.map((a) => {
+                      const checked = selectedAreas.includes(a.name)
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => toggleArea(a.name)}
+                          className="flex w-full items-center gap-2.5 px-3 py-3 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-800"
+                        >
+                          <span
+                            className={cn(
+                              'flex h-5 w-5 shrink-0 items-center justify-center rounded border',
+                              checked
+                                ? 'border-emerald-600 bg-emerald-600 text-white'
+                                : 'border-slate-400 dark:border-slate-600',
+                            )}
+                          >
+                            {checked && '✓'}
+                          </span>
+                          <span className="text-slate-900 dark:text-slate-100">{a.name}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-1 flex min-h-[42px] flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                {selectedAreas.length === 0 ? (
+                  <span>—</span>
+                ) : (
+                  selectedAreas.map((name) => (
+                    <span
+                      key={name}
+                      className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                    >
+                      {name}
+                    </span>
+                  ))
+                )}
+              </div>
+            )}
+            {areaEditable && (
+              <p className="mt-1 text-[11px] text-slate-400">
+                Selecione apenas as áreas disponibilizadas pelo Administrador — o cadastro de áreas
+                continua exclusivo do Administrador.
+              </p>
             )}
           </div>
         </div>
