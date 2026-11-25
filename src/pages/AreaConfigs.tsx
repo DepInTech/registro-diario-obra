@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import pb from '@/lib/pocketbase/client'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import {
   Layers,
   Plus,
@@ -18,19 +16,20 @@ import {
   ArrowLeft,
   Loader2,
   AlertCircle,
-  X,
   FileSpreadsheet,
   ListChecks,
   Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  FIELD_SHEET_CONFIG_GROUPS,
-  COMPRESSOR_PARAM_ROWS,
-  PRESET_DATE_KEYS,
-  countConfiguredFields,
-} from '@/lib/fieldSheetConfigMetadata'
+import { PRESET_DATE_KEYS, countConfiguredFields } from '@/lib/fieldSheetConfigMetadata'
 import type { AreaConfigRecord, PresetFields } from '@/lib/fieldSheetConfigMetadata'
+import {
+  FieldSheetEditorForm,
+  emptyFieldSheetFormState,
+  presetFieldsToFormState,
+  formStateToPresetFields,
+  type FieldSheetFormState,
+} from '@/components/FieldSheetEditorForm'
 
 type ConfigForm = {
   id: string
@@ -52,193 +51,6 @@ const emptyForm = (): ConfigForm => ({
   preset_fields: {},
 })
 
-/** Chave de compressor usada no preset (ex.: compressor_data.horimetro1) */
-function compressorKey(prefix: string, index: number): string {
-  return `compressor_data.${prefix}${index}`
-}
-
-function PresetInput({
-  field,
-  value,
-  onChange,
-}: {
-  field: { key: string; label: string; type: string; placeholder?: string; options?: string[] }
-  value: unknown
-  onChange: (v: unknown) => void
-}) {
-  const strValue =
-    typeof value === 'string' ? value : value === undefined || value === null ? '' : String(value)
-  const commonClass = 'min-h-[38px] text-sm'
-  if (field.type === 'toggle') {
-    return (
-      <label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800">
-        <Switch checked={value === true} onCheckedChange={(v) => onChange(v)} />
-        <span>{field.label}</span>
-      </label>
-    )
-  }
-  if (field.type === 'select') {
-    return (
-      <div>
-        <label className="epa-label">{field.label}</label>
-        <select
-          className={cn(
-            commonClass,
-            'mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-800',
-          )}
-          value={strValue}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          <option value="">—</option>
-          {(field.options || []).map((o) => (
-            <option key={o} value={o}>
-              {o}
-            </option>
-          ))}
-        </select>
-      </div>
-    )
-  }
-  if (field.type === 'textarea') {
-    return (
-      <div className="sm:col-span-2">
-        <label className="epa-label">{field.label}</label>
-        <Textarea
-          className="mt-1 text-sm"
-          rows={3}
-          placeholder={field.placeholder}
-          value={strValue}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      </div>
-    )
-  }
-  return (
-    <div>
-      <label className="epa-label">{field.label}</label>
-      <Input
-        className={cn(commonClass, 'mt-1')}
-        type={field.type === 'number' || field.type === 'date' ? 'text' : field.type}
-        placeholder={field.placeholder}
-        value={strValue}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </div>
-  )
-}
-
-function ConfigPresetSection({
-  group,
-  preset,
-  onChange,
-}: {
-  group: (typeof FIELD_SHEET_CONFIG_GROUPS)[number]
-  preset: PresetFields
-  onChange: (key: string, value: unknown) => void
-}) {
-  const isCompressors = group.key === 'compressors'
-  const groupKeys = useMemo(() => {
-    if (!isCompressors) return group.fields.map((f) => `${group.key}.${f.key}`)
-    return []
-  }, [group, isCompressors])
-  const filled = groupKeys.filter((k) => {
-    const v = preset[k]
-    if (v === undefined || v === null) return false
-    if (typeof v === 'boolean') return v
-    return String(v).trim() !== ''
-  }).length
-
-  return (
-    <Card>
-      <CardContent className="pt-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold uppercase tracking-wide text-emerald-900 dark:text-emerald-300">
-              {group.label}
-            </h3>
-            <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-              {group.description}
-            </p>
-          </div>
-          {filled > 0 && (
-            <Badge
-              variant="outline"
-              className="shrink-0 border-emerald-300 text-emerald-700 dark:text-emerald-300"
-            >
-              {filled} campo{filled > 1 ? 's' : ''} pré-preenchido{filled > 1 ? 's' : ''}
-            </Badge>
-          )}
-        </div>
-
-        <Separator className="my-4" />
-
-        {!isCompressors && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {group.fields.map((f) => (
-              <PresetInput
-                key={f.key}
-                field={f}
-                value={preset[`${group.key}.${f.key}`]}
-                onChange={(v) => onChange(`${group.key}.${f.key}`, v)}
-              />
-            ))}
-          </div>
-        )}
-
-        {isCompressors && (
-          <div className="space-y-4">
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Valores padronizados por compressor. Deixe em branco o que o Técnico deve medir em
-              campo.
-            </p>
-            {[1, 2, 3, 4].map((ci) => {
-              const anyFilled = COMPRESSOR_PARAM_ROWS.some((p) => {
-                const v = preset[compressorKey(p.prefix, ci)]
-                return v !== undefined && v !== null && String(v).trim() !== ''
-              })
-              return (
-                <div
-                  key={ci}
-                  className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"
-                >
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase text-slate-600 dark:text-slate-300">
-                      Compressor {ci}
-                    </span>
-                    {anyFilled && (
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] border-emerald-300 text-emerald-700 dark:text-emerald-300"
-                      >
-                        configurado
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    {COMPRESSOR_PARAM_ROWS.map((p) => (
-                      <PresetInput
-                        key={p.prefix}
-                        field={{
-                          key: p.prefix,
-                          label: p.label,
-                          type: p.type,
-                          placeholder: p.placeholder,
-                        }}
-                        value={preset[compressorKey(p.prefix, ci)]}
-                        onChange={(v) => onChange(compressorKey(p.prefix, ci), v)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
 export default function AreaConfigs() {
   const { user } = useAuth()
   const { toast } = useToast()
@@ -248,6 +60,8 @@ export default function AreaConfigs() {
   const [isEditingExisting, setIsEditingExisting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [confirmToggle, setConfirmToggle] = useState<AreaConfigRecord | null>(null)
+  // Estado do formulário ÚNICO da Planilha de Campo (modo admin-config)
+  const [sheetForm, setSheetForm] = useState<FieldSheetFormState>(() => emptyFieldSheetFormState())
 
   const isAdmin = user?.role === 'admin'
 
@@ -279,6 +93,7 @@ export default function AreaConfigs() {
   const startNew = () => {
     setIsEditingExisting(false)
     setEditing(emptyForm())
+    setSheetForm(emptyFieldSheetFormState())
   }
 
   const startEdit = (rec: AreaConfigRecord) => {
@@ -293,24 +108,11 @@ export default function AreaConfigs() {
       preset_fields:
         rec.preset_fields && typeof rec.preset_fields === 'object' ? { ...rec.preset_fields } : {},
     })
+    setSheetForm(presetFieldsToFormState(rec.preset_fields))
   }
 
   const setField = (key: keyof ConfigForm, value: unknown) => {
     setEditing((prev) => (prev ? { ...prev, [key]: value } : prev))
-  }
-
-  const setPresetValue = (key: string, value: unknown) => {
-    setEditing((prev) => {
-      if (!prev) return prev
-      const nextPreset = { ...(prev.preset_fields || {}) }
-      if (value === undefined || value === null || value === '' || value === false) {
-        // Remove a chave quando esvaziada — campo volta a ficar livre para o Técnico
-        delete nextPreset[key]
-      } else {
-        nextPreset[key] = value
-      }
-      return { ...prev, preset_fields: nextPreset }
-    })
   }
 
   const handleSave = async () => {
@@ -325,8 +127,9 @@ export default function AreaConfigs() {
       return
     }
     // Validação leve das chaves de data (mesma regra DD/MM/AAAA da Planilha de Campo)
+    const presetOut = formStateToPresetFields(sheetForm)
     for (const dk of PRESET_DATE_KEYS) {
-      const v = editing.preset_fields[`oil_removal.${dk}`]
+      const v = presetOut[`oil_removal.${dk}`]
       if (typeof v === 'string' && v.trim() !== '') {
         const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v.trim())
         if (!m) {
@@ -347,7 +150,7 @@ export default function AreaConfigs() {
         contract_number: (editing.contract_number || '').trim(),
         description: (editing.description || '').trim(),
         active: editing.active,
-        preset_fields: editing.preset_fields || {},
+        preset_fields: presetOut,
       }
       if (isEditingExisting && editing.id) {
         await pb.collection('area_configs').update(editing.id, payload)
@@ -556,7 +359,7 @@ export default function AreaConfigs() {
   }
 
   // ---------- FORMULÁRIO ----------
-  const filledCount = countConfiguredFields(editing.preset_fields)
+  const filledCount = countConfiguredFields(formStateToPresetFields(sheetForm))
 
   return (
     <div className="space-y-5">
@@ -639,16 +442,12 @@ export default function AreaConfigs() {
         </Badge>
       </div>
 
-      <div className="space-y-4">
-        {FIELD_SHEET_CONFIG_GROUPS.map((group) => (
-          <ConfigPresetSection
-            key={group.key}
-            group={group}
-            preset={editing.preset_fields}
-            onChange={setPresetValue}
-          />
-        ))}
-      </div>
+      <FieldSheetEditorForm
+        mode="admin-config"
+        value={sheetForm}
+        onChange={setSheetForm}
+        disabled={saving}
+      />
 
       <div className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
         <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
