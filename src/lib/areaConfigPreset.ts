@@ -472,7 +472,9 @@ export interface UseAreaConfigPresetResult {
 /**
  * Hook do editor: gerencia carga e ciclo de vida da configuração de área.
  * - UMA área selecionada + sem snapshot correspondente -> busca em area_configs e aplica.
- * - Snapshot já gravado no documento -> usado como fonte da verdade (sem retroatividade).
+ * - Snapshot gravado no documento -> fallback apenas quando a busca não responde;
+ *   a config ATIVA no servidor é sempre a fonte da verdade (recarregar a página
+ *   mostra os poços atuais da área, não os de um snapshot antigo).
  * - Múltiplas áreas selecionadas: busca TODAS as configs ativas e mescla os presets
  *   (primeira área que preenche cada campo vence; campos já digitados não mudam).
  * - Área removida/trocada -> valores intactos do preset antigo que a nova config
@@ -513,13 +515,12 @@ export function useAreaConfigPreset(params: {
     const sameSet =
       storedSet.length === currentSet.length && storedSet.every((v, i) => v === currentSet[i])
 
-    // Documento existente com snapshot da MESMA seleção de áreas: usa o snapshot
-    // (sem refetch — evita carregamentos repetidos)
-    if (stored && sameSet && storedSet.length > 0) {
-      setActiveConfig(stored)
-      return
-    }
-
+    // FONTE DA VERDADE = SERVIDOR (area_configs da área selecionada).
+    // O snapshot gravado no documento NUNCA é usado como valor final quando a
+    // busca online responde: um snapshot antigo podia carregar poços de uma
+    // versão anterior da configuração (ou de outra área), fazendo o Técnico ver
+    // poços errados ao selecionar/trocar/recarregar a área. Ele entra apenas
+    // como fallback quando a busca não responde (offline/sem acesso).
     let cancelled = false
     ;(async () => {
       // Busca a config ativa de CADA área selecionada e mescla os presets
@@ -530,6 +531,13 @@ export function useAreaConfigPreset(params: {
       if (cancelled) return
 
       if (snaps.length === 0) {
+        // Busca sem resposta (offline ou sem acesso de leitura): mantém o
+        // snapshot gravado quando a seleção corresponde — não limpa valores
+        // nem troca os poços exibidos.
+        if (stored && sameSet && storedSet.length > 0) {
+          setActiveConfig(stored)
+          return
+        }
         // Nenhuma config (área sem configuração, offline ou seleção vazia):
         // sem vínculo; limpa snapshot remanescente e valores intactos do preset antigo
         setActiveConfig(null)

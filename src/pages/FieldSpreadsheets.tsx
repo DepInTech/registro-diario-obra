@@ -305,6 +305,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 approvedAt: (rec as any).approved_at || undefined,
                 serverCreatedAt: rec.created || undefined,
                 change_history: (rec as any).change_history || undefined,
+                area_config_snapshot: (rec as any).area_config_snapshot || undefined,
                 admin_snapshot: parsedSnapshot || existingLocal?.admin_snapshot,
                 syncStatus: 'synced',
                 lastModified: new Date(rec.updated).getTime(),
