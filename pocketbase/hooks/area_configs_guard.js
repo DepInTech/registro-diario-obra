@@ -12,6 +12,34 @@
 onRecordCreateRequest((e) => {
   const auth = e.auth
   const role = auth ? auth.getString('role') : ''
+  // LOG DE EVIDÊNCIA — PAYLOAD CRU: prova o que CHEGOU na rede antes de qualquer
+  // sanitização. `e.record.get()` no JSVM pode não refletir o body cru (JSON pode
+  // chegar como string/JsonRaw, e o merge do body no record tem particularidades),
+  // então lemos direto de `e.requestInfo().body` (disponível neste PocketBase —
+  // já usado em audit_export.js) e logamos tipo + trecho limitado a ~300 chars.
+  try {
+    const rawBody = (e.requestInfo() && e.requestInfo().body) || {}
+    const rawPf = rawBody['preset_fields']
+    let rawSnippet = ''
+    try {
+      const full = JSON.stringify(rawPf)
+      rawSnippet = full
+        ? full.length > 300
+          ? full.substring(0, 300) + '...[truncado]'
+          : full
+        : 'undefined'
+    } catch (sErr) {
+      rawSnippet = '(não serializável: ' + sErr + ')'
+    }
+    console.log(
+      '[area_configs] CREATE RAW-BODY preset_fields typeof=' +
+        (rawPf === null ? 'null' : typeof rawPf) +
+        ' trecho=' +
+        rawSnippet,
+    )
+  } catch (rawErr) {
+    console.log('[area_configs] CREATE (log body cru falhou): ' + rawErr)
+  }
   // LOG DE EVIDÊNCIA: prova nos logs do backend quantas chaves o cliente enviou
   try {
     let pfLog = e.record.get('preset_fields')
@@ -91,6 +119,31 @@ onRecordCreateRequest((e) => {
 onRecordUpdateRequest((e) => {
   const auth = e.auth
   const role = auth ? auth.getString('role') : ''
+  // LOG DE EVIDÊNCIA — PAYLOAD CRU (mesma razão do CREATE: o record pode não
+  // refletir o body cru; `e.requestInfo().body` mostra o que chegou na rede).
+  try {
+    const rawBody = (e.requestInfo() && e.requestInfo().body) || {}
+    const rawPf = rawBody['preset_fields']
+    let rawSnippet = ''
+    try {
+      const full = JSON.stringify(rawPf)
+      rawSnippet = full
+        ? full.length > 300
+          ? full.substring(0, 300) + '...[truncado]'
+          : full
+        : 'undefined'
+    } catch (sErr) {
+      rawSnippet = '(não serializável: ' + sErr + ')'
+    }
+    console.log(
+      '[area_configs] UPDATE RAW-BODY preset_fields typeof=' +
+        (rawPf === null ? 'null' : typeof rawPf) +
+        ' trecho=' +
+        rawSnippet,
+    )
+  } catch (rawErr) {
+    console.log('[area_configs] UPDATE (log body cru falhou): ' + rawErr)
+  }
   // LOG DE EVIDÊNCIA: prova nos logs do backend quantas chaves o cliente enviou
   try {
     let pfLog = e.record.get('preset_fields')

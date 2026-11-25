@@ -190,14 +190,42 @@ export default function AreaConfigs() {
         active: editing.active,
         preset_fields: presetOut,
       }
-      if (isEditingExisting && editing.id) {
-        await pb.collection('area_configs').update(editing.id, payload)
+      // EVIDÊNCIA DO ROUND-TRIP: após o save bem-sucedido, comparamos o que a
+      // tela serializou (presetOut) com o que o SERVIDOR devolveu no registro
+      // salvo. Se saiu preenchido e voltou vazio, avisamos o usuário na hora —
+      // os logs do backend ([area_configs] ... RAW-BODY) mostram o que chegou.
+      type SavedAreaConfig = { preset_fields?: PresetFields | null }
+      const saved = (isEditingExisting && editing.id
+        ? await pb.collection('area_configs').update(editing.id, payload)
+        : await pb.collection('area_configs').create(payload)) as unknown as SavedAreaConfig
+      const savedPreset = saved?.preset_fields ?? null
+      const savedKeys = Object.keys(savedPreset || {})
+      console.log(
+        `[AreaConfigs][handleSave] resposta do servidor (build v${APP_VERSION})`,
+        '| savedPresetFieldsKeys=',
+        savedKeys.length,
+        '| savedPresetFields=',
+        JSON.parse(JSON.stringify(savedPreset || {})),
+      )
+      if (serializedCount > 0 && savedKeys.length === 0) {
+        console.error(
+          '[AreaConfigs] SERVIDOR PERSISTIU preset_fields VAZIO — presetOut tinha',
+          serializedCount,
+          'chave(s). Dados podem não ter sido persistidos.',
+        )
+        toast({
+          title: 'Servidor recebeu a configuração vazia',
+          description:
+            'Seus dados podem não ter sido persistidos. Informe o suporte (evidência: log do console).',
+          variant: 'destructive',
+        })
+      }
+      if (isEditingExisting) {
         toast({
           title: 'Configuração atualizada',
           description: `Área "${name}" salva (nova versão da configuração).`,
         })
       } else {
-        await pb.collection('area_configs').create(payload)
         toast({ title: 'Área configurada', description: `Área "${name}" cadastrada com sucesso.` })
       }
       setEditing(null)
