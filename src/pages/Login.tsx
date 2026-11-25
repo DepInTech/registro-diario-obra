@@ -3,6 +3,7 @@ import { Eye, EyeOff, Lock, User, Loader2, AlertCircle, Sun, Moon, ArrowRight } 
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { logoEpa } from '@/components/EpaLogo'
+import { APP_VERSION } from '@/lib/appVersion'
 
 // Imagem estável de alta resolução: Lago límpido cercado por densa floresta e luz solar suave ao amanhecer
 const NATURE_BG = 'https://img.usecurling.com/p/1600/1200?q=lake+forest+sunrise'
@@ -311,7 +312,7 @@ export function LoginPage() {
         <div className="w-full pt-6 pb-1 flex justify-end items-center">
           <div className="text-right text-[11px] text-[#475569] space-y-0.5 select-none">
             <p className="font-medium text-[#334155]">EPA – Soluções Ambientais</p>
-            <p className="text-[10px] text-[#64748B]">Versão 1.0.0</p>
+            <p className="text-[10px] text-[#64748B]">build v{APP_VERSION}</p>
           </div>
         </div>
       </main>

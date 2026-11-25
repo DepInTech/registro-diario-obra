@@ -21,6 +21,7 @@ import {
   Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { APP_VERSION } from '@/lib/appVersion'
 import { PRESET_DATE_KEYS, countConfiguredFields } from '@/lib/fieldSheetConfigMetadata'
 import type { AreaConfigRecord, PresetFields } from '@/lib/fieldSheetConfigMetadata'
 import FieldSheetEditorForm from '@/components/FieldSheetEditorForm'
@@ -128,6 +129,22 @@ export default function AreaConfigs() {
     }
     // Validação leve das chaves de data (mesma regra DD/MM/AAAA da Planilha de Campo)
     const presetOut = formStateToPresetFields(sheetForm)
+    // TRAVA ANTI-PERDA: se a tela mostra campos preenchidos (filledCount) mas a
+    // serialização saiu vazia, é falha interna — nunca gravar vazio em silêncio.
+    if (filledCount > 0 && countConfiguredFields(presetOut) === 0) {
+      console.error(
+        '[AreaConfigs] Serialização vazia com',
+        filledCount,
+        'campo(s) visível(is) na tela — salvamento bloqueado.',
+      )
+      toast({
+        title: 'Falha interna de serialização',
+        description:
+          'Seus dados NÃO foram salvos; recarregue a página (Ctrl+Shift+R) e tente de novo.',
+        variant: 'destructive',
+      })
+      return
+    }
     for (const dk of PRESET_DATE_KEYS) {
       const v = presetOut[`oil_removal.${dk}`]
       if (typeof v === 'string' && v.trim() !== '') {
@@ -379,6 +396,12 @@ export default function AreaConfigs() {
             desta área.
           </p>
         </div>
+        <span
+          className="ml-auto shrink-0 select-none text-[10px] text-slate-400 dark:text-slate-500"
+          title="Versão do bundle em execução neste dispositivo"
+        >
+          build v{APP_VERSION}
+        </span>
       </div>
 
       <Card>

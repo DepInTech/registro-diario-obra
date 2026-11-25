@@ -12,6 +12,34 @@
 onRecordCreateRequest((e) => {
   const auth = e.auth
   const role = auth ? auth.getString('role') : ''
+  // LOG DE EVIDÊNCIA: prova nos logs do backend quantas chaves o cliente enviou
+  try {
+    let pfLog = e.record.get('preset_fields')
+    if (pfLog && typeof pfLog === 'string') {
+      try {
+        pfLog = JSON.parse(pfLog)
+      } catch (_) {
+        pfLog = null
+      }
+    }
+    let pfKeys = 0
+    if (pfLog && typeof pfLog === 'object' && !Array.isArray(pfLog)) {
+      pfKeys = Object.keys(pfLog).length
+    }
+    console.log(
+      '[area_configs] CREATE ' +
+        'area_name="' +
+        (e.record.getString('area_name') || '') +
+        '" ' +
+        'config_version=' +
+        e.record.getInt('config_version') +
+        ' ' +
+        'op=create presetFieldsKeys=' +
+        pfKeys,
+    )
+  } catch (logErr) {
+    console.log('[area_configs] CREATE (log falhou): ' + logErr)
+  }
   if (role !== 'admin') {
     try {
       const logs = $app.findCollectionByNameOrId('audit_logs')
@@ -63,6 +91,34 @@ onRecordCreateRequest((e) => {
 onRecordUpdateRequest((e) => {
   const auth = e.auth
   const role = auth ? auth.getString('role') : ''
+  // LOG DE EVIDÊNCIA: prova nos logs do backend quantas chaves o cliente enviou
+  try {
+    let pfLog = e.record.get('preset_fields')
+    if (pfLog && typeof pfLog === 'string') {
+      try {
+        pfLog = JSON.parse(pfLog)
+      } catch (_) {
+        pfLog = null
+      }
+    }
+    let pfKeys = 0
+    if (pfLog && typeof pfLog === 'object' && !Array.isArray(pfLog)) {
+      pfKeys = Object.keys(pfLog).length
+    }
+    console.log(
+      '[area_configs] UPDATE ' +
+        'area_name="' +
+        (e.record.getString('area_name') || '') +
+        '" ' +
+        'config_version=' +
+        e.record.getInt('config_version') +
+        ' ' +
+        'op=update presetFieldsKeys=' +
+        pfKeys,
+    )
+  } catch (logErr) {
+    console.log('[area_configs] UPDATE (log falhou): ' + logErr)
+  }
   if (role !== 'admin') {
     try {
       const logs = $app.findCollectionByNameOrId('audit_logs')
