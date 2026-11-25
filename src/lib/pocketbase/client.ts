@@ -3,15 +3,15 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-/** Encerra assinaturas realtime (usado em logout/troca de usuário).
- * NOTA: apenas unsubscribe() — pb.realtime.destroy() não existe no SDK
- * pocketbase 0.26 e quebra o tsc. */
-export async function forceRealtimeTeardown(): Promise<void> {
-  try {
-    await pb.realtime.unsubscribe()
-  } catch (_) {
-    // teardown best-effort: nunca bloquear logout/sync por falha aqui
-  }
+/**
+ * Encerra a assinatura realtime de todos os canais ativos.
+ * IMPORTAÇÃO: AuthContext e SyncContext importam o NOME `forceRealtimeTeardown`
+ * aqui e o default `pb` — os dois exports devem existir SEMPRE neste arquivo.
+ * (pb.realtime.destroy() NÃO existe no tipo RealtimeService do SDK pocketbase
+ * 0.26 — usar apenas pb.realtime.unsubscribe(), que sem argumento encerra todos.)
+ */
+export function forceRealtimeTeardown(): void {
+  pb.realtime.unsubscribe()
 }
 
 export default pb

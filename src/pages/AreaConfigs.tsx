@@ -129,27 +129,30 @@ export default function AreaConfigs() {
       return
     }
     // Validação leve das chaves de data (mesma regra DD/MM/AAAA da Planilha de Campo)
+    // (filledCount vem do escopo do componente — fonte INDEPENDENTE da serialização)
     const presetOut = formStateToPresetFields(sheetForm)
-    // LOG DE DEBUG temporário: prova em tela (console) o round-trip do estado do
-    // editor -> serialização. Se presetOut sair vazio com sheetForm preenchido,
-    // o problema está na serialização — o usuário pode confirmar no console.
-    console.log(
-      '[AreaConfigs][handleSave] sheetForm keys=',
-      Object.keys(sheetForm || {}),
-      'sheetForm=',
-      JSON.parse(JSON.stringify(sheetForm || {})),
-      'presetOut keys=',
-      Object.keys(presetOut).length,
-      'presetOut=',
-      presetOut,
-    )
-    // TRAVA ANTI-PERDA: filledCount vem do estado do editor (fonte INDEPENDENTE,
-    // countFilledFormFields). Se a tela mostra campos preenchidos mas a
-    // serialização saiu vazia, é falha interna — nunca gravar vazio em silêncio.
     const serializedCount = Object.keys(presetOut).length
+    // LOG DE DEBUG temporário: prova em tela (console) o round-trip do estado do
+    // editor -> serialização. "keys=19" do sheetForm é só a ESTRUTURA do estado
+    // (emptyFieldSheetFormState sempre nasce com 19 chaves) — o que prova dados
+    // é filledCount x serializedCount, com a versão do bundle no log para o
+    // usuário confirmar qual build está executando o save.
+    console.log(
+      `[AreaConfigs][handleSave] build v${APP_VERSION}`,
+      '| filledCount=',
+      filledCount,
+      '| serializedCount=',
+      serializedCount,
+      '| presetOut=',
+      JSON.parse(JSON.stringify(presetOut || {})),
+    )
+    // TRAVA ANTI-PERDA (mantida da v0.0.223, com régua melhor): se a tela mostra
+    // campos preenchidos mas a serialização saiu vazia, é falha interna — nunca
+    // gravar vazio em silêncio. (A perda PARCIAL agora é estruturalmente
+    // impossível: o serializador e o contador usam o MESMO código de mapas.)
     if (filledCount > 0 && serializedCount === 0) {
       console.error(
-        '[AreaConfigs] Serialização vazia com',
+        '[AreaConfigs] Serialização VAZIA com',
         filledCount,
         'campo(s) visível(is) na tela — salvamento bloqueado.',
       )
@@ -161,8 +164,10 @@ export default function AreaConfigs() {
       })
       return
     }
+    // Chaves de data — mesma regra DD/MM/AAAA da Planilha de Campo. Acesso
+    // direto a oil_removal_data.<chave> (o serializador aninhou a data ali).
     for (const dk of PRESET_DATE_KEYS) {
-      const v = presetOut[`oil_removal.${dk}`]
+      const v = (presetOut.oil_removal_data as Record<string, unknown> | undefined)?.[dk]
       if (typeof v === 'string' && v.trim() !== '') {
         const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v.trim())
         if (!m) {

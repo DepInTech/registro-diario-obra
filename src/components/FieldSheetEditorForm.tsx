@@ -309,10 +309,14 @@ export function formStateToPresetFields(state: FieldSheetFormState): PresetField
       }
     }
   }
-  // Poços de remediação: uma entrada por linha (linhas totalmente vazias são
-  // descartadas — não representam configuração).
-  const wells = (state.extraction_data || []).filter((row) =>
-    Object.values(row).some((v) => String(v ?? '').trim() !== ''),
+  // Poços de remediação: uma entrada por linha. Linhas sem NENHUM dado (nem o
+  // nome do poço) são descartadas; linhas com o poço identificado mas células
+  // de leitura vazias são MANTIDAS — a estrutura configurada pelo Admin (quantos
+  // poços existem) não pode se perder na serialização (task item 2).
+  const wells = (state.extraction_data || []).filter(
+    (row) =>
+      String(row.well ?? '').trim() !== '' ||
+      Object.values(row).some((v) => String(v ?? '').trim() !== ''),
   )
   if (wells.length > 0) {
     preset.wells = wells.map((row) => ({
@@ -337,7 +341,8 @@ export function formStateToPresetFields(state: FieldSheetFormState): PresetField
       const a = String(state.infiltration_data[`out${num}Afternoon`] ?? '').trim()
       return { exit: num, morning: m, afternoon: a }
     })
-    .filter((e) => e.morning !== '' || e.afternoon !== '')
+  // TODAS as saídas adicionadas pelo Admin são preservadas, mesmo com células
+  // vazias (estrutura configurada, task item 2) — sem filtro de conteúdo aqui.
   if (exits.length > 0) preset.infiltration_exits = exits
   return preset
 }
@@ -428,8 +433,15 @@ export default function FieldSheetEditorForm({
     .sort((a, b) => a - b)
   const addInfiltrationExit = () => {
     const next = (exitNumbers[exitNumbers.length - 1] || 0) + 1
-    setInfiltration(`out${next}Morning`, '')
-    setInfiltration(`out${next}Afternoon`, '')
+    // Um único onChange com AMBAS as chaves — dois setInfiltration seguidos
+    // usavam o `value` stale e a chave Morning se perdia no estado.
+    set({
+      infiltration_data: {
+        ...(value.infiltration_data || {}),
+        [`out${next}Morning`]: '',
+        [`out${next}Afternoon`]: '',
+      },
+    })
   }
 
   const compressorCount = Math.max(1, Math.min(4, value.compressor_count || 1))
