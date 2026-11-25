@@ -79,6 +79,29 @@ export function parseAreaConfigSnapshot(raw: unknown): AreaConfigSnapshot | null
   }
 }
 
+/**
+ * Lê uma lista dinâmica serializada em preset_fields (wells / infiltration_exits).
+ * Aceita array já parseado ou JSON em string (mesma convenção de
+ * FieldSheetEditorForm.tsx / parseJsonList).
+ */
+function parsePresetJsonList(raw: unknown): Array<Record<string, unknown>> {
+  let cur: unknown = raw
+  if (typeof cur === 'string') {
+    const trimmed = cur.trim()
+    if (!trimmed) return []
+    try {
+      cur = JSON.parse(trimmed)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(cur)) return []
+  return cur.filter(
+    (item): item is Record<string, unknown> =>
+      !!item && typeof item === 'object' && !Array.isArray(item),
+  )
+}
+
 /** Busca a configuração ativa da área em area_configs (leitura — qualquer autenticado) */
 export async function fetchAreaConfigByArea(
   pb: { collection: (n: string) => any },
@@ -185,9 +208,27 @@ export function isSheetFieldLockedByAreaPreset(
   sheetFieldPath: string,
 ): boolean {
   if (!snapshot) return false
+  const preset = snapshot.presetFields
   const presetKey = TARGET_TO_PRESET_KEY[sheetFieldPath]
-  if (!presetKey) return false
-  return isPresetValueFilled(snapshot.presetFields?.[presetKey])
+  if (presetKey) return isPresetValueFilled(preset?.[presetKey])
+  // Poços dinâmicos (tabela 1. Extração): extraction_data.<índice>.<coluna>
+  const wellMatch = /^extraction_data\.(\d+)\.(well|morning|afternoon|pump|autopump)$/.exec(
+    sheetFieldPath,
+  )
+  if (wellMatch) {
+    const row = parsePresetJsonList(preset?.wells)[Number(wellMatch[1])]
+    if (!row) return false
+    return isPresetValueFilled(row[wellMatch[2]])
+  }
+  // Saídas dinâmicas de infiltração (tabela 2): infiltration_data.out<N>Morning/Afternoon
+  const exitMatch = /^infiltration_data\.out(\d+)(Morning|Afternoon)$/.exec(sheetFieldPath)
+  if (exitMatch) {
+    const num = Number(exitMatch[1])
+    const row = parsePresetJsonList(preset?.infiltration_exits).find((e) => Number(e.exit) === num)
+    if (!row) return false
+    return isPresetValueFilled(row[exitMatch[2] === 'Morning' ? 'morning' : 'afternoon'])
+  }
+  return false
 }
 
 /** Valor atual do campo no formulário está vazio? (preset só preenche campo vazio) */
@@ -249,6 +290,54 @@ export function buildPresetPatch(
     if (isFormValueEmpty(curSub)) {
       if (!jsonTargets[objName]) jsonTargets[objName] = {}
       jsonTargets[objName][subKey] = String(val)
+    }
+  }
+  // Poços dinâmicos: quando o preset define poços e o formulário ainda não tem
+  // leitura digitada em nenhuma linha, as linhas do preset substituem as linhas
+  // default (PR-01/PR-02) — dados já digitados pelo Técnico nunca são sobrescritos.
+  const presetWells = parsePresetJsonList(presetFields.wells)
+  if (presetWells.length > 0) {
+    const curRows = Array.isArray(current.extraction_data) ? current.extraction_data : []
+    const hasTechnicianData = curRows.some((row) =>
+      ['morning', 'afternoon', 'pump', 'autopump'].some(
+        (col) => row && String((row as any)[col] ?? '').trim() !== '',
+      ),
+    )
+    if (!hasTechnicianData) {
+      const rowsMatchPreset =
+        curRows.length === presetWells.length &&
+        curRows.every(
+          (row, i) => String(row?.well ?? '').trim() === String(presetWells[i].well ?? '').trim(),
+        )
+      // Default PR-01/PR-02 (ou lista diferente da configurada) -> substitui pelas
+      // linhas do preset; se já são exatamente os poços do preset, não faz nada.
+      if (!rowsMatchPreset) {
+        patch.extraction_data = presetWells.map((w) => ({
+          well: String(w.well ?? ''),
+          morning: String(w.morning ?? ''),
+          afternoon: String(w.afternoon ?? ''),
+          pump: String(w.pump ?? ''),
+          autopump: String(w.autopump ?? ''),
+        }))
+      }
+    }
+  }
+  // Saídas dinâmicas de infiltração: out<N>Morning / out<N>Afternoon (só sub-chaves vazias)
+  for (const exit of parsePresetJsonList(presetFields.infiltration_exits)) {
+    const num = Number(exit.exit)
+    if (!Number.isInteger(num) || num < 1) continue
+    for (const [suffix, pk] of [
+      ['Morning', 'morning'],
+      ['Afternoon', 'afternoon'],
+    ] as const) {
+      const val = exit[pk]
+      if (!isPresetValueFilled(val)) continue
+      const subKey = `out${num}${suffix}`
+      const curSub = (current.infiltration_data as Record<string, unknown> | undefined)?.[subKey]
+      if (isFormValueEmpty(curSub)) {
+        if (!jsonTargets.infiltration_data) jsonTargets.infiltration_data = {}
+        jsonTargets.infiltration_data[subKey] = String(val)
+      }
     }
   }
   for (const [objName, subObj] of Object.entries(jsonTargets)) {

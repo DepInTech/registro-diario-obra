@@ -1561,13 +1561,19 @@ function FieldFullEditor({
   const activeInfiltrationExitNumbers = useMemo(() => {
     const list = getInfiltrationExitNumbers(formData.infiltration_data)
     const maxInMap = list.length > 0 ? Math.max(...list) : 3
-    const totalMax = Math.max(3, maxInMap, extraInfExitCount)
+    // Configuração de Áreas: saídas definidas pelo Admin entram na tabela do Técnico
+    const presetExitNums = Array.isArray(areaConfigSnapshot?.presetFields?.infiltration_exits)
+      ? (areaConfigSnapshot!.presetFields.infiltration_exits as Array<Record<string, unknown>>)
+          .map((e) => Number(e?.exit))
+          .filter((n) => Number.isInteger(n) && n >= 1)
+      : []
+    const totalMax = Math.max(3, maxInMap, extraInfExitCount, ...presetExitNums)
     const result: number[] = []
     for (let i = 1; i <= totalMax; i++) {
       result.push(i)
     }
     return result
-  }, [formData.infiltration_data, extraInfExitCount])
+  }, [formData.infiltration_data, extraInfExitCount, areaConfigSnapshot])
 
   const handleAddCompressor = () => {
     const nextIdx = Math.max(
@@ -1584,7 +1590,24 @@ function FieldFullEditor({
     })
   }
 
+  // Saídas de infiltração pré-configuradas pelo Admin na Configuração de Áreas:
+  // se o preset define saídas, o Técnico não pode adicionar além delas.
+  const presetInfiltrationExitCount = Array.isArray(
+    areaConfigSnapshot?.presetFields?.infiltration_exits,
+  )
+    ? (areaConfigSnapshot!.presetFields.infiltration_exits as unknown[]).length
+    : 0
+
   const handleAddInfiltrationExit = () => {
+    if (!isAdmin && presetInfiltrationExitCount > 0) {
+      toast({
+        title: 'Ação não permitida',
+        description:
+          'As saídas de infiltração já foram configuradas pelo Administrador nesta área.',
+        variant: 'destructive',
+      })
+      return
+    }
     const nextExit = Math.max(
       4,
       (activeInfiltrationExitNumbers[activeInfiltrationExitNumbers.length - 1] || 3) + 1,
@@ -1903,6 +1926,13 @@ function FieldFullEditor({
 
   const isSubFieldLockedByAdmin = (parentField: string, subField: string) => {
     if (isAdmin) return false
+    // Configuração de Áreas: sub-campos dinâmicos (poços/saídas) travam pelo preset
+    if (parentField === 'extraction_data') {
+      return isAreaPresetLocked(`extraction_data.${subField}`)
+    }
+    if (parentField === 'infiltration_data' && /^out\d+(Morning|Afternoon)$/.test(subField)) {
+      return isAreaPresetLocked(`infiltration_data.${subField}`)
+    }
     const parentVal = snapshotFilledFields[parentField]
     if (!parentVal || typeof parentVal !== 'object') return false
     const subVal = parentVal[subField]
@@ -1934,12 +1964,21 @@ function FieldFullEditor({
   // Aparência de campo bloqueado pela devolução (o input já vem desabilitado).
   const returnBlockedClass =
     'bg-slate-100 text-slate-400 cursor-not-allowed dark:bg-slate-800/60 dark:text-slate-500'
+  // Aparência de campo bloqueado pelo preset da Configuração de Áreas (Admin preencheu).
+  const lockedFieldClass =
+    'bg-slate-100 text-slate-500 cursor-not-allowed dark:bg-slate-800/60 dark:text-slate-500'
 
   // Extraction wells handlers
-  // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha (snapshotWells vazio e initialSheet.extraction_data vazio)
+  // O Técnico só pode adicionar poço se o Admin não pré-configurou poços na ficha
+  // (admin_snapshot OU preset da Configuração de Áreas) — snapshotWells vazio,
+  // initialSheet.extraction_data vazio e preset de área sem poços.
+  const presetWellsCount = Array.isArray(areaConfigSnapshot?.presetFields?.wells)
+    ? (areaConfigSnapshot!.presetFields.wells as unknown[]).length
+    : 0
   const canAddExtractionWell =
     isAdmin ||
     ((!snapshotWells || snapshotWells.length === 0) &&
+      presetWellsCount === 0 &&
       (!initialSheet.extraction_data || initialSheet.extraction_data.length === 0))
 
   const handleAddExtractionWell = () => {
@@ -2003,6 +2042,11 @@ function FieldFullEditor({
     if (!currentRow) return
 
     if (!isExtractionCellEditable(col)) {
+      return
+    }
+
+    // Preset da Configuração de Áreas: célula com valor definido pelo Admin fica travada
+    if (!isAdmin && isAreaPresetLocked(`extraction_data.${index}.${col}`)) {
       return
     }
 
@@ -3464,8 +3508,20 @@ function FieldFullEditor({
                 const persistedRow = initialSheet?.extraction_data?.[index]
                 const lockedRow = snapRow || persistedRow
 
-                const effectiveWell = (snapRow?.well || persistedRow?.well || '').trim()
-                const hasLockedWell = isTechnician && Boolean(effectiveWell)
+                const effectiveWell = (
+                  snapRow?.well ||
+                  persistedRow?.well ||
+                  formData.extraction_data?.[index]?.well ||
+                  ''
+                ).trim()
+                const presetWellLocked = isAreaPresetLocked(`extraction_data.${index}.well`)
+                const presetMorningLocked = isAreaPresetLocked(`extraction_data.${index}.morning`)
+                const presetAfternoonLocked = isAreaPresetLocked(
+                  `extraction_data.${index}.afternoon`,
+                )
+                const presetPumpLocked = isAreaPresetLocked(`extraction_data.${index}.pump`)
+                const presetAutopumpLocked = isAreaPresetLocked(`extraction_data.${index}.autopump`)
+                const hasLockedWell = isTechnician && (Boolean(effectiveWell) || presetWellLocked)
 
                 const effectivePump =
                   snapRow?.pump !== undefined &&
@@ -3476,8 +3532,11 @@ function FieldFullEditor({
                         persistedRow?.pump !== null &&
                         String(persistedRow.pump).trim() !== ''
                       ? persistedRow.pump
-                      : undefined
-                const hasLockedPump = isTechnician && effectivePump !== undefined
+                      : row.pump !== undefined && row.pump !== null && presetPumpLocked
+                        ? row.pump
+                        : undefined
+                const hasLockedPump =
+                  isTechnician && (effectivePump !== undefined || presetPumpLocked)
 
                 return (
                   <tr key={index} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
@@ -3492,10 +3551,15 @@ function FieldFullEditor({
                           onChange={(e) =>
                             handleExtractionCellChange(index, 'well', e.target.value)
                           }
-                          disabled={isLocked || !isExtractionCellEditable('extraction_data')}
+                          disabled={
+                            isLocked ||
+                            presetWellLocked ||
+                            !isExtractionCellEditable('extraction_data')
+                          }
                           placeholder="Ex.: PR-01"
                           className={cn(
                             'h-10 font-semibold text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700',
+                            presetWellLocked && lockedFieldClass,
                             !isExtractionCellEditable('extraction_data') && returnBlockedClass,
                           )}
                         />
@@ -3509,10 +3573,16 @@ function FieldFullEditor({
                           handleExtractionCellChange(index, 'morning', e.target.value)
                           clearReturnedField('hidrometro')
                         }}
-                        disabled={isLocked || !isExtractionCellEditable('morning_time')}
+                        disabled={
+                          isLocked ||
+                          presetMorningLocked ||
+                          !isExtractionCellEditable('morning_time')
+                        }
+                        readOnly={presetMorningLocked}
                         placeholder="0,00"
                         className={cn(
                           'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
+                          presetMorningLocked && lockedFieldClass,
                           !isExtractionCellEditable('morning_time') && returnBlockedClass,
                           isReturnedField('hidrometro') &&
                             'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
@@ -3527,10 +3597,16 @@ function FieldFullEditor({
                           handleExtractionCellChange(index, 'afternoon', e.target.value)
                           clearReturnedField('hidrometro')
                         }}
-                        disabled={isLocked || !isExtractionCellEditable('afternoon_time')}
+                        disabled={
+                          isLocked ||
+                          presetAfternoonLocked ||
+                          !isExtractionCellEditable('afternoon_time')
+                        }
+                        readOnly={presetAfternoonLocked}
                         placeholder="0,00"
                         className={cn(
                           'h-10 font-mono text-xs sm:text-sm text-right border-slate-300 dark:border-slate-700',
+                          presetAfternoonLocked && lockedFieldClass,
                           !isExtractionCellEditable('afternoon_time') && returnBlockedClass,
                           isReturnedField('hidrometro') &&
                             'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
@@ -3549,10 +3625,15 @@ function FieldFullEditor({
                           onChange={(e) =>
                             handleExtractionCellChange(index, 'pump', e.target.value)
                           }
-                          disabled={isLocked || !isExtractionCellEditable('extraction_data')}
+                          disabled={
+                            isLocked ||
+                            presetPumpLocked ||
+                            !isExtractionCellEditable('extraction_data')
+                          }
                           placeholder="0,00"
                           className={cn(
                             'h-10 font-mono text-xs sm:text-sm text-center border-slate-300 dark:border-slate-700',
+                            presetPumpLocked && lockedFieldClass,
                             !isExtractionCellEditable('extraction_data') && returnBlockedClass,
                           )}
                         />
@@ -3588,10 +3669,15 @@ function FieldFullEditor({
                                   handleFieldChange('extraction_data', updated)
                                   clearReturnedField('autopump')
                                 }}
-                                disabled={isLocked || !isExtractionCellEditable('autopump')}
+                                disabled={
+                                  isLocked ||
+                                  presetAutopumpLocked ||
+                                  !isExtractionCellEditable('autopump')
+                                }
                                 placeholder="Descreva a saída..."
                                 className={cn(
                                   'h-10 text-xs sm:text-sm flex-1',
+                                  presetAutopumpLocked && lockedFieldClass,
                                   !isExtractionCellEditable('autopump') && returnBlockedClass,
                                   isReturnedField('autopump') &&
                                     'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold focus-visible:ring-amber-500',
@@ -3645,9 +3731,14 @@ function FieldFullEditor({
                               handleFieldChange('extraction_data', updated)
                               clearReturnedField('autopump')
                             }}
-                            disabled={isLocked || !isExtractionCellEditable('autopump')}
+                            disabled={
+                              isLocked ||
+                              presetAutopumpLocked ||
+                              !isExtractionCellEditable('autopump')
+                            }
                             className={cn(
                               'epa-input h-10 w-full text-xs sm:text-sm',
+                              presetAutopumpLocked && lockedFieldClass,
                               !isExtractionCellEditable('autopump') && returnBlockedClass,
                               isReturnedField('autopump') &&
                                 'border-amber-500 bg-amber-50/60 dark:border-amber-500 dark:bg-amber-950/40 font-semibold',
