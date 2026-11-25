@@ -1831,8 +1831,9 @@ function FieldFullEditor({
   )
   // Editável: não bloqueado por status/envio nem por devolução — mesmas regras dos
   // demais campos do cabeçalho. OBS.: a trava de conteúdo da ficha base
-  // (isFieldLockedByAdmin) NÃO se aplica à ADIÇÃO de áreas (requisito da seleção
-  // múltipla); ela vira trava apenas para REMOÇÃO da área pré-definida pelo Admin.
+  // (isFieldLockedByAdmin) NÃO se aplica à seleção de áreas (adição OU remoção —
+  // requisito: o Técnico monta livremente a lista; remover da seleção não exclui
+  // o cadastro administrativo da área).
   const areaEditable = !isLocked && isFieldEditableForTechnician('area') && !formData.archived
 
   const persistAreas = (next: string[]) => {
@@ -1851,17 +1852,11 @@ function FieldFullEditor({
     persistAreas(next)
   }
 
+  // Sem bloqueio por ficha base: o Técnico remove QUALQUER área da seleção da
+  // planilha (inclusive as vindas da base do Admin). Isso NÃO exclui o cadastro
+  // administrativo da área — apenas a tira desta planilha.
   const removeArea = (name: string) => {
     if (!areaEditable) return
-    if (adminBaseAreas.includes(name)) {
-      toast({
-        title: 'Área definida pelo Administrador',
-        description:
-          'Esta área faz parte da configuração da ficha base e não pode ser removida. Se necessário, solicite a alteração ao Administrador.',
-        variant: 'destructive',
-      })
-      return
-    }
     persistAreas(selectedAreas.filter((a) => a !== name))
   }
 
@@ -1926,16 +1921,6 @@ function FieldFullEditor({
       ? adminSnapshot.filled_fields
       : {}
   ) as Record<string, any>
-
-  // Áreas vindas da FICHA BASE do Admin (snapshot filled_fields.area): configuração
-  // administrativa — o Técnico não as remove, apenas ADICIONA outras. Sem área do
-  // Admin na base, o Técnico tem liberdade total para montar a lista.
-  // (Declarado após snapshotFilledFields — dependência de ordem corrigida em v0.0.201.)
-  const adminBaseAreas = parseAreaList(
-    typeof snapshotFilledFields.area === 'string'
-      ? snapshotFilledFields.area
-      : String(snapshotFilledFields.area || ''),
-  )
 
   // PARTE 1 — Configuração de Áreas: hook pré-existente (área única -> preset do Admin).
   // Declarado APÓS formData/isAdmin/setFormData (regra de hooks). A trava é condicional

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'epa-gestao-v1'
+const CACHE_NAME = 'epa-gestao-v2'
 const STATIC_ASSETS = ['/', '/index.html', '/manifest.json', '/favicon.ico']
 
 self.addEventListener('install', (event) => {
@@ -31,6 +31,9 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
+        // Cache-busting: JS/CSS têm nome com hash por build — nunca servir do
+        // cache de assets nem sobrescrever o cache com resposta sem hash.
+        if (url.pathname.startsWith('/assets/')) return response
         if (response.status === 200) {
           const clone = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
@@ -38,7 +41,10 @@ self.addEventListener('fetch', (event) => {
         return response
       })
       .catch(async () => {
-        const cached = await caches.match(event.request)
+        // Fallback OFFLINE: navegação volta sempre ao index.html do REDE
+        // primeiro (bundle novo a cada deploy); só se a rede falhar usa o
+        // cache — e assets com hash só do cache com o MESMO nome de arquivo.
+        const cached = await caches.match(event.request, { ignoreSearch: false })
         if (cached) return cached
         if (event.request.headers.get('accept')?.includes('text/html')) {
           return caches.match('/index.html')
