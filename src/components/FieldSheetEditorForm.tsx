@@ -358,6 +358,42 @@ const COMPRESSOR_ROWS: ReadonlyArray<{
   { label: 'Troca de óleo e filtro (a cada 1000hrs)', prefix: 'trocaOleo', ph: 'Ex.: 6000HR' },
 ]
 
+/** Contagem INDEPENDENTE de campos preenchidos no estado do editor — não passa
+ * pela serialização (formStateToPresetFields). É a fonte do contador exibido na
+ * tela e da trava anti-perda: se este número é > 0 e a serialização sai vazia,
+ * há perda real e o salvamento é bloqueado. */
+export function countFilledFormFields(state: FieldSheetFormState | null | undefined): number {
+  if (!state || typeof state !== 'object') return 0
+  let count = 0
+  // Campos simples (mesma convenção dos mapas preset acima)
+  for (const target of Object.values(SIMPLE_PRESET_MAP)) {
+    if (String((state as any)[target] ?? '').trim() !== '') count++
+  }
+  // Booleanos marcados
+  for (const target of Object.values(BOOLEAN_PRESET_MAP)) {
+    if ((state as any)[target] === true) count++
+  }
+  // Sub-chaves de objetos JSON (oil_removal_data.*, infiltração fixa)
+  for (const [, [objName, subKey]] of Object.entries(JSON_SUB_PRESET_MAP)) {
+    const obj = (state as any)[objName]
+    if (obj && typeof obj === 'object' && String((obj as any)[subKey] ?? '').trim() !== '') count++
+  }
+  // Compressores (cada índice preenchido conta)
+  const cobj = state.compressor_data || {}
+  for (const key of Object.keys(cobj)) {
+    if (String((cobj as any)[key] ?? '').trim() !== '') count++
+  }
+  // Poços da tabela 1 (linha com qualquer valor conta como 1)
+  for (const row of state.extraction_data || []) {
+    if (Object.values(row).some((v) => String(v ?? '').trim() !== '')) count++
+  }
+  // Saídas dinâmicas da tabela 2 (out<N>Morning / out<N>Afternoon)
+  for (const [k, v] of Object.entries(state.infiltration_data || {})) {
+    if (/^out\d+(Morning|Afternoon)$/.test(k) && String(v ?? '').trim() !== '') count++
+  }
+  return count
+}
+
 export default function FieldSheetEditorForm({
   mode,
   value,

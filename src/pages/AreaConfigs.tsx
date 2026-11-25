@@ -29,6 +29,7 @@ import {
   emptyFieldSheetFormState,
   presetFieldsToFormState,
   formStateToPresetFields,
+  countFilledFormFields,
   type FieldSheetFormState,
 } from '@/components/FieldSheetEditorForm'
 
@@ -129,9 +130,24 @@ export default function AreaConfigs() {
     }
     // Validação leve das chaves de data (mesma regra DD/MM/AAAA da Planilha de Campo)
     const presetOut = formStateToPresetFields(sheetForm)
-    // TRAVA ANTI-PERDA: se a tela mostra campos preenchidos (filledCount) mas a
+    // LOG DE DEBUG temporário: prova em tela (console) o round-trip do estado do
+    // editor -> serialização. Se presetOut sair vazio com sheetForm preenchido,
+    // o problema está na serialização — o usuário pode confirmar no console.
+    console.log(
+      '[AreaConfigs][handleSave] sheetForm keys=',
+      Object.keys(sheetForm || {}),
+      'sheetForm=',
+      JSON.parse(JSON.stringify(sheetForm || {})),
+      'presetOut keys=',
+      Object.keys(presetOut).length,
+      'presetOut=',
+      presetOut,
+    )
+    // TRAVA ANTI-PERDA: filledCount vem do estado do editor (fonte INDEPENDENTE,
+    // countFilledFormFields). Se a tela mostra campos preenchidos mas a
     // serialização saiu vazia, é falha interna — nunca gravar vazio em silêncio.
-    if (filledCount > 0 && countConfiguredFields(presetOut) === 0) {
+    const serializedCount = Object.keys(presetOut).length
+    if (filledCount > 0 && serializedCount === 0) {
       console.error(
         '[AreaConfigs] Serialização vazia com',
         filledCount,
@@ -376,7 +392,11 @@ export default function AreaConfigs() {
   }
 
   // ---------- FORMULÁRIO ----------
-  const filledCount = countConfiguredFields(formStateToPresetFields(sheetForm))
+  // Contador INDEPENDENTE da serialização: conta os campos preenchidos
+  // DIRETO no estado do editor (countFilledFormFields). Se fosse derivado da
+  // mesma função que serializa (tautologia antiga), a trava anti-perda nunca
+  // dispararia — agora detecta perda real e bloqueia o save.
+  const filledCount = countFilledFormFields(sheetForm)
 
   return (
     <div className="space-y-5">
