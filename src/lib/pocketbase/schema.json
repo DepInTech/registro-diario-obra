@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-25T18:11:51.036Z",
+  "generatedAt": "2026-11-25T18:42:18.437Z",
   "collections": [
     {
       "name": "users",
@@ -29,21 +29,29 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "role",
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["admin", "technician"]
+          "selectValues": [
+            "admin",
+            "technician"
+          ]
         },
         {
           "name": "active",
@@ -91,17 +99,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_clients_name ON clients (name)"]
+      "indexes": [
+        "CREATE INDEX idx_clients_name ON clients (name)"
+      ]
     },
     {
       "name": "companies",
@@ -131,17 +146,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_companies_name ON companies (name)"]
+      "indexes": [
+        "CREATE INDEX idx_companies_name ON companies (name)"
+      ]
     },
     {
       "name": "areas",
@@ -171,17 +193,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_areas_name ON areas (name)"]
+      "indexes": [
+        "CREATE INDEX idx_areas_name ON areas (name)"
+      ]
     },
     {
       "name": "contracts",
@@ -231,24 +260,35 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["active", "paused", "closed"]
+          "selectValues": [
+            "active",
+            "paused",
+            "closed"
+          ]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE UNIQUE INDEX idx_contracts_code ON contracts (code)"]
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_contracts_code ON contracts (code)"
+      ]
     },
     {
       "name": "projects",
@@ -318,21 +358,30 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["active", "paused", "completed"]
+          "selectValues": [
+            "active",
+            "paused",
+            "completed"
+          ]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "assigned_users",
@@ -443,17 +492,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE UNIQUE INDEX idx_wells_project_id ON wells (project, identification)"]
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_wells_project_id ON wells (project, identification)"
+      ]
     },
     {
       "name": "reports_rdo",
@@ -490,7 +546,12 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["Sol", "Chuva", "Nublado", "Instável"]
+          "selectValues": [
+            "Sol",
+            "Chuva",
+            "Nublado",
+            "Instável"
+          ]
         },
         {
           "name": "performed_by",
@@ -559,7 +620,12 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["draft", "submitted", "approved", "returned"]
+          "selectValues": [
+            "draft",
+            "submitted",
+            "approved",
+            "returned"
+          ]
         },
         {
           "name": "review_notes",
@@ -572,14 +638,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "vector",
@@ -720,17 +791,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_report_wells_report ON report_wells (report)"]
+      "indexes": [
+        "CREATE INDEX idx_report_wells_report ON report_wells (report)"
+      ]
     },
     {
       "name": "report_photos",
@@ -773,24 +851,34 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "category",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["general", "field_inspection"]
+          "selectValues": [
+            "general",
+            "field_inspection"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_report_photos_report_order ON report_photos (report, 'order')"]
+      "indexes": [
+        "CREATE INDEX idx_report_photos_report_order ON report_photos (report, 'order')"
+      ]
     },
     {
       "name": "field_spreadsheets",
@@ -888,21 +976,31 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["draft", "submitted", "approved", "returned"]
+          "selectValues": [
+            "draft",
+            "submitted",
+            "approved",
+            "returned"
+          ]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "review_notes",
@@ -1124,14 +1222,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -1173,17 +1276,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE UNIQUE INDEX idx_system_settings_key ON system_settings (key)"]
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_system_settings_key ON system_settings (key)"
+      ]
     },
     {
       "name": "in_situ_sheets",
@@ -1231,7 +1341,12 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["draft", "submitted", "approved", "returned"]
+          "selectValues": [
+            "draft",
+            "submitted",
+            "approved",
+            "returned"
+          ]
         },
         {
           "name": "responsible_name",
@@ -1262,14 +1377,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "nutrient_rows",
@@ -1342,17 +1462,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE UNIQUE INDEX idx_na_area_configs_name ON na_area_configs (area_name)"]
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_na_area_configs_name ON na_area_configs (area_name)"
+      ]
     },
     {
       "name": "na_sheets",
@@ -1400,7 +1527,12 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["draft", "submitted", "approved", "returned"]
+          "selectValues": [
+            "draft",
+            "submitted",
+            "approved",
+            "returned"
+          ]
         },
         {
           "name": "notes",
@@ -1425,14 +1557,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -1475,7 +1612,12 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["submitted", "returned", "approved", "info"]
+          "selectValues": [
+            "submitted",
+            "returned",
+            "approved",
+            "info"
+          ]
         },
         {
           "name": "entity",
@@ -1507,14 +1649,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -1574,17 +1721,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE UNIQUE INDEX idx_area_configs_name ON area_configs (area_name)"]
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_area_configs_name ON area_configs (area_name)"
+      ]
     }
   ]
 }
