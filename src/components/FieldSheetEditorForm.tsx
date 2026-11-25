@@ -137,6 +137,38 @@ const JSON_SUB_PRESET_MAP: Record<string, [keyof FieldSheetFormState, string]> =
   'oil_removal.sao2DataLimpeza': ['oil_removal_data', 'sao2DataLimpeza'],
 }
 
+// ---------------------------------------------------------------------------
+// Listas dinâmicas — formato de serialização estável em preset_fields:
+//
+// - wells: array de objetos [{ well, morning, afternoon, pump, autopump }, ...]
+//   (uma entrada por linha da tabela 1. Extração; linhas parciais/vazias são
+//   mantidas para preservar a contagem configurada pelo Admin).
+// - infiltration_exits: array de objetos [{ exit: N, morning, afternoon }, ...]
+//   (uma entrada por saída dinâmica outN* da tabela 2. Infiltração; o par
+//   fixo geralMorning/geralAfternoon continua nos campos simples infiltration.*).
+//
+// Na LEITURA também aceita JSON em string (legado/robustez: PocketBase pode
+// devolver o campo JSON como string dependendo do cliente).
+// ---------------------------------------------------------------------------
+
+function parseJsonList(raw: unknown): Array<Record<string, unknown>> {
+  let cur: unknown = raw
+  if (typeof cur === 'string') {
+    const trimmed = cur.trim()
+    if (!trimmed) return []
+    try {
+      cur = JSON.parse(trimmed)
+    } catch {
+      return []
+    }
+  }
+  if (!Array.isArray(cur)) return []
+  return cur.filter(
+    (item): item is Record<string, unknown> =>
+      !!item && typeof item === 'object' && !Array.isArray(item),
+  )
+}
+
 /** Extrai o estado do formulário a partir de um preset_fields salvo */
 export function presetFieldsToFormState(
   preset: PresetFields | null | undefined,
@@ -181,6 +213,28 @@ export function presetFieldsToFormState(
     }
     ;(state as any).compressor_data = obj
   }
+  // Poços de remediação (tabela 1. Extração): wells = [{ well, morning,
+  // afternoon, pump, autopump }, ...] — TODAS as colunas configuradas pelo Admin.
+  const wells = parseJsonList(preset.wells)
+  if (wells.length > 0) {
+    state.extraction_data = wells.map((w) => ({
+      well: str(w.well),
+      morning: str(w.morning),
+      afternoon: str(w.afternoon),
+      pump: str(w.pump),
+      autopump: str(w.autopump),
+    }))
+  }
+  // Saídas dinâmicas de infiltração (tabela 2): infiltration_exits =
+  // [{ exit, morning, afternoon }, ...] -> out<N>Morning / out<N>Afternoon.
+  for (const exit of parseJsonList(preset.infiltration_exits)) {
+    const num = Number(exit.exit)
+    if (!Number.isInteger(num) || num < 1) continue
+    if (isPresetValueFilled(exit.morning))
+      state.infiltration_data[`out${num}Morning`] = str(exit.morning)
+    if (isPresetValueFilled(exit.afternoon))
+      state.infiltration_data[`out${num}Afternoon`] = str(exit.afternoon)
+  }
   return state
 }
 
@@ -218,6 +272,36 @@ export function formStateToPresetFields(state: FieldSheetFormState): PresetField
       }
     }
   }
+  // Poços de remediação: uma entrada por linha (linhas totalmente vazias são
+  // descartadas — não representam configuração).
+  const wells = (state.extraction_data || []).filter((row) =>
+    Object.values(row).some((v) => String(v ?? '').trim() !== ''),
+  )
+  if (wells.length > 0) {
+    preset.wells = wells.map((row) => ({
+      well: String(row.well ?? '').trim(),
+      morning: String(row.morning ?? '').trim(),
+      afternoon: String(row.afternoon ?? '').trim(),
+      pump: String(row.pump ?? '').trim(),
+      autopump: String(row.autopump ?? '').trim(),
+    }))
+  }
+  // Saídas dinâmicas de infiltração: out<N>Morning/out<N>Afternoon agrupados
+  // por saída [{ exit, morning, afternoon }, ...] (par fixo Geral fica fora).
+  const exitNums = new Set<number>()
+  for (const key of Object.keys(state.infiltration_data || {})) {
+    const m = /^out(\d+)(Morning|Afternoon)$/.exec(key)
+    if (m) exitNums.add(Number(m[1]))
+  }
+  const exits = Array.from(exitNums)
+    .sort((a, b) => a - b)
+    .map((num) => {
+      const m = String(state.infiltration_data[`out${num}Morning`] ?? '').trim()
+      const a = String(state.infiltration_data[`out${num}Afternoon`] ?? '').trim()
+      return { exit: num, morning: m, afternoon: a }
+    })
+    .filter((e) => e.morning !== '' || e.afternoon !== '')
+  if (exits.length > 0) preset.infiltration_exits = exits
   return preset
 }
 
