@@ -6,10 +6,11 @@ pb.autoCancellation(false)
 export default pb
 export { pb }
 
-export async function forceRealtimeTeardown(): Promise<void> {
+export function forceRealtimeTeardown() {
+  const client = pb as unknown as { disconnect?: () => void }
   try {
-    ;(pb as unknown as { disconnect?: () => void }).disconnect?.()
+    client.disconnect?.()
   } catch {
-    // best-effort: nunca lançar erro
+    // teardown silencioso: o cliente pode já estar desconectado
   }
 }
