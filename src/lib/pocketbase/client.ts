@@ -3,17 +3,14 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-export default pb
-export { pb }
-
-/**
- * Encerra as subscriptions realtime do PocketBase (best-effort).
- * O método pode ser privado no tipo do SDK — por isso o cast seguro.
- */
-export async function forceRealtimeTeardown(): Promise<void> {
-  try {
-    ;(pb as unknown as { disconnect?: () => void }).disconnect?.()
-  } catch {
-    // best-effort: nunca lançar erro
+/** Encerra a assinatura de realtime desta instância de forma segura.
+ *  Mantida por compatibilidade (AuthContext/SyncContext importam o export nomeado). */
+export function forceRealtimeTeardown(): void {
+  const disconnect = (pb as unknown as { disconnect?: () => void }).disconnect
+  if (typeof disconnect === 'function') {
+    disconnect.call(pb)
   }
 }
+
+export { pb }
+export default pb

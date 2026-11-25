@@ -9,7 +9,6 @@ import { InSituPage } from '@/pages/InSituSpreadsheets'
 import { NaMonitoringPage } from '@/pages/NaMonitoringSpreadsheets'
 import { UsersPage } from '@/pages/Users'
 import { AuditPage } from '@/pages/Audit'
-import AreaConfigs from '@/pages/AreaConfigs'
 import { LoginPage } from '@/pages/Login'
 import { Toaster } from '@/components/ui/toaster'
 import { useToast } from '@/hooks/use-toast'
@@ -27,10 +26,7 @@ export default function Index() {
   const handleNavigate = (targetPage: Page) => {
     const role = user?.role
 
-    if (
-      (targetPage === 'users' || targetPage === 'audit' || targetPage === 'area_configs') &&
-      role !== 'admin'
-    ) {
+    if ((targetPage === 'users' || targetPage === 'audit') && role !== 'admin') {
       toast({
         title: 'Você não possui permissão para esta função.',
         description: 'Acesso restrito a Administradores.',
@@ -47,7 +43,7 @@ export default function Index() {
   useEffect(() => {
     if (!user) return
     const role = user.role
-    if ((page === 'users' || page === 'audit' || page === 'area_configs') && role !== 'admin') {
+    if ((page === 'users' || page === 'audit') && role !== 'admin') {
       toast({
         title: 'Você não possui permissão para esta função.',
         description: 'Redirecionando para Visão Geral.',
@@ -133,13 +129,13 @@ export default function Index() {
       )}
       {page === 'users' && user?.role === 'admin' && <UsersPage />}
       {page === 'audit' && user?.role === 'admin' && <AuditPage />}
-      {page === 'area_configs' && user?.role === 'admin' && <AreaConfigs />}
       {/* Fallback de navegação se o usuário tiver perfil que não se enquadre na rota */}
       {(page === 'rdos' || page === 'fields' || page === 'insitu' || page === 'na_monitoring') &&
         user?.role !== 'admin' &&
         user?.role !== 'technician' && <Dashboard navigate={handleNavigate} />}
-      {(page === 'users' || page === 'audit' || page === 'area_configs') &&
-        user?.role !== 'admin' && <Dashboard navigate={handleNavigate} />}
+      {(page === 'users' || page === 'audit') && user?.role !== 'admin' && (
+        <Dashboard navigate={handleNavigate} />
+      )}
       <Toaster />
     </Layout>
   )

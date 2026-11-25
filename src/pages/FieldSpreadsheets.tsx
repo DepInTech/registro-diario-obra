@@ -32,6 +32,7 @@ import {
   RotateCcw,
   Archive,
   ArchiveRestore,
+  MapPin,
 } from 'lucide-react'
 import { logoEpa } from '@/components/EpaLogo'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -146,12 +147,17 @@ function getInfiltrationExitNumbers(infData: Record<string, any> | null | undefi
 }
 
 import { CorrectionHistorySection } from '@/components/CorrectionHistorySection'
+import AreaConfigs from '@/pages/AreaConfigs'
 
 export function FieldSpreadsheets({ query }: { query: string }) {
   const [editing, setEditing] = useState<OfflineFieldSheetItem | null>(null)
   const [items, setItems] = useState<OfflineFieldSheetItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [tabFilter, setTabFilter] = useState<'active' | 'archived' | 'deleted'>('active')
+  const [tabFilter, setTabFilter] = useState<'active' | 'archived' | 'deleted' | 'area_configs'>(
+    'active',
+  )
+  const { user: moduleUser } = useAuth()
+  const isModuleAdmin = moduleUser?.role === 'admin'
   const [filter, setFilter] = useState<'all' | Status>('all')
   const [isNew, setIsNew] = useState(false)
   const [deleteModalSheet, setDeleteModalSheet] = useState<OfflineFieldSheetItem | null>(null)
@@ -973,51 +979,82 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     )
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Abas Ativas vs Arquivadas vs Excluídos (Admin) */}
-      <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800">
+  // Barra de abas extraída: visível também na aba "Configuração de Áreas" (para voltar)
+  const areaConfigTabBar = (
+    <div className="flex items-center gap-2 border-b pb-2 dark:border-slate-800">
+      <button
+        onClick={() => setTabFilter('active')}
+        className={cn(
+          'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+          tabFilter === 'active'
+            ? 'bg-emerald-700 text-white shadow-sm'
+            : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+        )}
+      >
+        <FileSpreadsheet className="h-4 w-4" />
+        Planilhas Ativas ({activeCount})
+      </button>
+      {user?.role !== 'technician' && (
         <button
-          onClick={() => setTabFilter('active')}
+          onClick={() => setTabFilter('archived')}
           className={cn(
             'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
-            tabFilter === 'active'
+            tabFilter === 'archived'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+          )}
+        >
+          <Archive className="h-4 w-4" />
+          Arquivadas ({archivedCount})
+        </button>
+      )}
+      {user?.role === 'admin' && (
+        <button
+          onClick={() => setTabFilter('deleted')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
+            tabFilter === 'deleted'
+              ? 'bg-red-700 text-white shadow-sm'
+              : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
+          )}
+        >
+          <Trash2 className="h-4 w-4" />
+          Excluídas ({deletedCount})
+        </button>
+      )}
+      {isModuleAdmin && (
+        <button
+          onClick={() => setTabFilter('area_configs')}
+          className={cn(
+            'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition ml-auto',
+            tabFilter === 'area_configs'
               ? 'bg-emerald-700 text-white shadow-sm'
               : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
           )}
         >
-          <FileSpreadsheet className="h-4 w-4" />
-          Planilhas Ativas ({activeCount})
+          <MapPin className="h-4 w-4" />
+          Configuração de Áreas
         </button>
-        {user?.role !== 'technician' && (
-          <button
-            onClick={() => setTabFilter('archived')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
-              tabFilter === 'archived'
-                ? 'bg-amber-600 text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
-            )}
-          >
-            <Archive className="h-4 w-4" />
-            Arquivadas ({archivedCount})
-          </button>
-        )}
-        {user?.role === 'admin' && (
-          <button
-            onClick={() => setTabFilter('deleted')}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg transition',
-              tabFilter === 'deleted'
-                ? 'bg-red-700 text-white shadow-sm'
-                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
-            )}
-          >
-            <Trash2 className="h-4 w-4" />
-            Excluídas ({deletedCount})
-          </button>
-        )}
+      )}
+    </div>
+  )
+
+  // ABA "CONFIGURAÇÃO DE ÁREAS" (só Admin): gerenciamento de áreas da Planilha de
+  // Campo DENTRO do módulo (mesmo conceito de organização do Monitoramento de NA).
+  // A barra de abas permanece visível para voltar às planilhas.
+  if (tabFilter === 'area_configs' && isModuleAdmin) {
+    return (
+      <div className="space-y-6">
+        {areaConfigTabBar}
+        <AreaConfigs />
       </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Abas Ativas vs Arquivadas vs Excluídos (Admin) vs Configuração de Áreas (Admin) */}
+      {areaConfigTabBar}
 
       {tabFilter === 'archived' && (
         <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300 flex items-center justify-between">
@@ -1710,11 +1747,16 @@ function FieldFullEditor({
   // e o campo NÃO está autorizado (lista vazia/inválida bloqueia tudo).
   const isReturnBlocked = (field: string) => !isFieldEditableForTechnician(field)
 
-  // SELEÇÃO MÚLTIPLA DE ÁREAS: o Admin cadastra/disponibiliza as áreas (coleção 'areas');
-  // o Técnico apenas SELECIONA as disponibilizadas — cadastro/edição continua exclusivo do Admin.
+  // SELEÇÃO MÚLTIPLA DE ÁREAS: a lista vem da CONFIGURAÇÃO DA PLANILHA DE CAMPO
+  // (coleção area_configs — o Admin cadastra as áreas na aba "Configuração de Áreas"
+  // deste módulo). Apenas áreas ATIVAS aparecem na seleção; planilhas antigas
+  // continuam abrindo pois a lista gravada nelas não é reescrita. Fallback: se
+  // area_configs ainda não tem registros (instalações antigas), usa a coleção
+  // legacy 'areas'. O Técnico apenas SELECIONA — cadastro/edição continua
+  // exclusivo do Admin.
   const [availableAreas, setAvailableAreas] = useState<Array<{ id: string; name: string }>>(() => {
     try {
-      const cached = localStorage.getItem('epa_areas_cache')
+      const cached = localStorage.getItem('epa_field_area_configs_cache')
       return cached ? (JSON.parse(cached) as Array<{ id: string; name: string }>) : []
     } catch {
       return []
@@ -1728,20 +1770,40 @@ function FieldFullEditor({
     const loadAreas = async () => {
       try {
         if (!navigator.onLine || !pb.authStore.isValid) return
-        const recs = await pb.collection('areas').getFullList({ sort: 'name' })
-        const list = (recs as any[])
-          .map((r) => ({ id: r.id, name: r.name || '' }))
-          .filter((a) => a.name)
+        // Fonte primária: area_configs (somente ativas)
+        let list: Array<{ id: string; name: string }> = []
+        try {
+          const recs = await pb.collection('area_configs').getFullList({
+            sort: 'area_name',
+            filter: 'active = true',
+          })
+          list = (recs as any[])
+            .map((r) => ({ id: r.id, name: r.area_name || '' }))
+            .filter((a) => a.name)
+        } catch (err) {
+          console.warn('Erro ao carregar áreas (area_configs):', err)
+        }
+        // Fallback legacy: nenhuma área configurada -> coleção antiga 'areas'
+        if (list.length === 0) {
+          try {
+            const legacyRecs = await pb.collection('areas').getFullList({ sort: 'name' })
+            list = (legacyRecs as any[])
+              .map((r) => ({ id: r.id, name: r.name || '' }))
+              .filter((a) => a.name)
+          } catch (err) {
+            console.warn('Erro ao carregar áreas legadas (areas):', err)
+          }
+        }
         if (!cancelled && list.length > 0) {
           setAvailableAreas(list)
           try {
-            localStorage.setItem('epa_areas_cache', JSON.stringify(list))
+            localStorage.setItem('epa_field_area_configs_cache', JSON.stringify(list))
           } catch {
             // ignore erros de cota do localStorage
           }
         }
       } catch (err) {
-        console.warn('Erro ao carregar áreas (areas):', err)
+        console.warn('Erro ao carregar áreas para seleção:', err)
       }
     }
     loadAreas()
