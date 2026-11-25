@@ -1558,23 +1558,6 @@ function FieldFullEditor({
     return result
   }, [formData.compressor_data, extraCompCount])
 
-  const activeInfiltrationExitNumbers = useMemo(() => {
-    const list = getInfiltrationExitNumbers(formData.infiltration_data)
-    const maxInMap = list.length > 0 ? Math.max(...list) : 3
-    // Configuração de Áreas: saídas definidas pelo Admin entram na tabela do Técnico
-    const presetExitNums = Array.isArray(areaConfigSnapshot?.presetFields?.infiltration_exits)
-      ? (areaConfigSnapshot!.presetFields.infiltration_exits as Array<Record<string, unknown>>)
-          .map((e) => Number(e?.exit))
-          .filter((n) => Number.isInteger(n) && n >= 1)
-      : []
-    const totalMax = Math.max(3, maxInMap, extraInfExitCount, ...presetExitNums)
-    const result: number[] = []
-    for (let i = 1; i <= totalMax; i++) {
-      result.push(i)
-    }
-    return result
-  }, [formData.infiltration_data, extraInfExitCount, areaConfigSnapshot])
-
   const handleAddCompressor = () => {
     const nextIdx = Math.max(
       3,
@@ -1589,14 +1572,6 @@ function FieldFullEditor({
       description: `COMPRESSOR ${String(nextIdx).padStart(2, '0')} adicionado às tabelas de Compressores e Linha de Ar.`,
     })
   }
-
-  // Saídas de infiltração pré-configuradas pelo Admin na Configuração de Áreas:
-  // se o preset define saídas, o Técnico não pode adicionar além delas.
-  const presetInfiltrationExitCount = Array.isArray(
-    areaConfigSnapshot?.presetFields?.infiltration_exits,
-  )
-    ? (areaConfigSnapshot!.presetFields.infiltration_exits as unknown[]).length
-    : 0
 
   const handleAddInfiltrationExit = () => {
     if (!isAdmin && presetInfiltrationExitCount > 0) {
@@ -1907,6 +1882,32 @@ function FieldFullEditor({
     setFormData,
     pbClient: pb,
   })
+
+  // Saídas de infiltração dinâmicas: números ativos = preset da Configuração de Áreas
+  // (saídas definidas pelo Admin entram na tabela do Técnico) + extras já adicionados.
+  const activeInfiltrationExitNumbers = useMemo(() => {
+    const list = getInfiltrationExitNumbers(formData.infiltration_data)
+    const maxInMap = list.length > 0 ? Math.max(...list) : 3
+    const presetExitNums = Array.isArray(areaConfigSnapshot?.presetFields?.infiltration_exits)
+      ? (areaConfigSnapshot!.presetFields.infiltration_exits as Array<Record<string, unknown>>)
+          .map((e) => Number(e?.exit))
+          .filter((n) => Number.isInteger(n) && n >= 1)
+      : []
+    const totalMax = Math.max(3, maxInMap, extraInfExitCount, ...presetExitNums)
+    const result: number[] = []
+    for (let i = 1; i <= totalMax; i++) {
+      result.push(i)
+    }
+    return result
+  }, [formData.infiltration_data, extraInfExitCount, areaConfigSnapshot])
+
+  // Saídas de infiltração pré-configuradas pelo Admin na Configuração de Áreas:
+  // se o preset define saídas, o Técnico não pode adicionar além delas.
+  const presetInfiltrationExitCount = Array.isArray(
+    areaConfigSnapshot?.presetFields?.infiltration_exits,
+  )
+    ? (areaConfigSnapshot!.presetFields.infiltration_exits as unknown[]).length
+    : 0
 
   const isFieldLockedByAdmin = (field: string) => {
     if (isAdmin) return false
