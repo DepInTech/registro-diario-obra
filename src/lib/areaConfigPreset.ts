@@ -350,6 +350,104 @@ export function buildPresetPatch(
   return patch
 }
 
+/**
+ * Troca de área: remove valores aplicados pelo preset ANTERIOR que o usuário
+ * ainda não editou (valor atual === valor do preset antigo) e que a nova
+ * configuração não volta a preencher. Dados digitados pelo usuário nunca são
+ * apagados; seleção/remoção de uma área não toca dados das demais.
+ */
+function clearStalePresetValues(
+  current: Record<string, any>,
+  prevPreset: PresetFields,
+  nextPreset: PresetFields,
+): Record<string, any> {
+  const next: Record<string, any> = { ...current }
+  const stale = (cur: unknown, prevVal: unknown) =>
+    isPresetValueFilled(prevVal) &&
+    cur !== undefined &&
+    cur !== null &&
+    String(cur) === String(prevVal)
+
+  for (const [presetKey, col] of Object.entries(SIMPLE_FIELD_MAP)) {
+    if (stale(next[col], prevPreset[presetKey]) && !isPresetValueFilled(nextPreset[presetKey])) {
+      next[col] = ''
+    }
+  }
+  for (const [presetKey, [objName, subKey]] of Object.entries(JSON_OBJ_FIELD_MAP)) {
+    const obj = next[objName]
+    const curSub = obj && typeof obj === 'object' ? (obj as any)[subKey] : undefined
+    if (stale(curSub, prevPreset[presetKey]) && !isPresetValueFilled(nextPreset[presetKey])) {
+      next[objName] = { ...(obj && typeof obj === 'object' ? obj : {}), [subKey]: '' }
+    }
+  }
+  for (const [presetKey, target] of Object.entries(COMPRESSOR_KEYS)) {
+    const [objName, subKey] = target.split('.')
+    const obj = next[objName]
+    const curSub = obj && typeof obj === 'object' ? (obj as any)[subKey] : undefined
+    if (stale(curSub, prevPreset[presetKey]) && !isPresetValueFilled(nextPreset[presetKey])) {
+      next[objName] = { ...(obj && typeof obj === 'object' ? obj : {}), [subKey]: '' }
+    }
+  }
+  for (const [presetKey, col] of Object.entries(BOOLEAN_FIELD_MAP)) {
+    if (prevPreset[presetKey] === true && next[col] === true && nextPreset[presetKey] !== true) {
+      next[col] = false
+    }
+  }
+  // Poços: linhas que ainda são exatamente as do preset antigo (sem leitura
+  // digitada) são substituídas pelas da nova config; sem poços na nova config,
+  // as linhas permanecem como estão (dados já digitados nunca são apagados).
+  const prevWells = parsePresetJsonList(prevPreset.wells)
+  if (prevWells.length > 0) {
+    const curRows = Array.isArray(next.extraction_data) ? next.extraction_data : []
+    const hasTechnicianData = curRows.some((row) =>
+      ['morning', 'afternoon', 'pump', 'autopump'].some(
+        (col) => row && String((row as any)[col] ?? '').trim() !== '',
+      ),
+    )
+    const rowsMatchPrev =
+      curRows.length === prevWells.length &&
+      curRows.every(
+        (row, i) => String(row?.well ?? '').trim() === String(prevWells[i].well ?? '').trim(),
+      )
+    if (rowsMatchPrev && !hasTechnicianData) {
+      const nextWells = parsePresetJsonList(nextPreset.wells)
+      if (nextWells.length > 0) {
+        next.extraction_data = nextWells.map((w) => ({
+          well: String(w.well ?? ''),
+          morning: String(w.morning ?? ''),
+          afternoon: String(w.afternoon ?? ''),
+          pump: String(w.pump ?? ''),
+          autopump: String(w.autopump ?? ''),
+        }))
+      }
+    }
+  }
+  // Saídas de infiltração dinâmicas: mesmo critério (valor intacto do preset antigo)
+  const prevExits = parsePresetJsonList(prevPreset.infiltration_exits)
+  const nextExits = parsePresetJsonList(nextPreset.infiltration_exits)
+  for (const exit of prevExits) {
+    const num = Number(exit.exit)
+    if (!Number.isInteger(num) || num < 1) continue
+    for (const [suffix, pk] of [
+      ['Morning', 'morning'],
+      ['Afternoon', 'afternoon'],
+    ] as const) {
+      const subKey = `out${num}${suffix}`
+      const curSub = (next.infiltration_data as Record<string, unknown> | undefined)?.[subKey]
+      const nextVal = nextExits.find((e) => Number(e.exit) === num)?.[pk]
+      if (stale(curSub, exit[pk]) && !isPresetValueFilled(nextVal)) {
+        next.infiltration_data = {
+          ...(next.infiltration_data && typeof next.infiltration_data === 'object'
+            ? next.infiltration_data
+            : {}),
+          [subKey]: '',
+        }
+      }
+    }
+  }
+  return next
+}
+
 export interface UseAreaConfigPresetResult {
   /** Configuração ativa usada por esta planilha (do snapshot gravado ou recém-buscada) */
   areaConfigSnapshot: AreaConfigSnapshot | null
@@ -361,8 +459,12 @@ export interface UseAreaConfigPresetResult {
  * Hook do editor: gerencia carga e ciclo de vida da configuração de área.
  * - UMA área selecionada + sem snapshot correspondente -> busca em area_configs e aplica.
  * - Snapshot já gravado no documento -> usado como fonte da verdade (sem retroatividade).
- * - Área removida/trocada -> snapshot é limpo do formulário; valores digitados permanecem.
- * - Admin: não busca nem aplica (configuração é coisa do Técnico consumir).
+ * - Múltiplas áreas selecionadas: busca TODAS as configs ativas e mescla os presets
+ *   (primeira área que preenche cada campo vence; campos já digitados não mudam).
+ * - Área removida/trocada -> valores intactos do preset antigo que a nova config
+ *   não preenche são limpos (clearStalePresetValues); valores digitados permanecem.
+ * - Admin: também busca e aplica (precisa visualizar a config da área); o BLOQUEIO
+ *   continua exclusivo do Técnico (isAreaPresetLocked retorna false para Admin).
  */
 export function useAreaConfigPreset(params: {
   formData: Record<string, any>
@@ -385,45 +487,84 @@ export function useAreaConfigPreset(params: {
   )
 
   useEffect(() => {
-    if (isAdmin) return
     const stored = parseAreaConfigSnapshot(formData?.[AREA_CONFIG_SNAPSHOT_FIELD])
-    const single = selectedAreas.length === 1 ? selectedAreas[0] : null
+    const currentSet = [...selectedAreas].sort()
+    const storedSet = stored
+      ? stored.areaName
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .sort()
+      : []
+    const sameSet =
+      storedSet.length === currentSet.length && storedSet.every((v, i) => v === currentSet[i])
 
-    // Documento existente com snapshot da MESMA área: usa o snapshot (sem refetch)
-    if (stored && stored.areaName === single) {
+    // Documento existente com snapshot da MESMA seleção de áreas: usa o snapshot
+    // (sem refetch — evita carregamentos repetidos)
+    if (stored && sameSet && storedSet.length > 0) {
       setActiveConfig(stored)
-      return
-    }
-    // Snapshot de outra área ou seleção não-unitária: descarta o vínculo no FORMULÁRIO
-    // (dados já digitados permanecem; novo salvamento sai sem configuração)
-    if (stored) {
-      setActiveConfig(null)
-      setFormData((prev: any) => {
-        if (prev?.[AREA_CONFIG_SNAPSHOT_FIELD] === undefined) return prev
-        const next = { ...prev }
-        delete next[AREA_CONFIG_SNAPSHOT_FIELD]
-        return next
-      })
-      return
-    }
-    if (!single) {
-      setActiveConfig(null)
       return
     }
 
     let cancelled = false
     ;(async () => {
-      const snap = await fetchAreaConfigByArea(pbClient, single)
+      // Busca a config ativa de CADA área selecionada e mescla os presets
+      const snaps = (
+        await Promise.all(selectedAreas.map((name) => fetchAreaConfigByArea(pbClient, name)))
+      ).filter((s): s is AreaConfigSnapshot => !!s)
+
       if (cancelled) return
-      if (!snap) {
+
+      if (snaps.length === 0) {
+        // Nenhuma config (área sem configuração, offline ou seleção vazia):
+        // sem vínculo; limpa snapshot remanescente e valores intactos do preset antigo
         setActiveConfig(null)
+        setFormData((prev: any) => {
+          if (!prev) return prev
+          const prevSnap = parseAreaConfigSnapshot(prev[AREA_CONFIG_SNAPSHOT_FIELD])
+          const cleaned = prevSnap ? clearStalePresetValues(prev, prevSnap.presetFields, {}) : prev
+          if (cleaned === prev && prev[AREA_CONFIG_SNAPSHOT_FIELD] === undefined) {
+            return prev
+          }
+          const next = { ...cleaned }
+          delete next[AREA_CONFIG_SNAPSHOT_FIELD]
+          return next
+        })
         return
       }
-      setActiveConfig(snap)
+
+      // Mescla: a primeira área que preenche cada chave do preset vence
+      const merged: PresetFields = {}
+      for (const s of snaps) {
+        for (const [k, v] of Object.entries(s.presetFields)) {
+          if (merged[k] === undefined || merged[k] === null || merged[k] === '') merged[k] = v
+        }
+      }
+      const combined: AreaConfigSnapshot = {
+        configId: snaps.map((s) => s.configId).join(','),
+        configVersion: snaps.reduce((max, s) => Math.max(max, s.configVersion), 0),
+        areaName: selectedAreas.join(', '),
+        contractNumber: snaps
+          .map((s) => s.contractNumber)
+          .filter((c) => c.trim() !== '')
+          .join(', '),
+        description: snaps
+          .map((s) => s.description)
+          .filter((d) => d.trim() !== '')
+          .join(' | '),
+        presetFields: merged,
+        loadedAt: new Date().toISOString(),
+      }
+      setActiveConfig(combined)
       setFormData((prev: any) => {
-        // Aplica o preset sobre o estado MAIS RECENTE do formulário
-        const patch = buildPresetPatch(prev || {}, snap.presetFields)
-        return { ...(prev || {}), ...patch, [AREA_CONFIG_SNAPSHOT_FIELD]: JSON.stringify(snap) }
+        const prevSnap = parseAreaConfigSnapshot(prev?.[AREA_CONFIG_SNAPSHOT_FIELD])
+        // 1) limpa valores intactos do preset ANTERIOR que a nova config não preenche
+        const base = prevSnap
+          ? clearStalePresetValues(prev || {}, prevSnap.presetFields, merged)
+          : prev || {}
+        // 2) aplica o preset novo sobre o estado MAIS RECENTE (só campos vazios)
+        const patch = buildPresetPatch(base, merged)
+        return { ...base, ...patch, [AREA_CONFIG_SNAPSHOT_FIELD]: JSON.stringify(combined) }
       })
     })()
 
