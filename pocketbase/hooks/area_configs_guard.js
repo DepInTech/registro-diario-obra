@@ -174,6 +174,23 @@ onRecordCreateRequest((e) => {
     // Primeira versão da configuração
     const ver = e.record.getInt('config_version')
     if (ver < 1) e.record.set('config_version', 1)
+    // LOG FINAL: o que será de fato PERSISTIDO (após recuperação + sanitização)
+    try {
+      const finalPf = e.record.get('preset_fields')
+      let finalObj = finalPf
+      if (typeof finalObj === 'string') {
+        try {
+          finalObj = JSON.parse(finalObj)
+        } catch (_) {
+          finalObj = null
+        }
+      }
+      const finalKeys =
+        finalObj && typeof finalObj === 'object' && !Array.isArray(finalObj)
+          ? Object.keys(finalObj).length
+          : 0
+      console.log('[area_configs] CREATE FINAL presetFieldsKeys=' + finalKeys)
+    } catch (_) {}
   } catch (_) {}
 
   e.next()
@@ -337,6 +354,23 @@ onRecordUpdateRequest((e) => {
     // snapshot, e não a configuração viva — por isso o incremento é seguro)
     const ver = e.record.getInt('config_version')
     e.record.set('config_version', ver + 1)
+    // LOG FINAL: o que será de fato PERSISTIDO (após recuperação + sanitização)
+    try {
+      const finalPf = e.record.get('preset_fields')
+      let finalObj = finalPf
+      if (typeof finalObj === 'string') {
+        try {
+          finalObj = JSON.parse(finalObj)
+        } catch (_) {
+          finalObj = null
+        }
+      }
+      const finalKeys =
+        finalObj && typeof finalObj === 'object' && !Array.isArray(finalObj)
+          ? Object.keys(finalObj).length
+          : 0
+      console.log('[area_configs] UPDATE FINAL presetFieldsKeys=' + finalKeys)
+    } catch (_) {}
   } catch (_) {}
 
   e.next()
