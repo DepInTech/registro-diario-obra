@@ -156,6 +156,9 @@ export async function directSaveSheetToServer(
           ? { assigned_technicians: item.assigned_technicians }
           : {}),
         ...(item.admin_snapshot ? { admin_snapshot: item.admin_snapshot } : {}),
+        // Snapshot da Configuração de Áreas (migração 0046): viaja no create para que
+        // o bloqueio condicional por preset sobreviva a salvar/sincronizar/reabrir
+        ...(item.area_config_snapshot ? { area_config_snapshot: item.area_config_snapshot } : {}),
       }
 
       const sanitized = sanitizeFieldSpreadsheetPayload(payload)
@@ -237,6 +240,9 @@ export async function directSaveSheetToServer(
         deleted_by: item.deletedBy || undefined,
         deleted_at: item.deletedAt || undefined,
         ...(item.admin_snapshot ? { admin_snapshot: item.admin_snapshot } : {}),
+        // Snapshot da Configuração de Áreas (migração 0046): viaja no update para que
+        // o bloqueio condicional por preset sobreviva a salvar/sincronizar/reabrir
+        ...(item.area_config_snapshot ? { area_config_snapshot: item.area_config_snapshot } : {}),
       }
       if (item.projectId && item.projectId.trim()) {
         payload.project = item.projectId

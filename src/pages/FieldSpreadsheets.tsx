@@ -247,7 +247,7 @@ export function FieldSpreadsheets({ query }: { query: string }) {
                 clientName: client?.name || 'Petrobras — Refinaria Sul',
                 contractCode: contract?.code || 'CT-EPA-2025-017',
                 date: rec.date ? rec.date.slice(0, 10) : '2025-05-28',
-                area: rec.area || 'Oficina Central',
+                area: rec.area || '',
                 operator: rec.operator,
                 operatorName: parsedSnapshot?.technician_name || op?.name || '',
                 assigned_technicians: Array.isArray((rec as any).assigned_technicians)
@@ -645,7 +645,9 @@ export function FieldSpreadsheets({ query }: { query: string }) {
     }
 
     const nowIso = new Date().toISOString()
-    const finalArea = (baseSheetField?.area || 'Oficina Central').trim()
+    // Nenhum default fixo de área: vem da ficha base do Admin ou fica vazio para
+    // escolha explícita na seleção (lista carregada de area_configs ativas).
+    const finalArea = (baseSheetField?.area || '').trim()
 
     // Validação estrita do operator: nunca usar ID inexistente como 'cfpekk93zx4j1pr'
     let resolvedOperator = ''

@@ -1349,6 +1349,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_at: sheet.deletedAt || undefined,
               client_token: clientToken,
               ...(sheet.admin_snapshot ? { admin_snapshot: sheet.admin_snapshot } : {}),
+              // Snapshot da Configuração de Áreas: sobrevive a salvar/filar/sincronizar
+              ...(sheet.area_config_snapshot
+                ? { area_config_snapshot: sheet.area_config_snapshot }
+                : {}),
             }
 
             // Submissão com adoção atômica do ID do servidor
@@ -1596,6 +1600,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               deleted_by: sheet.deletedBy || undefined,
               deleted_at: sheet.deletedAt || undefined,
               ...(sheet.admin_snapshot ? { admin_snapshot: sheet.admin_snapshot } : {}),
+              // Snapshot da Configuração de Áreas: sobrevive a salvar/filar/sincronizar
+              ...(sheet.area_config_snapshot
+                ? { area_config_snapshot: sheet.area_config_snapshot }
+                : {}),
             }
             if (sheet.projectId && sheet.projectId.trim()) {
               payload.project = sheet.projectId
@@ -2471,7 +2479,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             clientName: local?.clientName,
             contractCode: local?.contractCode,
             date: record.date ? record.date.slice(0, 10) : local?.date || '',
-            area: record.area || local?.area || 'Oficina Central',
+            area: record.area || local?.area || '',
             operator: record.operator || local?.operator || '',
             operatorName: sheetSnapshot?.technician_name || operatorName,
             weather: record.weather || local?.weather || 'Sol',
@@ -3112,7 +3120,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             clientName,
             contractCode,
             date: record.date ? record.date.slice(0, 10) : local?.date || '',
-            area: record.area || local?.area || 'Oficina Central',
+            area: record.area || local?.area || '',
             operator: record.operator || local?.operator || '',
             operatorName: sheetSnapshot?.technician_name || operatorName,
             weather: record.weather || local?.weather || 'Sol',
