@@ -7,7 +7,19 @@
 //   - sanitização leve do payload (strings; preset_fields sempre objeto).
 //
 // REGRA JSVM: toda a lógica fica INLINE nos callbacks — declarações top-level
-// usadas dentro de callbacks causam 'Hook scoping error' no deploy.
+// usadas dentro de callbacks causam 'Hook scoping error' no deploy. Por isso a
+// normalização de preset_fields (string | array de bytes | objeto) está
+// DUPLICADA inline em cada callback, sem função auxiliar top-level.
+//
+// PARTICULARIDADE DO JSVM: `e.record.get('preset_fields')` NÃO devolve nem o
+// objeto JS nem uma string — devolve o JSON como ARRAY DE BYTES
+// (json.RawMessage). Qualquer checagem do tipo `Array.isArray(pf) => inválido`
+// APAGA o valor. Em TODOS os pontos que leem o campo do record, o valor é
+// normalizado inline: string -> JSON.parse; array de números -> bytes
+// decodificados em fatias de 4096 -> JSON.parse; objeto simples -> uso direto.
+// Um array de bytes parseável NUNCA é descartado: se o JSON.parse do conteúdo
+// decodificado produz objeto, esse É o valor do campo. Só se o parse falhar o
+// valor é tratado como vazio (fallback mantido).
 
 onRecordCreateRequest((e) => {
   const auth = e.auth
@@ -46,6 +58,17 @@ onRecordCreateRequest((e) => {
     if (pfLog && typeof pfLog === 'string') {
       try {
         pfLog = JSON.parse(pfLog)
+      } catch (_) {
+        pfLog = null
+      }
+    } else if (Array.isArray(pfLog) && pfLog.length > 0 && typeof pfLog[0] === 'number') {
+      // json.RawMessage no JSVM: array de bytes -> string -> JSON.parse
+      let sLog = ''
+      for (let i = 0; i < pfLog.length; i += 4096) {
+        sLog += String.fromCharCode.apply(null, pfLog.slice(i, i + 4096))
+      }
+      try {
+        pfLog = JSON.parse(sLog)
       } catch (_) {
         pfLog = null
       }
@@ -91,9 +114,11 @@ onRecordCreateRequest((e) => {
 
   // RECUPERAÇÃO DO CAMPO JSON (JSVM): o record pode não refletir o body cru —
   // preset_fields chega em e.requestInfo().body como json.RawMessage (array de
-  // bytes) e o merge no record não o aplica. Antes da sanitização, recuperamos
-  // o valor do body cru e aplicamos ao record SE o record estiver vazio.
-  // Se parse falhar, NÃO sobrescrevemos (mantém o que o record tem).
+  // bytes) e o merge no record não o aplica. Normalizamos o valor do body cru
+  // e o valor atual do record (string | bytes | objeto); quando o body traz um
+  // objeto válido ele É o valor do campo e é aplicado; quando o body não traz
+  // (ou não parseia) e o record já tem objeto válido, o valor do record é
+  // preservado (cliente legítimo que não envia preset_fields não o perde).
   try {
     const rawBody2 = (e.requestInfo() && e.requestInfo().body) || {}
     const rawPf2 = rawBody2['preset_fields']
@@ -120,31 +145,47 @@ onRecordCreateRequest((e) => {
         normalized = rawPf2
       }
     }
-    let recPf = e.record.get('preset_fields')
-    if (recPf && typeof recPf === 'string') {
-      try {
-        recPf = JSON.parse(recPf)
-      } catch (_) {
-        recPf = null
+    // Normalização inline do valor lido do record (string | bytes | objeto)
+    const recPf = e.record.get('preset_fields')
+    let recPfObj = null
+    try {
+      if (recPf && typeof recPf === 'string') {
+        try {
+          recPfObj = JSON.parse(recPf)
+        } catch (_) {
+          recPfObj = null
+        }
+      } else if (Array.isArray(recPf) && recPf.length > 0 && typeof recPf[0] === 'number') {
+        let sRec = ''
+        for (let i = 0; i < recPf.length; i += 4096) {
+          sRec += String.fromCharCode.apply(null, recPf.slice(i, i + 4096))
+        }
+        try {
+          recPfObj = JSON.parse(sRec)
+        } catch (bErr) {
+          console.log('[area_configs] CREATE record bytes não parsearam: ' + bErr)
+          recPfObj = null
+        }
+      } else if (recPf && typeof recPf === 'object' && !Array.isArray(recPf)) {
+        recPfObj = recPf
       }
+    } catch (normErr) {
+      console.log('[area_configs] CREATE (normalização do record falhou): ' + normErr)
+      recPfObj = null
     }
-    if (
-      recPf &&
-      typeof recPf === 'object' &&
-      !Array.isArray(recPf) &&
-      Object.keys(recPf).length > 0
-    ) {
-      console.log('[area_configs] CREATE preset_fields: caminho=record-já-tinha')
-    } else if (
-      normalized &&
-      typeof normalized === 'object' &&
-      !Array.isArray(normalized) &&
-      Object.keys(normalized).length > 0
-    ) {
+    const normalizedValido =
+      normalized && typeof normalized === 'object' && !Array.isArray(normalized)
+    const recPfValido = recPfObj && typeof recPfObj === 'object' && !Array.isArray(recPfObj)
+    if (normalizedValido && Object.keys(normalized).length > 0) {
       e.record.set('preset_fields', normalized)
       console.log(
         '[area_configs] CREATE preset_fields: caminho=raw-body-aplicado chaves=' +
           Object.keys(normalized).length,
+      )
+    } else if (recPfValido && Object.keys(recPfObj).length > 0) {
+      console.log(
+        '[area_configs] CREATE preset_fields: caminho=record-já-tinha chaves=' +
+          Object.keys(recPfObj).length,
       )
     } else {
       console.log('[area_configs] CREATE preset_fields: caminho=vazio')
@@ -160,30 +201,69 @@ onRecordCreateRequest((e) => {
     e.record.set('contract_number', contract.trim())
     const desc = e.record.getString('description') || ''
     e.record.set('description', desc.trim())
-    // preset_fields: garante objeto (nunca string solta ou array)
+    // preset_fields: normaliza TODAS as representações possíveis lidas do
+    // record (string | array de bytes json.RawMessage | objeto) ANTES de
+    // decidir — um array de bytes parseável nunca é descartado como inválido.
     let pf = e.record.get('preset_fields')
-    if (pf && typeof pf === 'string') {
-      try {
-        pf = JSON.parse(pf)
-      } catch (_) {
-        pf = {}
+    let pfObj = null
+    try {
+      if (pf && typeof pf === 'string') {
+        try {
+          pfObj = JSON.parse(pf)
+        } catch (_) {
+          pfObj = null
+        }
+      } else if (Array.isArray(pf) && pf.length > 0 && typeof pf[0] === 'number') {
+        let sPf = ''
+        for (let i = 0; i < pf.length; i += 4096) {
+          sPf += String.fromCharCode.apply(null, pf.slice(i, i + 4096))
+        }
+        try {
+          pfObj = JSON.parse(sPf)
+        } catch (bErr) {
+          console.log('[area_configs] CREATE sanitização: bytes não parsearam: ' + bErr)
+          pfObj = null
+        }
+      } else if (pf && typeof pf === 'object' && !Array.isArray(pf)) {
+        pfObj = pf
       }
+    } catch (normErr) {
+      console.log('[area_configs] CREATE (sanitização: normalização falhou): ' + normErr)
+      pfObj = null
     }
-    if (!pf || typeof pf !== 'object' || Array.isArray(pf)) pf = {}
-    e.record.set('preset_fields', JSON.parse(JSON.stringify(pf)))
+    if (!pfObj || typeof pfObj !== 'object' || Array.isArray(pfObj)) pfObj = {}
+    e.record.set('preset_fields', JSON.parse(JSON.stringify(pfObj)))
     // Primeira versão da configuração
     const ver = e.record.getInt('config_version')
     if (ver < 1) e.record.set('config_version', 1)
-    // LOG FINAL: o que será de fato PERSISTIDO (após recuperação + sanitização)
+    // LOG FINAL: o que será de fato PERSISTIDO (após recuperação + sanitização).
+    // O get() aqui devolve array de bytes (json.RawMessage) — normalizar antes
+    // de contar chaves, senão o log conta 0 mesmo com dados.
     try {
       const finalPf = e.record.get('preset_fields')
-      let finalObj = finalPf
-      if (typeof finalObj === 'string') {
-        try {
-          finalObj = JSON.parse(finalObj)
-        } catch (_) {
-          finalObj = null
+      let finalObj = null
+      try {
+        if (finalPf && typeof finalPf === 'string') {
+          try {
+            finalObj = JSON.parse(finalPf)
+          } catch (_) {
+            finalObj = null
+          }
+        } else if (Array.isArray(finalPf) && finalPf.length > 0 && typeof finalPf[0] === 'number') {
+          let sFin = ''
+          for (let i = 0; i < finalPf.length; i += 4096) {
+            sFin += String.fromCharCode.apply(null, finalPf.slice(i, i + 4096))
+          }
+          try {
+            finalObj = JSON.parse(sFin)
+          } catch (_) {
+            finalObj = null
+          }
+        } else if (finalPf && typeof finalPf === 'object' && !Array.isArray(finalPf)) {
+          finalObj = finalPf
         }
+      } catch (_) {
+        finalObj = null
       }
       const finalKeys =
         finalObj && typeof finalObj === 'object' && !Array.isArray(finalObj)
@@ -233,6 +313,17 @@ onRecordUpdateRequest((e) => {
       } catch (_) {
         pfLog = null
       }
+    } else if (Array.isArray(pfLog) && pfLog.length > 0 && typeof pfLog[0] === 'number') {
+      // json.RawMessage no JSVM: array de bytes -> string -> JSON.parse
+      let sLog = ''
+      for (let i = 0; i < pfLog.length; i += 4096) {
+        sLog += String.fromCharCode.apply(null, pfLog.slice(i, i + 4096))
+      }
+      try {
+        pfLog = JSON.parse(sLog)
+      } catch (_) {
+        pfLog = null
+      }
     }
     let pfKeys = 0
     if (pfLog && typeof pfLog === 'object' && !Array.isArray(pfLog)) {
@@ -273,9 +364,12 @@ onRecordUpdateRequest((e) => {
     throw new ForbiddenError('Apenas Administradores podem editar configurações de área.')
   }
 
-  // RECUPERAÇÃO DO CAMPO JSON (JSVM) — idêntica ao CREATE: se o record não
-  // recebeu o preset_fields do body (json.RawMessage não aplicado ao record),
-  // recuperamos do body cru ANTES da sanitização (que consolidaria vazio).
+  // RECUPERAÇÃO DO CAMPO JSON (JSVM) — idêntica ao CREATE: normalizamos o
+  // preset_fields do body cru (json.RawMessage, array de bytes) e o valor
+  // atual do record (string | bytes | objeto). Quando o body traz um objeto
+  // válido ele É o valor do campo e é aplicado; quando o body não traz (ou
+  // não parseia) e o record já tem objeto válido, o valor do record é
+  // preservado (cliente legítimo que não envia preset_fields não o perde).
   try {
     const rawBody2 = (e.requestInfo() && e.requestInfo().body) || {}
     const rawPf2 = rawBody2['preset_fields']
@@ -302,31 +396,47 @@ onRecordUpdateRequest((e) => {
         normalized = rawPf2
       }
     }
-    let recPf = e.record.get('preset_fields')
-    if (recPf && typeof recPf === 'string') {
-      try {
-        recPf = JSON.parse(recPf)
-      } catch (_) {
-        recPf = null
+    // Normalização inline do valor lido do record (string | bytes | objeto)
+    const recPf = e.record.get('preset_fields')
+    let recPfObj = null
+    try {
+      if (recPf && typeof recPf === 'string') {
+        try {
+          recPfObj = JSON.parse(recPf)
+        } catch (_) {
+          recPfObj = null
+        }
+      } else if (Array.isArray(recPf) && recPf.length > 0 && typeof recPf[0] === 'number') {
+        let sRec = ''
+        for (let i = 0; i < recPf.length; i += 4096) {
+          sRec += String.fromCharCode.apply(null, recPf.slice(i, i + 4096))
+        }
+        try {
+          recPfObj = JSON.parse(sRec)
+        } catch (bErr) {
+          console.log('[area_configs] UPDATE record bytes não parsearam: ' + bErr)
+          recPfObj = null
+        }
+      } else if (recPf && typeof recPf === 'object' && !Array.isArray(recPf)) {
+        recPfObj = recPf
       }
+    } catch (normErr) {
+      console.log('[area_configs] UPDATE (normalização do record falhou): ' + normErr)
+      recPfObj = null
     }
-    if (
-      recPf &&
-      typeof recPf === 'object' &&
-      !Array.isArray(recPf) &&
-      Object.keys(recPf).length > 0
-    ) {
-      console.log('[area_configs] UPDATE preset_fields: caminho=record-já-tinha')
-    } else if (
-      normalized &&
-      typeof normalized === 'object' &&
-      !Array.isArray(normalized) &&
-      Object.keys(normalized).length > 0
-    ) {
+    const normalizedValido =
+      normalized && typeof normalized === 'object' && !Array.isArray(normalized)
+    const recPfValido = recPfObj && typeof recPfObj === 'object' && !Array.isArray(recPfObj)
+    if (normalizedValido && Object.keys(normalized).length > 0) {
       e.record.set('preset_fields', normalized)
       console.log(
         '[area_configs] UPDATE preset_fields: caminho=raw-body-aplicado chaves=' +
           Object.keys(normalized).length,
+      )
+    } else if (recPfValido && Object.keys(recPfObj).length > 0) {
+      console.log(
+        '[area_configs] UPDATE preset_fields: caminho=record-já-tinha chaves=' +
+          Object.keys(recPfObj).length,
       )
     } else {
       console.log('[area_configs] UPDATE preset_fields: caminho=vazio')
@@ -340,30 +450,70 @@ onRecordUpdateRequest((e) => {
     if (name) e.record.set('area_name', name)
     const desc = e.record.getString('description') || ''
     e.record.set('description', desc.trim())
+    // preset_fields: normaliza TODAS as representações possíveis lidas do
+    // record (string | array de bytes json.RawMessage | objeto) ANTES de
+    // decidir — um array de bytes parseável nunca é descartado como inválido.
     let pf = e.record.get('preset_fields')
-    if (pf && typeof pf === 'string') {
-      try {
-        pf = JSON.parse(pf)
-      } catch (_) {
-        pf = {}
+    let pfObj = null
+    try {
+      if (pf && typeof pf === 'string') {
+        try {
+          pfObj = JSON.parse(pf)
+        } catch (_) {
+          pfObj = null
+        }
+      } else if (Array.isArray(pf) && pf.length > 0 && typeof pf[0] === 'number') {
+        let sPf = ''
+        for (let i = 0; i < pf.length; i += 4096) {
+          sPf += String.fromCharCode.apply(null, pf.slice(i, i + 4096))
+        }
+        try {
+          pfObj = JSON.parse(sPf)
+        } catch (bErr) {
+          console.log('[area_configs] UPDATE sanitização: bytes não parsearam: ' + bErr)
+          pfObj = null
+        }
+      } else if (pf && typeof pf === 'object' && !Array.isArray(pf)) {
+        pfObj = pf
       }
+    } catch (normErr) {
+      console.log('[area_configs] UPDATE (sanitização: normalização falhou): ' + normErr)
+      pfObj = null
     }
-    if (!pf || typeof pf !== 'object' || Array.isArray(pf)) pf = {}
-    e.record.set('preset_fields', JSON.parse(JSON.stringify(pf)))
+    if (!pfObj || typeof pfObj !== 'object' || Array.isArray(pfObj)) pfObj = {}
+    e.record.set('preset_fields', JSON.parse(JSON.stringify(pfObj)))
     // Incrementa a versão da configuração (planilhas já preenchidas carregam
     // snapshot, e não a configuração viva — por isso o incremento é seguro)
     const ver = e.record.getInt('config_version')
     e.record.set('config_version', ver + 1)
-    // LOG FINAL: o que será de fato PERSISTIDO (após recuperação + sanitização)
+    // LOG FINAL: o que será de fato PERSISTIDO (após recuperação + sanitização).
+    // O get() aqui devolve array de bytes (json.RawMessage) — normalizar antes
+    // de contar chaves, senão o log conta 0 mesmo com dados.
     try {
       const finalPf = e.record.get('preset_fields')
-      let finalObj = finalPf
-      if (typeof finalObj === 'string') {
-        try {
-          finalObj = JSON.parse(finalObj)
-        } catch (_) {
-          finalObj = null
+      let finalObj = null
+      try {
+        if (finalPf && typeof finalPf === 'string') {
+          try {
+            finalObj = JSON.parse(finalPf)
+          } catch (_) {
+            finalObj = null
+          }
+        } else if (Array.isArray(finalPf) && finalPf.length > 0 && typeof finalPf[0] === 'number') {
+          let sFin = ''
+          for (let i = 0; i < finalPf.length; i += 4096) {
+            sFin += String.fromCharCode.apply(null, finalPf.slice(i, i + 4096))
+          }
+          try {
+            finalObj = JSON.parse(sFin)
+          } catch (_) {
+            finalObj = null
+          }
+        } else if (finalPf && typeof finalPf === 'object' && !Array.isArray(finalPf)) {
+          finalObj = finalPf
         }
+      } catch (_) {
+        finalObj = null
       }
       const finalKeys =
         finalObj && typeof finalObj === 'object' && !Array.isArray(finalObj)
