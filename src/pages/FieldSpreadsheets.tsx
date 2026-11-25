@@ -2439,11 +2439,12 @@ function FieldFullEditor({
       assigned_technicians: assignedTechs,
       status: effectiveStatus,
       change_history: updatedHistory,
-      // PARTE 1 — snapshot da configuração de área viaja como um campo a mais no payload
-      // (o hook já grava/limpa a string em formData; aqui apenas garantimos o valor final).
-      area_config_snapshot: areaConfigSnapshot
-        ? (formData.area_config_snapshot ?? JSON.stringify(areaConfigSnapshot))
-        : undefined,
+      // PARTE 1 — snapshot da configuração de área viaja como um campo a mais no payload.
+      // CORREÇÃO: grava SEMPRE o snapshot ATIVO retornado pelo hook (busca online da
+      // área selecionada, ou fallback sameSet quando offline). Nunca re-persistir o
+      // formData.area_config_snapshot herdado de sessão anterior — era isso que fazia
+      // o Técnico ver poços de outra área após recarregar.
+      area_config_snapshot: areaConfigSnapshot ? JSON.stringify(areaConfigSnapshot) : undefined,
       admin_snapshot:
         currentAdminSnapshot &&
         typeof currentAdminSnapshot === 'object' &&
