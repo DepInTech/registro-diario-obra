@@ -301,28 +301,33 @@ export function buildPresetPatch(
   const presetWells = parsePresetJsonList(presetFields.wells)
   if (presetWells.length > 0) {
     const curRows = Array.isArray(current.extraction_data) ? current.extraction_data : []
-    const hasTechnicianData = curRows.some((row) =>
-      ['morning', 'afternoon', 'pump', 'autopump'].some(
-        (col) => row && String((row as any)[col] ?? '').trim() !== '',
-      ),
-    )
-    if (!hasTechnicianData) {
-      const rowsMatchPreset =
-        curRows.length === presetWells.length &&
-        curRows.every(
-          (row, i) => String(row?.well ?? '').trim() === String(presetWells[i].well ?? '').trim(),
-        )
-      // Default PR-01/PR-02 (ou lista diferente da configurada) -> substitui pelas
-      // linhas do preset; se já são exatamente os poços do preset, não faz nada.
-      if (!rowsMatchPreset) {
-        patch.extraction_data = presetWells.map((w) => ({
+    const rowsMatchPreset =
+      curRows.length === presetWells.length &&
+      curRows.every(
+        (row, i) => String(row?.well ?? '').trim() === String(presetWells[i].well ?? '').trim(),
+      )
+    // Lista de poços diferente da atual (default PR-01/PR-02 ou poços de OUTRA área):
+    // substitui pelas linhas do preset. Leituras digitadas são mantidas somente quando
+    // o nome do poço é o mesmo — poços de outra área nunca permanecem na tabela.
+    if (!rowsMatchPreset) {
+      const pick = (
+        row: Record<string, unknown> | undefined,
+        w: Record<string, unknown>,
+        col: string,
+      ) => (row && !isFormValueEmpty(row[col]) ? String(row[col]) : String(w[col] ?? ''))
+      patch.extraction_data = presetWells.map((w) => {
+        const wellName = String(w.well ?? '').trim()
+        const prevRow = curRows.find((row) => String(row?.well ?? '').trim() === wellName) as
+          | Record<string, unknown>
+          | undefined
+        return {
           well: String(w.well ?? ''),
-          morning: String(w.morning ?? ''),
-          afternoon: String(w.afternoon ?? ''),
-          pump: String(w.pump ?? ''),
-          autopump: String(w.autopump ?? ''),
-        }))
-      }
+          morning: pick(prevRow, w, 'morning'),
+          afternoon: pick(prevRow, w, 'afternoon'),
+          pump: pick(prevRow, w, 'pump'),
+          autopump: pick(prevRow, w, 'autopump'),
+        }
+      })
     }
   }
   // Saídas dinâmicas de infiltração: out<N>Morning / out<N>Afternoon (só sub-chaves vazias)
@@ -371,15 +376,18 @@ function clearStalePresetValues(
     cur !== null &&
     String(cur) === String(prevVal)
 
+  // Valor que veio do preset anterior e não foi editado é ZERADO aqui; o preset novo
+  // é reaplicado logo depois por buildPresetPatch (que só preenche campos vazios).
+  // Assim a área selecionada substitui os valores da área anterior.
   for (const [presetKey, col] of Object.entries(SIMPLE_FIELD_MAP)) {
-    if (stale(next[col], prevPreset[presetKey]) && !isPresetValueFilled(nextPreset[presetKey])) {
+    if (stale(next[col], prevPreset[presetKey])) {
       next[col] = ''
     }
   }
   for (const [presetKey, [objName, subKey]] of Object.entries(JSON_OBJ_FIELD_MAP)) {
     const obj = next[objName]
     const curSub = obj && typeof obj === 'object' ? (obj as any)[subKey] : undefined
-    if (stale(curSub, prevPreset[presetKey]) && !isPresetValueFilled(nextPreset[presetKey])) {
+    if (stale(curSub, prevPreset[presetKey])) {
       next[objName] = { ...(obj && typeof obj === 'object' ? obj : {}), [subKey]: '' }
     }
   }
@@ -387,7 +395,7 @@ function clearStalePresetValues(
     const [objName, subKey] = target.split('.')
     const obj = next[objName]
     const curSub = obj && typeof obj === 'object' ? (obj as any)[subKey] : undefined
-    if (stale(curSub, prevPreset[presetKey]) && !isPresetValueFilled(nextPreset[presetKey])) {
+    if (stale(curSub, prevPreset[presetKey])) {
       next[objName] = { ...(obj && typeof obj === 'object' ? obj : {}), [subKey]: '' }
     }
   }
@@ -396,38 +404,42 @@ function clearStalePresetValues(
       next[col] = false
     }
   }
-  // Poços: linhas que ainda são exatamente as do preset antigo (sem leitura
-  // digitada) são substituídas pelas da nova config; sem poços na nova config,
-  // as linhas permanecem como estão (dados já digitados nunca são apagados).
+  // Poços: as linhas são do preset anterior quando nome do poço e cada leitura são
+  // iguais aos do preset OU estão vazias. Se for esse o caso, a lista inteira é
+  // trocada pelos poços da nova área (ou volta ao padrão PR-01/PR-02 se ela não tiver).
+  // Se o Técnico digitou leitura diferente do preset, as linhas são preservadas.
+  const POSITIONAL_COLS = ['morning', 'afternoon', 'pump', 'autopump'] as const
   const prevWells = parsePresetJsonList(prevPreset.wells)
   if (prevWells.length > 0) {
     const curRows = Array.isArray(next.extraction_data) ? next.extraction_data : []
-    const hasTechnicianData = curRows.some((row) =>
-      ['morning', 'afternoon', 'pump', 'autopump'].some(
-        (col) => row && String((row as any)[col] ?? '').trim() !== '',
-      ),
-    )
-    const rowsMatchPrev =
+    const rowIsFromPreset = (row: any, prevRow: Record<string, unknown>) =>
+      String(row?.well ?? '').trim() === String(prevRow.well ?? '').trim() &&
+      POSITIONAL_COLS.every((col) => {
+        const cur = String(row?.[col] ?? '').trim()
+        return cur === '' || cur === String(prevRow[col] ?? '').trim()
+      })
+    const allFromPreset =
       curRows.length === prevWells.length &&
-      curRows.every(
-        (row, i) => String(row?.well ?? '').trim() === String(prevWells[i].well ?? '').trim(),
-      )
-    if (rowsMatchPrev && !hasTechnicianData) {
+      curRows.every((row, i) => rowIsFromPreset(row, prevWells[i]))
+    if (allFromPreset) {
       const nextWells = parsePresetJsonList(nextPreset.wells)
-      if (nextWells.length > 0) {
-        next.extraction_data = nextWells.map((w) => ({
-          well: String(w.well ?? ''),
-          morning: String(w.morning ?? ''),
-          afternoon: String(w.afternoon ?? ''),
-          pump: String(w.pump ?? ''),
-          autopump: String(w.autopump ?? ''),
-        }))
-      }
+      next.extraction_data =
+        nextWells.length > 0
+          ? nextWells.map((w) => ({
+              well: String(w.well ?? ''),
+              morning: String(w.morning ?? ''),
+              afternoon: String(w.afternoon ?? ''),
+              pump: String(w.pump ?? ''),
+              autopump: String(w.autopump ?? ''),
+            }))
+          : [
+              { well: 'PR-01', morning: '', afternoon: '', pump: '', autopump: '' },
+              { well: 'PR-02', morning: '', afternoon: '', pump: '', autopump: '' },
+            ]
     }
   }
   // Saídas de infiltração dinâmicas: mesmo critério (valor intacto do preset antigo)
   const prevExits = parsePresetJsonList(prevPreset.infiltration_exits)
-  const nextExits = parsePresetJsonList(nextPreset.infiltration_exits)
   for (const exit of prevExits) {
     const num = Number(exit.exit)
     if (!Number.isInteger(num) || num < 1) continue
@@ -437,8 +449,7 @@ function clearStalePresetValues(
     ] as const) {
       const subKey = `out${num}${suffix}`
       const curSub = (next.infiltration_data as Record<string, unknown> | undefined)?.[subKey]
-      const nextVal = nextExits.find((e) => Number(e.exit) === num)?.[pk]
-      if (stale(curSub, exit[pk]) && !isPresetValueFilled(nextVal)) {
+      if (stale(curSub, exit[pk])) {
         next.infiltration_data = {
           ...(next.infiltration_data && typeof next.infiltration_data === 'object'
             ? next.infiltration_data
