@@ -137,12 +137,23 @@ export default function AreaConfigs() {
     // (emptyFieldSheetFormState sempre nasce com 19 chaves) — o que prova dados
     // é filledCount x serializedCount, com a versão do bundle no log para o
     // usuário confirmar qual build está executando o save.
+    // Contagens ANINHADAS para leitura clara: 2 linhas de poços colapsam em 1
+    // chave 'wells' no preset (o mesmo vale para saídas de infiltração e para
+    // compressores), então serializedCount é MENOR que filledCount por
+    // estrutura — não é perda. O que prova integridade é o presetOut impresso
+    // logo abaixo (as linhas continuam lá dentro de wells[]).
+    const wellsOut = Array.isArray(presetOut.wells) ? (presetOut.wells as unknown[]).length : 0
+    const exitsOut = Array.isArray(presetOut.infiltration_exits)
+      ? (presetOut.infiltration_exits as unknown[]).length
+      : 0
+    const compressorOut = Number(presetOut.compressor_count) || 0
     console.log(
       `[AreaConfigs][handleSave] build v${APP_VERSION}`,
       '| filledCount=',
       filledCount,
       '| serializedCount=',
       serializedCount,
+      `(chaves de topo; poços=${wellsOut} linha(s), saídas=${exitsOut} linha(s), compressores=${compressorOut})`,
       '| presetOut=',
       JSON.parse(JSON.stringify(presetOut || {})),
     )

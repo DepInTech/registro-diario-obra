@@ -89,6 +89,69 @@ onRecordCreateRequest((e) => {
     throw new ForbiddenError('Apenas Administradores podem criar configurações de área.')
   }
 
+  // RECUPERAÇÃO DO CAMPO JSON (JSVM): o record pode não refletir o body cru —
+  // preset_fields chega em e.requestInfo().body como json.RawMessage (array de
+  // bytes) e o merge no record não o aplica. Antes da sanitização, recuperamos
+  // o valor do body cru e aplicamos ao record SE o record estiver vazio.
+  // Se parse falhar, NÃO sobrescrevemos (mantém o que o record tem).
+  try {
+    const rawBody2 = (e.requestInfo() && e.requestInfo().body) || {}
+    const rawPf2 = rawBody2['preset_fields']
+    let normalized = null
+    if (rawPf2 !== undefined && rawPf2 !== null) {
+      if (Array.isArray(rawPf2) && rawPf2.length > 0 && typeof rawPf2[0] === 'number') {
+        // json.RawMessage no JSVM: array de bytes -> string -> JSON.parse
+        let s = ''
+        for (let i = 0; i < rawPf2.length; i += 4096) {
+          s += String.fromCharCode.apply(null, rawPf2.slice(i, i + 4096))
+        }
+        try {
+          normalized = JSON.parse(s)
+        } catch (pErr) {
+          console.log('[area_configs] CREATE raw-body bytes não parsearam: ' + pErr)
+        }
+      } else if (typeof rawPf2 === 'string') {
+        try {
+          normalized = JSON.parse(rawPf2)
+        } catch (_) {
+          normalized = null
+        }
+      } else if (typeof rawPf2 === 'object' && !Array.isArray(rawPf2)) {
+        normalized = rawPf2
+      }
+    }
+    let recPf = e.record.get('preset_fields')
+    if (recPf && typeof recPf === 'string') {
+      try {
+        recPf = JSON.parse(recPf)
+      } catch (_) {
+        recPf = null
+      }
+    }
+    if (
+      recPf &&
+      typeof recPf === 'object' &&
+      !Array.isArray(recPf) &&
+      Object.keys(recPf).length > 0
+    ) {
+      console.log('[area_configs] CREATE preset_fields: caminho=record-já-tinha')
+    } else if (
+      normalized &&
+      typeof normalized === 'object' &&
+      !Array.isArray(normalized) &&
+      Object.keys(normalized).length > 0
+    ) {
+      e.record.set('preset_fields', normalized)
+      console.log(
+        '[area_configs] CREATE preset_fields: caminho=raw-body-aplicado chaves=' +
+          Object.keys(normalized).length,
+      )
+    } else {
+      console.log('[area_configs] CREATE preset_fields: caminho=vazio')
+    }
+  } catch (rescueErr) {
+    console.log('[area_configs] CREATE (recuperação raw-body falhou): ' + rescueErr)
+  }
   // Sanitização leve (inline no callback)
   try {
     const name = (e.record.getString('area_name') || '').trim()
@@ -193,6 +256,67 @@ onRecordUpdateRequest((e) => {
     throw new ForbiddenError('Apenas Administradores podem editar configurações de área.')
   }
 
+  // RECUPERAÇÃO DO CAMPO JSON (JSVM) — idêntica ao CREATE: se o record não
+  // recebeu o preset_fields do body (json.RawMessage não aplicado ao record),
+  // recuperamos do body cru ANTES da sanitização (que consolidaria vazio).
+  try {
+    const rawBody2 = (e.requestInfo() && e.requestInfo().body) || {}
+    const rawPf2 = rawBody2['preset_fields']
+    let normalized = null
+    if (rawPf2 !== undefined && rawPf2 !== null) {
+      if (Array.isArray(rawPf2) && rawPf2.length > 0 && typeof rawPf2[0] === 'number') {
+        // json.RawMessage no JSVM: array de bytes -> string -> JSON.parse
+        let s = ''
+        for (let i = 0; i < rawPf2.length; i += 4096) {
+          s += String.fromCharCode.apply(null, rawPf2.slice(i, i + 4096))
+        }
+        try {
+          normalized = JSON.parse(s)
+        } catch (pErr) {
+          console.log('[area_configs] UPDATE raw-body bytes não parsearam: ' + pErr)
+        }
+      } else if (typeof rawPf2 === 'string') {
+        try {
+          normalized = JSON.parse(rawPf2)
+        } catch (_) {
+          normalized = null
+        }
+      } else if (typeof rawPf2 === 'object' && !Array.isArray(rawPf2)) {
+        normalized = rawPf2
+      }
+    }
+    let recPf = e.record.get('preset_fields')
+    if (recPf && typeof recPf === 'string') {
+      try {
+        recPf = JSON.parse(recPf)
+      } catch (_) {
+        recPf = null
+      }
+    }
+    if (
+      recPf &&
+      typeof recPf === 'object' &&
+      !Array.isArray(recPf) &&
+      Object.keys(recPf).length > 0
+    ) {
+      console.log('[area_configs] UPDATE preset_fields: caminho=record-já-tinha')
+    } else if (
+      normalized &&
+      typeof normalized === 'object' &&
+      !Array.isArray(normalized) &&
+      Object.keys(normalized).length > 0
+    ) {
+      e.record.set('preset_fields', normalized)
+      console.log(
+        '[area_configs] UPDATE preset_fields: caminho=raw-body-aplicado chaves=' +
+          Object.keys(normalized).length,
+      )
+    } else {
+      console.log('[area_configs] UPDATE preset_fields: caminho=vazio')
+    }
+  } catch (rescueErr) {
+    console.log('[area_configs] UPDATE (recuperação raw-body falhou): ' + rescueErr)
+  }
   // Sanitização leve + versionamento pontual da configuração
   try {
     const name = (e.record.getString('area_name') || '').trim()
