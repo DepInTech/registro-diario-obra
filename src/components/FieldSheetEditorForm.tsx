@@ -131,6 +131,8 @@ const BOOLEAN_PRESET_MAP: Record<string, keyof FieldSheetFormState> = {
 const JSON_SUB_PRESET_MAP: Record<string, [keyof FieldSheetFormState, string]> = {
   'infiltration.geralMorning': ['infiltration_data', 'geralMorning'],
   'infiltration.geralAfternoon': ['infiltration_data', 'geralAfternoon'],
+  'infiltration.bombaInfiltracao': ['infiltration_data', 'bombaInfiltracao'],
+  'infiltration.bombaGeral': ['infiltration_data', 'bombaGeral'],
   'oil_removal.sao1Volume': ['oil_removal_data', 'sao1Volume'],
   'oil_removal.sao1DataLimpeza': ['oil_removal_data', 'sao1DataLimpeza'],
   'oil_removal.sao2Volume': ['oil_removal_data', 'sao2Volume'],
@@ -192,9 +194,12 @@ export function presetFieldsToFormState(
     }
   }
   // Compressores: compressor_data.<prefixo><1..4>
-  const count = Number(preset.compressor_count) || 0
+  const count = inferCompressorCount(
+    preset.compressor_data as Record<string, unknown> | undefined,
+    Number(preset.compressor_count) || 0,
+  )
   if (count > 0) {
-    state.compressor_count = Math.min(4, count)
+    state.compressor_count = count
     const obj = (state as any).compressor_data || {}
     for (const prefix of [
       'horimetro',
@@ -238,6 +243,37 @@ export function presetFieldsToFormState(
   return state
 }
 
+/** Inferência do número de compressores a partir dos índices efetivamente
+ * preenchidos em compressor_data (a UI mostra a coluna do compressor 01 mesmo
+ * com compressor_count = 0 — sem inferência, o Admin que preenche só o
+ * compressor 01 perderia os valores na serialização). */
+function inferCompressorCount(data: Record<string, unknown> | undefined, current: number): number {
+  let maxIndex = 0
+  let hasAny = false
+  const prefixes = [
+    'horimetro',
+    'pressao',
+    'drenagem',
+    'tempoDesligado',
+    'filtroAr',
+    'nivelOleo',
+    'trocaOleo',
+    'linhaAr',
+  ]
+  for (const key of Object.keys(data || {})) {
+    if (String(data?.[key] ?? '').trim() === '') continue
+    for (const prefix of prefixes) {
+      if (!key.startsWith(prefix)) continue
+      const idx = Number(key.slice(prefix.length))
+      if (Number.isInteger(idx) && idx >= 1) {
+        hasAny = true
+        maxIndex = Math.max(maxIndex, idx)
+      }
+    }
+  }
+  return Math.min(4, Math.max(current, hasAny ? maxIndex : 0, hasAny ? 1 : 0))
+}
+
 /** Converte o estado atual do formulário de volta para preset_fields (chaves vazias são descartadas) */
 export function formStateToPresetFields(state: FieldSheetFormState): PresetFields {
   const preset: PresetFields = {}
@@ -253,9 +289,10 @@ export function formStateToPresetFields(state: FieldSheetFormState): PresetField
     const v = obj && typeof obj === 'object' ? String((obj as any)[subKey] ?? '').trim() : ''
     if (v !== '') preset[pk] = v
   }
-  if (state.compressor_count > 0) {
-    preset.compressor_count = state.compressor_count
-    const obj = state.compressor_data || {}
+  const obj = state.compressor_data || {}
+  const count = inferCompressorCount(obj, state.compressor_count)
+  if (count > 0) {
+    preset.compressor_count = count
     for (const prefix of [
       'horimetro',
       'pressao',
@@ -266,7 +303,7 @@ export function formStateToPresetFields(state: FieldSheetFormState): PresetField
       'trocaOleo',
       'linhaAr',
     ]) {
-      for (let i = 1; i <= state.compressor_count; i++) {
+      for (let i = 1; i <= count; i++) {
         const v = String(obj[`${prefix}${i}`] ?? '').trim()
         if (v !== '') preset[`compressors.compressor_data.${prefix}${i}`] = v
       }

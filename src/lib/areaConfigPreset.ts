@@ -159,6 +159,8 @@ const BOOLEAN_FIELD_MAP: Record<string, string> = {
 const JSON_OBJ_FIELD_MAP: Record<string, [string, string]> = {
   'infiltration.geralMorning': ['infiltration_data', 'geralMorning'],
   'infiltration.geralAfternoon': ['infiltration_data', 'geralAfternoon'],
+  'infiltration.bombaInfiltracao': ['infiltration_data', 'bombaInfiltracao'],
+  'infiltration.bombaGeral': ['infiltration_data', 'bombaGeral'],
   'oil_removal.sao1Volume': ['oil_removal_data', 'sao1Volume'],
   'oil_removal.sao1DataLimpeza': ['oil_removal_data', 'sao1DataLimpeza'],
   'oil_removal.sao2Volume': ['oil_removal_data', 'sao2Volume'],
@@ -174,6 +176,7 @@ const COMPRESSOR_PREFIXES = [
   'filtroAr',
   'nivelOleo',
   'trocaOleo',
+  'linhaAr',
 ]
 
 const COMPRESSOR_KEYS: Record<string, string> = {}
