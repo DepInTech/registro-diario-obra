@@ -1581,6 +1581,8 @@ function FieldFullEditor({
   const { isOnline, syncNow } = useSync()
   const { toast } = useToast()
   const isAdmin = user?.role === 'admin'
+  // Variável estável para helpers de render (ex.: effectiveWell da tabela de extração)
+  const isTechnicianVar = user?.role === 'technician'
 
   // Helpers para compressores e saídas de infiltração dinâmicos
   // Estado local para permitir compressores e saídas extras mesmo antes de preencher valores
@@ -3560,12 +3562,34 @@ function FieldFullEditor({
                 const persistedRow = initialSheet?.extraction_data?.[index]
                 const lockedRow = snapRow || persistedRow
 
+                // ORIGEM DO NOME DO POÇO EXIBIDO: o preset ATIVO da área selecionada
+                // (Configuração de Áreas) é a fonte da verdade — vence admin_snapshot
+                // capturado quando a ficha apontava para outra área e vence o valor
+                // persistido na própria ficha. Quando o preset não define poço para a
+                // linha (ou é Admin), mantém o comportamento anterior.
+                const presetWellRows = Array.isArray(areaConfigSnapshot?.presetFields?.wells)
+                  ? (areaConfigSnapshot!.presetFields.wells as Array<Record<string, unknown>>)
+                  : []
+                const presetRowWell = presetWellRows[index]
+                  ? String((presetWellRows[index] as any).well ?? '').trim()
+                  : ''
+                const wellFromState = String(formData.extraction_data?.[index]?.well || '').trim()
                 const effectiveWell = (
-                  snapRow?.well ||
-                  persistedRow?.well ||
-                  formData.extraction_data?.[index]?.well ||
-                  ''
+                  (isTechnicianVar && presetRowWell
+                    ? presetRowWell
+                    : snapRow?.well || persistedRow?.well || wellFromState) || ''
                 ).trim()
+                if (
+                  isTechnicianVar &&
+                  presetRowWell &&
+                  presetRowWell !== String(snapRow?.well ?? '').trim() &&
+                  presetRowWell !== wellFromState
+                ) {
+                  const originVal = String(snapRow?.well ?? '') || wellFromState || '(vazio)'
+                  console.log(
+                    `[area-config] poço exibido vindo do PRESET da área (não do snapshot/persistido): linha ${index + 1} -> "${presetRowWell}" (snapshot/estado tinha "${originVal}")`,
+                  )
+                }
                 const presetWellLocked = isAreaPresetLocked(`extraction_data.${index}.well`)
                 const presetMorningLocked = isAreaPresetLocked(`extraction_data.${index}.morning`)
                 const presetAfternoonLocked = isAreaPresetLocked(

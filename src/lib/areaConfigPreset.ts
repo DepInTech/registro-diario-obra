@@ -19,6 +19,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { PresetFields } from '@/lib/fieldSheetConfigMetadata'
+import { APP_VERSION } from '@/lib/appVersion'
 
 export const AREA_CONFIG_SNAPSHOT_FIELD = 'area_config_snapshot'
 
@@ -100,6 +101,13 @@ function parsePresetJsonList(raw: unknown): Array<Record<string, unknown>> {
     (item): item is Record<string, unknown> =>
       !!item && typeof item === 'object' && !Array.isArray(item),
   )
+}
+
+/** Lista de poços de um snapshot, para log de rastreamento */
+export function wellsOf(snapshot: AreaConfigSnapshot | null | undefined): string {
+  const wells = parsePresetJsonList(snapshot?.presetFields?.wells)
+  if (wells.length === 0) return '(nenhum)'
+  return wells.map((w) => String(w.well ?? '')).join(', ')
 }
 
 /** Busca a configuração ativa da área em area_configs (leitura — qualquer autenticado) */
@@ -481,6 +489,11 @@ export interface UseAreaConfigPresetResult {
  *   não preenche são limpos (clearStalePresetValues); valores digitados permanecem.
  * - Admin: também busca e aplica (precisa visualizar a config da área); o BLOQUEIO
  *   continua exclusivo do Técnico (isAreaPresetLocked retorna false para Admin).
+ *
+ * RASTREAMENTO DO BUG (console, prefixo [area-config]): (1) seleção identificada,
+ * (2) filtro consultado, (3) resultado da consulta ao backend, (4) poços retornados
+ * (dentro do log 3), (5) poços aplicados na interface. FALLBACK marca o uso do
+ * snapshot gravado em vez da busca online — o suspeito principal de poços errados.
  */
 export function useAreaConfigPreset(params: {
   formData: Record<string, any>
@@ -502,6 +515,19 @@ export function useAreaConfigPreset(params: {
     parseAreaConfigSnapshot(formData?.[AREA_CONFIG_SNAPSHOT_FIELD]),
   )
 
+  // Log de carga inicial: snapshot herdado do documento é o estado inicial do hook
+  // (importante para rastrear planilhas antigas com snapshot de outra área).
+  useEffect(() => {
+    console.log(
+      `[area-config] v${APP_VERSION} — carga inicial do snapshot no documento: ${
+        parseAreaConfigSnapshot(formData?.[AREA_CONFIG_SNAPSHOT_FIELD])
+          ? `área "${parseAreaConfigSnapshot(formData?.[AREA_CONFIG_SNAPSHOT_FIELD])!.areaName}" (configId=${parseAreaConfigSnapshot(formData?.[AREA_CONFIG_SNAPSHOT_FIELD])!.configId}) -> poços: ${wellsOf(parseAreaConfigSnapshot(formData?.[AREA_CONFIG_SNAPSHOT_FIELD]))}`
+          : '(nenhum snapshot gravado)'
+      }`,
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     const stored = parseAreaConfigSnapshot(formData?.[AREA_CONFIG_SNAPSHOT_FIELD])
     const currentSet = [...selectedAreas].sort()
@@ -521,20 +547,37 @@ export function useAreaConfigPreset(params: {
     // versão anterior da configuração (ou de outra área), fazendo o Técnico ver
     // poços errados ao selecionar/trocar/recarregar a área. Ele entra apenas
     // como fallback quando a busca não responde (offline/sem acesso).
+    console.log(
+      `[area-config] (1) seleção de áreas identificada: [${selectedAreas.join(' | ')}] (isAdmin=${isAdmin})`,
+    )
     let cancelled = false
     ;(async () => {
+      console.log(
+        `[area-config] (2) consultando area_configs por area_name exato + active=true: [${selectedAreas.join(' | ')}]`,
+      )
       // Busca a config ativa de CADA área selecionada e mescla os presets
       const snaps = (
         await Promise.all(selectedAreas.map((name) => fetchAreaConfigByArea(pbClient, name)))
       ).filter((s): s is AreaConfigSnapshot => !!s)
 
+      for (const s of snaps) {
+        console.log(
+          `[area-config] (3) consulta ao backend OK: área "${s.areaName}" (configId=${s.configId}, configVersion=${s.configVersion}) -> poços: ${wellsOf(s)}`,
+        )
+      }
       if (cancelled) return
 
       if (snaps.length === 0) {
+        console.log(
+          `[area-config] (3) consulta ao backend SEM resultado (offline/sem acesso) para [${selectedAreas.join(' | ')}]`,
+        )
         // Busca sem resposta (offline ou sem acesso de leitura): mantém o
         // snapshot gravado quando a seleção corresponde — não limpa valores
         // nem troca os poços exibidos.
         if (stored && sameSet && storedSet.length > 0) {
+          console.log(
+            `[area-config] FALLBACK local usado: snapshot gravado na planilha (área "${stored.areaName}", configVersion=${stored.configVersion}) -> poços: ${wellsOf(stored)} — SUSPEITO se os poços não batem com a área selecionada`,
+          )
           setActiveConfig(stored)
           return
         }
@@ -578,6 +621,9 @@ export function useAreaConfigPreset(params: {
         loadedAt: new Date().toISOString(),
       }
       setActiveConfig(combined)
+      console.log(
+        `[area-config] (5) aplicado na interface: área(s) "${combined.areaName}" (configId=${combined.configId}) -> poços: ${wellsOf(combined)}`,
+      )
       setFormData((prev: any) => {
         const prevSnap = parseAreaConfigSnapshot(prev?.[AREA_CONFIG_SNAPSHOT_FIELD])
         // 1) limpa valores intactos do preset ANTERIOR que a nova config não preenche
