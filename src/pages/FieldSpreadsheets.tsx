@@ -2355,7 +2355,9 @@ function FieldFullEditor({
         !Array.isArray(currentAdminSnapshot)
           ? currentAdminSnapshot
           : undefined,
-      syncStatus: isProvisional ? 'pending_create' : 'pending_update',
+      syncStatus: (isProvisional
+        ? 'pending_create'
+        : 'pending_update') as OfflineFieldSheetItem['syncStatus'],
       lastModified: Date.now(),
     }
 

@@ -23,8 +23,8 @@ import {
 import { cn } from '@/lib/utils'
 import { PRESET_DATE_KEYS, countConfiguredFields } from '@/lib/fieldSheetConfigMetadata'
 import type { AreaConfigRecord, PresetFields } from '@/lib/fieldSheetConfigMetadata'
+import FieldSheetEditorForm from '@/components/FieldSheetEditorForm'
 import {
-  FieldSheetEditorForm,
   emptyFieldSheetFormState,
   presetFieldsToFormState,
   formStateToPresetFields,

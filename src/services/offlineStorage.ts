@@ -155,6 +155,8 @@ export interface OfflineFieldSheetItem {
     captured_at?: string
     [key: string]: any
   }
+  /** Snapshot JSON da configuração de área (presets) aplicada a esta ficha. */
+  area_config_snapshot?: string
   client_token?: string
   syncStatus: 'synced' | 'pending_create' | 'pending_update' | 'conflict' | 'failed'
   syncError?: string
