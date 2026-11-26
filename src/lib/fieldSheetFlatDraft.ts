@@ -95,10 +95,19 @@ export function formPatchToFlatPreset(
         const fixed = OBJ_SUB_TO_FLAT[`infiltration_data.${sub}`]
         if (fixed) {
           out[fixed] = str(sv)
+          // TRACE PONTA A PONTA: a 2ª via da digitação — se o Salvar mostrar
+          // doRascunho=0, NENHUMA tecla passou por aqui (elo onChange quebrado
+          // na tela: input renderizado ≠ input ligado ao estado).
+          console.log(`[trace-infil] rascunho write-through ${fixed} = "${str(sv)}"`)
           continue
         }
         const m = /^out(\d+)(Morning|Afternoon)$/.exec(sub)
-        if (m) out[`infiltration.out${m[1]}${m[2]}`] = str(sv)
+        if (m) {
+          out[`infiltration.out${m[1]}${m[2]}`] = str(sv)
+          console.log(
+            `[trace-infil] rascunho write-through infiltration.out${m[1]}${m[2]} = "${str(sv)}"`,
+          )
+        }
       }
       continue
     }

@@ -300,6 +300,27 @@ export default function AreaConfigs() {
     flatDraftRef.current = {}
     setEditorDirty(false)
     setRestoredDraft(false)
+    // TRACE PONTA A PONTA (etapa vi): valores de infiltration.* LIDOS DO BANCO
+    // na reabertura da área (fora do if do rascunho — roda sempre que abre
+    // uma área existente SEM rascunho pendente; com rascunho, o log do
+    // presetOut mostra a via restaurada).
+    if (rec.preset_fields && typeof rec.preset_fields === 'object') {
+      console.log(
+        `[trace-infil] reabertura área="${rec.area_name}" id=${rec.id} (build v${APP_VERSION})`,
+      )
+      for (const k of [
+        'infiltration.geralMorning',
+        'infiltration.geralAfternoon',
+        'infiltration.bombaInfiltracao',
+        'infiltration.bombaGeral',
+        'infiltration.infiltration_morning_time',
+        'infiltration.infiltration_afternoon_time',
+      ]) {
+        console.log(
+          `[trace-infil] reabertura ${k} = "${String((rec.preset_fields as any)[k] ?? '')}"`,
+        )
+      }
+    }
   }
 
   // Cancelar/Voltar: descarte EXPLÍCITO do rascunho desta área.
@@ -340,6 +361,23 @@ export default function AreaConfigs() {
     // compressores), então serializedCount é MENOR que filledCount por
     // estrutura — não é perda. O que prova integridade é o presetOut impresso
     // abaixo (as linhas continuam lá dentro de wells[]).
+    // TRACE PONTA A PONTA (etapa ii): VALORES reais de infiltration.* nos dois
+    // estados (estado vivo e estado+rascunho) no momento do Salvar — não
+    // contagens. Prova exatamente o que o sheetForm tinha ao clicar em Salvar.
+    const infilKeys = [
+      'infiltration.geralMorning',
+      'infiltration.geralAfternoon',
+      'infiltration.bombaInfiltracao',
+      'infiltration.bombaGeral',
+      'infiltration.infiltration_morning_time',
+      'infiltration.infiltration_afternoon_time',
+    ]
+    for (const k of infilKeys) {
+      console.log(
+        `[trace-infil] save estado ${k} = "${String((statePreset as any)[k] ?? '')}"` +
+          ` | com-rascunho = "${String((presetOut as any)[k] ?? '')}" (build v${APP_VERSION})`,
+      )
+    }
     const wellsOut = Array.isArray(presetOut.wells) ? (presetOut.wells as unknown[]).length : 0
     const exitsOut = Array.isArray(presetOut.infiltration_exits)
       ? (presetOut.infiltration_exits as unknown[]).length
@@ -427,6 +465,13 @@ export default function AreaConfigs() {
         '| savedPresetFields=',
         JSON.parse(JSON.stringify(savedPreset || {})),
       )
+      // TRACE PONTA A PONTA (etapa iv): o que o SERVIDOR devolveu para cada
+      // campo de Infiltração — prova do round-trip banco⇄tela com VALORES.
+      for (const k of infilKeys) {
+        console.log(
+          `[trace-infil] resposta-servidor ${k} = "${String((savedPreset as any)?.[k] ?? '')}" (build v${APP_VERSION})`,
+        )
+      }
       if (serializedCount > 0 && savedKeys.length === 0) {
         console.error(
           '[AreaConfigs] SERVIDOR PERSISTIU preset_fields VAZIO — presetOut tinha',

@@ -270,6 +270,27 @@ onRecordCreateRequest((e) => {
           ? Object.keys(finalObj).length
           : 0
       console.log('[area_configs] CREATE FINAL presetFieldsKeys=' + finalKeys)
+      // TRACE PONTA A PONTA (etapa v): VALORES de infiltration.* recebidos no
+      // CREATE — prova do conteúdo, não da contagem.
+      if (finalObj && typeof finalObj === 'object') {
+        var _traceKeys = [
+          'infiltration.geralMorning',
+          'infiltration.geralAfternoon',
+          'infiltration.bombaInfiltracao',
+          'infiltration.bombaGeral',
+          'infiltration.infiltration_morning_time',
+          'infiltration.infiltration_afternoon_time',
+        ]
+        for (var _ti = 0; _ti < _traceKeys.length; _ti++) {
+          console.log(
+            '[trace-infil] CREATE ' +
+              _traceKeys[_ti] +
+              ' = "' +
+              String(finalObj[_traceKeys[_ti]] === undefined ? '' : finalObj[_traceKeys[_ti]]) +
+              '"',
+          )
+        }
+      }
     } catch (_) {}
   } catch (_) {}
 
@@ -520,6 +541,27 @@ onRecordUpdateRequest((e) => {
           ? Object.keys(finalObj).length
           : 0
       console.log('[area_configs] UPDATE FINAL presetFieldsKeys=' + finalKeys)
+      // TRACE PONTA A PONTA (etapa v): VALORES de infiltration.* recebidos e que
+      // serão persistidos — prova do conteúdo, não da contagem.
+      if (finalObj && typeof finalObj === 'object') {
+        var _traceKeys = [
+          'infiltration.geralMorning',
+          'infiltration.geralAfternoon',
+          'infiltration.bombaInfiltracao',
+          'infiltration.bombaGeral',
+          'infiltration.infiltration_morning_time',
+          'infiltration.infiltration_afternoon_time',
+        ]
+        for (var _ti = 0; _ti < _traceKeys.length; _ti++) {
+          console.log(
+            '[trace-infil] UPDATE ' +
+              _traceKeys[_ti] +
+              ' = "' +
+              String(finalObj[_traceKeys[_ti]] === undefined ? '' : finalObj[_traceKeys[_ti]]) +
+              '"',
+          )
+        }
+      }
     } catch (_) {}
   } catch (_) {}
 

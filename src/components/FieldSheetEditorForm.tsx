@@ -16,6 +16,7 @@
 // Componente 100% controlado: nenhuma lógica de sincronização, fila, IndexedDB,
 // client_token ou retorno de ciclo vive aqui.
 
+import { useEffect, useRef } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { PresetFields } from '@/lib/fieldSheetConfigMetadata'
 import { isPresetValueFilled } from '@/lib/areaConfigPreset'
@@ -429,12 +430,39 @@ export default function FieldSheetEditorForm({
   onFlatPresetWrite,
 }: FieldSheetEditorFormProps) {
   const isAdminConfig = mode === 'admin-config'
+  // ID único desta MONTAGEM do editor — descarta a hipótese de instância
+  // duplicada/morta: se o usuário digita e o log não aparece, ou aparece com
+  // outro id, há mais de uma instância na tela (ou nenhuma viva).
+  const mountIdRef = useRef<string>('')
+  if (mountIdRef.current === '') {
+    mountIdRef.current = `M${Math.random().toString(36).slice(2, 8)}`
+  }
+  useEffect(() => {
+    if (isAdminConfig) {
+      console.log(`[trace-infil] editor montado id=${mountIdRef.current} (build v${APP_VERSION})`)
+      return () => {
+        console.log(
+          `[trace-infil] editor desmontado id=${mountIdRef.current} (build v${APP_VERSION})`,
+        )
+      }
+    }
+  }, [])
   // TODAS as mutações usam update FUNCIONAL (prev => next): a base do merge é o
   // estado mais recente do pai (sheetForm), NUNCA o `value` do render corrente.
   // É o mesmo padrão dos poços (que sempre chegaram ao estado) aplicado a TODAS
   // as seções — cada tecla em Infiltração entra no sheetForm na hora e o badge
   // (countFilledFormFields) sobe imediatamente.
   const set = (partial: Partial<FieldSheetFormState>) => {
+    // TRACE PONTA A PONTA (etapa i): todo onChange de campo de Infiltração
+    // (horários manhã/tarde) imprime O VALOR digitado — prova de que o evento
+    // chega ao handler ligado ao estado.
+    if (isAdminConfig) {
+      for (const [k, v] of Object.entries(partial)) {
+        if (k.startsWith('infiltration_')) {
+          console.log(`[trace-infil] onChange ${k} = "${String(v)}" (build v${APP_VERSION})`)
+        }
+      }
+    }
     // WRITE-THROUGH: além do estado, gravar SINCRONAMENTE no rascunho de sessão
     // (chaves planas do preset). Não substitui o estado — é uma 2ª via em tempo
     // real; quem lê é o handleSave do chamador.
@@ -445,7 +473,13 @@ export default function FieldSheetEditorForm({
     onChange((prev) => ({ ...prev, ...partial }))
   }
   const logInfil = (key: string, val: string) => {
-    if (isAdminConfig) console.log(`[infil] ${key} = "${val}" (build v${APP_VERSION})`)
+    if (isAdminConfig) {
+      // TRACE PONTA A PONTA (etapa i): onChange da tabela de Infiltração com O
+      // VALOR digitado (hidrômetros, saídas, bombas). Se este log NÃO aparecer
+      // ao digitar, o input renderizado na tela não é o que tem este onChange.
+      console.log(`[trace-infil] onChange infiltration.${key} = "${val}" (build v${APP_VERSION})`)
+      console.log(`[infil] ${key} = "${val}" (build v${APP_VERSION})`)
+    }
   }
 
   const setExtractionRow = (
