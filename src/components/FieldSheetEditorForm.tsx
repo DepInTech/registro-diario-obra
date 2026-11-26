@@ -67,7 +67,12 @@ export type FieldSheetFormMode = 'technician-fill' | 'admin-config'
 interface FieldSheetEditorFormProps {
   mode: FieldSheetFormMode
   value: FieldSheetFormState
-  onChange: (next: FieldSheetFormState) => void
+  /** Update FUNCIONAL: o componente chama onChange(prev => next) em vez de
+   * onChange(next) construído a partir do `value` do render corrente. Assim a
+   * base do merge é sempre o estado MAIS RECENTE do pai — digitar em qualquer
+   * campo (em especial Infiltração) chega imediatamente ao sheetForm, mesmo se
+   * dois onChange dispararem no mesmo lote de eventos (stale closure). */
+  onChange: (update: (prev: FieldSheetFormState) => FieldSheetFormState) => void
   disabled?: boolean
 }
 
@@ -414,25 +419,40 @@ export default function FieldSheetEditorForm({
   disabled,
 }: FieldSheetEditorFormProps) {
   const isAdminConfig = mode === 'admin-config'
-  const set = (partial: Partial<FieldSheetFormState>) => onChange({ ...value, ...partial })
+  // TODAS as mutações usam update FUNCIONAL (prev => next): a base do merge é o
+  // estado mais recente do pai (sheetForm), NUNCA o `value` do render corrente.
+  // É o mesmo padrão dos poços (que sempre chegaram ao estado) aplicado a TODAS
+  // as seções — cada tecla em Infiltração entra no sheetForm na hora e o badge
+  // (countFilledFormFields) sobe imediatamente.
+  const set = (partial: Partial<FieldSheetFormState>) =>
+    onChange((prev) => ({ ...prev, ...partial }))
 
   const setExtractionRow = (index: number, partial: Partial<FieldSheetExtractionRow>) => {
-    const rows = [...(value.extraction_data || [])]
-    rows[index] = { ...rows[index], ...partial }
-    set({ extraction_data: rows })
+    onChange((prev) => {
+      const rows = [...(prev.extraction_data || [])]
+      rows[index] = { ...rows[index], ...partial }
+      return { ...prev, extraction_data: rows }
+    })
   }
   const addExtractionWell = () =>
-    set({
+    onChange((prev) => ({
+      ...prev,
       extraction_data: [
-        ...(value.extraction_data || []),
+        ...(prev.extraction_data || []),
         { well: '', morning: '', afternoon: '', pump: '', autopump: '' },
       ],
-    })
+    }))
   const removeExtractionWell = (index: number) =>
-    set({ extraction_data: (value.extraction_data || []).filter((_, i) => i !== index) })
+    onChange((prev) => ({
+      ...prev,
+      extraction_data: (prev.extraction_data || []).filter((_, i) => i !== index),
+    }))
 
   const setInfiltration = (key: string, val: string) =>
-    set({ infiltration_data: { ...(value.infiltration_data || {}), [key]: val } })
+    onChange((prev) => ({
+      ...prev,
+      infiltration_data: { ...(prev.infiltration_data || {}), [key]: val },
+    }))
   const exitNumbers = Object.keys(value.infiltration_data || {})
     .map((k) => /^out(\d+)(Morning|Afternoon)$/.exec(k)?.[1])
     .filter((n): n is string => Boolean(n))
@@ -440,26 +460,46 @@ export default function FieldSheetEditorForm({
     .filter((n, i, arr) => arr.indexOf(n) === i)
     .sort((a, b) => a - b)
   const addInfiltrationExit = () => {
-    const next = (exitNumbers[exitNumbers.length - 1] || 0) + 1
-    // Um único onChange com AMBAS as chaves — dois setInfiltration seguidos
-    // usavam o `value` stale e a chave Morning se perdia no estado.
-    set({
-      infiltration_data: {
-        ...(value.infiltration_data || {}),
-        [`out${next}Morning`]: '',
-        [`out${next}Afternoon`]: '',
-      },
+    // Dentro do updater: numera a saída a partir do estado MAIS RECENTE (dois
+    // cliques rápidos no mesmo lote nunca geram a mesma numeração nem perdem a
+    // chave Morning — mesmo cuidado do merge acima).
+    onChange((prev) => {
+      const nums = Object.keys(prev.infiltration_data || {})
+        .map((k) => /^out(\d+)(Morning|Afternoon)$/.exec(k)?.[1])
+        .filter((n): n is string => Boolean(n))
+        .map((n) => Number(n))
+        .filter((n, i, arr) => arr.indexOf(n) === i)
+        .sort((a, b) => a - b)
+      const next = (nums[nums.length - 1] || 0) + 1
+      return {
+        ...prev,
+        infiltration_data: {
+          ...(prev.infiltration_data || {}),
+          [`out${next}Morning`]: '',
+          [`out${next}Afternoon`]: '',
+        },
+      }
     })
   }
 
   const compressorCount = Math.max(1, Math.min(4, value.compressor_count || 1))
   const compressorIndices = Array.from({ length: compressorCount }, (_, i) => i + 1)
-  const addCompressor = () => set({ compressor_count: Math.min(4, compressorCount + 1) })
+  const addCompressor = () =>
+    onChange((prev) => ({
+      ...prev,
+      compressor_count: Math.min(4, Math.max(1, Math.min(4, prev.compressor_count || 1)) + 1),
+    }))
   const setCompressor = (key: string, val: string) =>
-    set({ compressor_data: { ...(value.compressor_data || {}), [key]: val } })
+    onChange((prev) => ({
+      ...prev,
+      compressor_data: { ...(prev.compressor_data || {}), [key]: val },
+    }))
 
   const setOil = (key: keyof FieldSheetFormState['oil_removal_data'], val: string) =>
-    set({ oil_removal_data: { ...value.oil_removal_data, [key]: val } })
+    onChange((prev) => ({
+      ...prev,
+      oil_removal_data: { ...prev.oil_removal_data, [key]: val },
+    }))
 
   const infiltrationRows: Array<{ label: string; mKey: string; aKey: string }> = [
     { label: 'Geral', mKey: 'geralMorning', aKey: 'geralAfternoon' },
