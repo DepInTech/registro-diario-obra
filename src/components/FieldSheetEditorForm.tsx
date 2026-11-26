@@ -19,6 +19,8 @@
 import { Plus, Trash2 } from 'lucide-react'
 import type { PresetFields } from '@/lib/fieldSheetConfigMetadata'
 import { isPresetValueFilled } from '@/lib/areaConfigPreset'
+import { APP_VERSION } from '@/lib/appVersion'
+import { formPatchToFlatPreset, type FlatPresetPatch } from '@/lib/fieldSheetFlatDraft'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -74,6 +76,13 @@ interface FieldSheetEditorFormProps {
    * dois onChange dispararem no mesmo lote de eventos (stale closure). */
   onChange: (update: (prev: FieldSheetFormState) => FieldSheetFormState) => void
   disabled?: boolean
+  /**
+   * WRITE-THROUGH (modo admin-config): chamado SINCRONAMENTE a cada mutação do
+   * formulário com as chaves PLANAS do preset correspondentes (ex.
+   * "infiltration.geralMorning": "123"). O pai grava no rascunho de sessão da
+   * área — fonte de verdade independente do estado React, lida pelo Salvar.
+   */
+  onFlatPresetWrite?: (flat: FlatPresetPatch) => void
 }
 
 export function emptyFieldSheetFormState(): FieldSheetFormState {
@@ -417,6 +426,7 @@ export default function FieldSheetEditorForm({
   value,
   onChange,
   disabled,
+  onFlatPresetWrite,
 }: FieldSheetEditorFormProps) {
   const isAdminConfig = mode === 'admin-config'
   // TODAS as mutações usam update FUNCIONAL (prev => next): a base do merge é o
@@ -424,10 +434,30 @@ export default function FieldSheetEditorForm({
   // É o mesmo padrão dos poços (que sempre chegaram ao estado) aplicado a TODAS
   // as seções — cada tecla em Infiltração entra no sheetForm na hora e o badge
   // (countFilledFormFields) sobe imediatamente.
-  const set = (partial: Partial<FieldSheetFormState>) =>
+  const set = (partial: Partial<FieldSheetFormState>) => {
+    // WRITE-THROUGH: além do estado, gravar SINCRONAMENTE no rascunho de sessão
+    // (chaves planas do preset). Não substitui o estado — é uma 2ª via em tempo
+    // real; quem lê é o handleSave do chamador.
+    if (isAdminConfig && onFlatPresetWrite) {
+      const flat = formPatchToFlatPreset(partial)
+      if (Object.keys(flat).length > 0) onFlatPresetWrite(flat)
+    }
     onChange((prev) => ({ ...prev, ...partial }))
+  }
+  const logInfil = (key: string, val: string) => {
+    if (isAdminConfig) console.log(`[infil] ${key} = "${val}" (build v${APP_VERSION})`)
+  }
 
-  const setExtractionRow = (index: number, partial: Partial<FieldSheetExtractionRow>) => {
+  const setExtractionRow = (
+    index: number,
+    partial: Partial<FieldSheetExtractionRow> & { morning_time?: string; afternoon_time?: string },
+  ) => {
+    // Horários de manhã/tarde da tabela 1 são campos simples do preset
+    // (extraction.morning_time / extraction.afternoon_time) — write-through idem.
+    // O RESTO da linha (well/morning/afternoon/pump/autopump) é estrutura
+    // (preset.wells[]) e segue pelo caminho normal do estado.
+    if (partial.morning_time !== undefined) set({ morning_time: partial.morning_time })
+    if (partial.afternoon_time !== undefined) set({ afternoon_time: partial.afternoon_time })
     onChange((prev) => {
       const rows = [...(prev.extraction_data || [])]
       rows[index] = { ...rows[index], ...partial }
@@ -448,11 +478,20 @@ export default function FieldSheetEditorForm({
       extraction_data: (prev.extraction_data || []).filter((_, i) => i !== index),
     }))
 
-  const setInfiltration = (key: string, val: string) =>
+  const setInfiltration = (key: string, val: string) => {
+    logInfil(`infiltration.${key}`, val)
+    // WRITE-THROUGH: toda tecla da Infiltração vai para o rascunho de sessão
+    if (isAdminConfig && onFlatPresetWrite) {
+      const flat = formPatchToFlatPreset({
+        infiltration_data: { [key]: val },
+      })
+      if (Object.keys(flat).length > 0) onFlatPresetWrite(flat)
+    }
     onChange((prev) => ({
       ...prev,
       infiltration_data: { ...(prev.infiltration_data || {}), [key]: val },
     }))
+  }
   const exitNumbers = Object.keys(value.infiltration_data || {})
     .map((k) => /^out(\d+)(Morning|Afternoon)$/.exec(k)?.[1])
     .filter((n): n is string => Boolean(n))
@@ -489,17 +528,27 @@ export default function FieldSheetEditorForm({
       ...prev,
       compressor_count: Math.min(4, Math.max(1, Math.min(4, prev.compressor_count || 1)) + 1),
     }))
-  const setCompressor = (key: string, val: string) =>
+  const setCompressor = (key: string, val: string) => {
+    if (isAdminConfig && onFlatPresetWrite) {
+      const flat = formPatchToFlatPreset({ compressor_data: { [key]: val } })
+      if (Object.keys(flat).length > 0) onFlatPresetWrite(flat)
+    }
     onChange((prev) => ({
       ...prev,
       compressor_data: { ...(prev.compressor_data || {}), [key]: val },
     }))
+  }
 
-  const setOil = (key: keyof FieldSheetFormState['oil_removal_data'], val: string) =>
+  const setOil = (key: keyof FieldSheetFormState['oil_removal_data'], val: string) => {
+    if (isAdminConfig && onFlatPresetWrite) {
+      const flat = formPatchToFlatPreset({ oil_removal_data: { [key]: val } })
+      if (Object.keys(flat).length > 0) onFlatPresetWrite(flat)
+    }
     onChange((prev) => ({
       ...prev,
       oil_removal_data: { ...prev.oil_removal_data, [key]: val },
     }))
+  }
 
   const infiltrationRows: Array<{ label: string; mKey: string; aKey: string }> = [
     { label: 'Geral', mKey: 'geralMorning', aKey: 'geralAfternoon' },

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import pb from '@/lib/pocketbase/client'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/hooks/use-toast'
+import { mergeFlatDraftIntoFormState, type FlatPresetPatch } from '@/lib/fieldSheetFlatDraft'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -24,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { APP_VERSION } from '@/lib/appVersion'
 import { PRESET_DATE_KEYS, countConfiguredFields } from '@/lib/fieldSheetConfigMetadata'
 import type { AreaConfigRecord, PresetFields } from '@/lib/fieldSheetConfigMetadata'
+import { isPresetValueFilled } from '@/lib/areaConfigPreset'
 import FieldSheetEditorForm from '@/components/FieldSheetEditorForm'
 import {
   emptyFieldSheetFormState,
@@ -67,6 +69,13 @@ const emptyForm = (): ConfigForm => ({
 // 'new') enquanto o componente estiver montado e a restaura na reabertura —
 // e é apagado no Salvar (persistiu) e no Cancelar/Voltar (descarte explícito).
 // Chave POR ÁREA garante que trocar de área nunca misture dados.
+//
+// v0.0.237 — WRITE-THROUGH POR TECLA: o rascunho ganhou `flatPreset`, mapa de
+// chaves PLANAS no formato do preset (ex. "infiltration.geralMorning") espelhado
+// sincronamente a cada mutação do editor (handleFlatPresetWrite) e em
+// flatDraftRef (lido pelo Salvar sem depender de render). É uma fonte de
+// verdade INDEPENDENTE do estado React: no Salvar, cada chave vazia no estado
+// é resgatada do rascunho (mergeFlatDraftIntoFormState).
 // ---------------------------------------------------------------------------
 const DRAFT_STORAGE_KEY = 'epa_area_config_unsaved_drafts'
 
@@ -74,6 +83,8 @@ type AreaConfigDraft = {
   editing: ConfigForm
   isEditingExisting: boolean
   sheetForm: FieldSheetFormState
+  /** 2ª via da digitação (write-through): chaves PLANAS no formato do preset */
+  flatPreset?: FlatPresetPatch
   savedAt: number
 }
 
@@ -114,6 +125,9 @@ export default function AreaConfigs() {
   const [sheetForm, setSheetForm] = useState<FieldSheetFormState>(() => emptyFieldSheetFormState())
   // true quando a edição atual veio de um rascunho não salvo restaurado
   const [restoredDraft, setRestoredDraft] = useState(false)
+  // Espelho REF do rascunho plano da área aberta: lido pelo handleSave SEM
+  // depender de render/closure — é a 2ª via da digitação (write-through).
+  const flatDraftRef = useRef<FlatPresetPatch>({})
 
   // ---------------- PROTEÇÃO DO EDITOR ABERTO (bug do badge parado em 2) ----------------
   // Qualquer atualização de lista (polling "[Polling] N mudanças aplicadas",
@@ -139,6 +153,30 @@ export default function AreaConfigs() {
     [],
   )
 
+  // WRITE-THROUGH (2ª via da digitação): o editor chama isto SINCRONAMENTE a
+  // cada mutação de campo simples com as chaves planas do preset (ex.
+  // "infiltration.geralMorning": "123"). Espelha em ref (lida pelo Salvar sem
+  // depender de render) e grava no rascunho de sessão da área — MESCLANDO
+  // (nunca apagando chaves já digitadas). Fonte de verdade independente do
+  // estado React: se o sheetForm for resetado por qualquer motivo, o que o
+  // Admin digitou continua aqui e chega ao banco no Salvar.
+  const handleFlatPresetWrite = useCallback(
+    (flat: FlatPresetPatch) => {
+      flatDraftRef.current = { ...flatDraftRef.current, ...flat }
+      const drafts = readDrafts()
+      const key = draftKeyOf(editing)
+      const existing = drafts[key]
+      writeDraft(key, {
+        editing: editing ?? emptyForm(),
+        isEditingExisting,
+        sheetForm,
+        flatPreset: { ...(existing?.flatPreset || {}), ...flat },
+        savedAt: Date.now(),
+      })
+    },
+    [editing, isEditingExisting, sheetForm],
+  )
+
   // Persiste a edição em andamento a cada mudança (digitação incluída), para
   // que uma desmontagem inesperada NUNCA descarte o que já foi digitado.
   // Quando o editor está SUJO, o rascunho é gravado AINDA MAIS (a cada tecla):
@@ -146,7 +184,13 @@ export default function AreaConfigs() {
   // o ESTADO VIVO (nenhum caminho externo sobrescreve sheetForm), não o rascunho.
   useEffect(() => {
     if (!editing) return
-    writeDraft(draftKeyOf(editing), { editing, isEditingExisting, sheetForm, savedAt: Date.now() })
+    writeDraft(draftKeyOf(editing), {
+      editing,
+      isEditingExisting,
+      sheetForm,
+      flatPreset: flatDraftRef.current, // nunca sobrescrever a 2ª via com vazio
+      savedAt: Date.now(),
+    })
   }, [editing, isEditingExisting, sheetForm, editorDirty])
   // Atualizações de lista/realtime/polling só chegam como `records` — nunca
   // tocam no editor aberto (prova: nenhum efeito aqui lê `records` para reabrir
@@ -161,7 +205,13 @@ export default function AreaConfigs() {
     if (!latest) return
     setIsEditingExisting(latest.isEditingExisting)
     setEditing(latest.editing)
-    setSheetForm({ ...emptyFieldSheetFormState(), ...latest.sheetForm })
+    setSheetForm(
+      mergeFlatDraftIntoFormState(
+        { ...emptyFieldSheetFormState(), ...latest.sheetForm },
+        latest.flatPreset,
+      ),
+    )
+    flatDraftRef.current = { ...(latest.flatPreset || {}) }
     setEditorDirty(true) // rascunho restaurado = estado com digitação: protegido
     setRestoredDraft(true)
   }, [])
@@ -199,13 +249,20 @@ export default function AreaConfigs() {
     if (draft?.editing && draft.sheetForm) {
       // Retoma o cadastro "nova área" que estava em andamento (não salvo).
       setEditing(draft.editing)
-      setSheetForm({ ...emptyFieldSheetFormState(), ...draft.sheetForm })
+      setSheetForm(
+        mergeFlatDraftIntoFormState(
+          { ...emptyFieldSheetFormState(), ...draft.sheetForm },
+          draft.flatPreset,
+        ),
+      )
+      flatDraftRef.current = { ...(draft.flatPreset || {}) }
       setEditorDirty(true)
       setRestoredDraft(true)
       return
     }
     setEditing(emptyForm())
     setSheetForm(emptyFieldSheetFormState())
+    flatDraftRef.current = {}
     setEditorDirty(false)
     setRestoredDraft(false)
   }
@@ -227,13 +284,20 @@ export default function AreaConfigs() {
       // Retoma SOMENTE o rascunho DESTA área (chave = id do registro): nunca
       // mistura dados de Infiltração entre áreas diferentes.
       setEditing({ ...base, ...draft.editing, id: rec.id, area_name: base.area_name })
-      setSheetForm({ ...emptyFieldSheetFormState(), ...draft.sheetForm })
+      setSheetForm(
+        mergeFlatDraftIntoFormState(
+          { ...emptyFieldSheetFormState(), ...draft.sheetForm },
+          draft.flatPreset,
+        ),
+      )
+      flatDraftRef.current = { ...(draft.flatPreset || {}) }
       setEditorDirty(true)
       setRestoredDraft(true)
       return
     }
     setEditing(base)
     setSheetForm(presetFieldsToFormState(rec.preset_fields))
+    flatDraftRef.current = {}
     setEditorDirty(false)
     setRestoredDraft(false)
   }
@@ -241,6 +305,7 @@ export default function AreaConfigs() {
   // Cancelar/Voltar: descarte EXPLÍCITO do rascunho desta área.
   const handleCancel = () => {
     if (editing) writeDraft(draftKeyOf(editing), null)
+    flatDraftRef.current = {}
     setEditing(null)
     setEditorDirty(false)
     setRestoredDraft(false)
@@ -261,32 +326,42 @@ export default function AreaConfigs() {
       })
       return
     }
-    // Validação leve das chaves de data (mesma regra DD/MM/AAAA da Planilha de Campo)
-    // (filledCount vem do escopo do componente — fonte INDEPENDENTE da serialização)
-    const presetOut = formStateToPresetFields(sheetForm)
+    // MESCLAGEM ESTADO x RASCUNHO no Salvar: serializa o estado, mescla o
+    // rascunho plano (write-through por tecla) e serializa o resultado —
+    // "estado se não-vazio, senão rascunho". O que o Admin digitou chega ao
+    // banco MESMO que o sheetForm tenha sido resetado por qualquer motivo
+    // (a 2ª via é independente do estado React).
+    const statePreset = formStateToPresetFields(sheetForm)
+    const draftFlat = flatDraftRef.current
+    const presetOut = formStateToPresetFields(mergeFlatDraftIntoFormState(sheetForm, draftFlat))
     const serializedCount = Object.keys(presetOut).length
-    // LOG DE DEBUG temporário: prova em tela (console) o round-trip do estado do
-    // editor -> serialização. "keys=19" do sheetForm é só a ESTRUTURA do estado
-    // (emptyFieldSheetFormState sempre nasce com 19 chaves) — o que prova dados
-    // é filledCount x serializedCount, com a versão do bundle no log para o
-    // usuário confirmar qual build está executando o save.
     // Contagens ANINHADAS para leitura clara: 2 linhas de poços colapsam em 1
     // chave 'wells' no preset (o mesmo vale para saídas de infiltração e para
     // compressores), então serializedCount é MENOR que filledCount por
     // estrutura — não é perda. O que prova integridade é o presetOut impresso
-    // logo abaixo (as linhas continuam lá dentro de wells[]).
+    // abaixo (as linhas continuam lá dentro de wells[]).
     const wellsOut = Array.isArray(presetOut.wells) ? (presetOut.wells as unknown[]).length : 0
     const exitsOut = Array.isArray(presetOut.infiltration_exits)
       ? (presetOut.infiltration_exits as unknown[]).length
       : 0
     const compressorOut = Number(presetOut.compressor_count) || 0
+    // LOG FINAL PEDIDO: origem de cada valor (estado x rascunho de sessão).
+    // "doRascunho" = chaves vazias no estado que foram resgatadas do rascunho.
+    let draftRescuedCount = 0
+    for (const pk of Object.keys(presetOut)) {
+      const fromState = statePreset[pk]
+      const stateFilled =
+        typeof fromState === 'boolean' ? fromState : String(fromState ?? '').trim() !== ''
+      if (!stateFilled && isPresetValueFilled(presetOut[pk])) draftRescuedCount++
+    }
     console.log(
       `[AreaConfigs][handleSave] build v${APP_VERSION}`,
-      '| filledCount=',
-      filledCount,
-      '| serializedCount=',
-      serializedCount,
-      `(chaves de topo; poços=${wellsOut} linha(s), saídas=${exitsOut} linha(s), compressores=${compressorOut})`,
+      `| filledCount=${filledCount}`,
+      `| serializedCount=${serializedCount}`,
+      `(poços=${wellsOut} linha(s), saídas=${exitsOut} linha(s), compressores=${compressorOut})`,
+      `| estado=${Object.keys(statePreset).length} chaves`,
+      `| rascunho=${Object.keys(draftFlat).length} chaves`,
+      `| doRascunho=${draftRescuedCount}`,
       '| presetOut=',
       JSON.parse(JSON.stringify(presetOut || {})),
     )
@@ -375,6 +450,7 @@ export default function AreaConfigs() {
       }
       // Persistiu: o rascunho desta área não é mais necessário.
       writeDraft(draftKeyOf(editing), null)
+      flatDraftRef.current = {}
       setEditing(null)
       setEditorDirty(false)
       setRestoredDraft(false)
@@ -678,6 +754,7 @@ export default function AreaConfigs() {
         mode="admin-config"
         value={sheetForm}
         onChange={setSheetFormGuarded}
+        onFlatPresetWrite={handleFlatPresetWrite}
         disabled={saving}
       />
 
