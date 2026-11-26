@@ -247,13 +247,14 @@ export function presetFieldsToFormState(
   }
   // Saídas dinâmicas de infiltração (tabela 2): infiltration_exits =
   // [{ exit, morning, afternoon }, ...] -> out<N>Morning / out<N>Afternoon.
+  // TODAS as saídas configuradas entram no estado — inclusive com morning/
+  // afternoon VAZIOS (a existência da saída é estrutura, não conteúdo; o
+  // filtro por valor preenchido era o que ocultava saídas sem leitura).
   for (const exit of parseJsonList(preset.infiltration_exits)) {
     const num = Number(exit.exit)
     if (!Number.isInteger(num) || num < 1) continue
-    if (isPresetValueFilled(exit.morning))
-      state.infiltration_data[`out${num}Morning`] = str(exit.morning)
-    if (isPresetValueFilled(exit.afternoon))
-      state.infiltration_data[`out${num}Afternoon`] = str(exit.afternoon)
+    state.infiltration_data[`out${num}Morning`] = str(exit.morning)
+    state.infiltration_data[`out${num}Afternoon`] = str(exit.afternoon)
   }
   return state
 }
@@ -627,6 +628,13 @@ export default function FieldSheetEditorForm({
     .map((n) => Number(n))
     .filter((n, i, arr) => arr.indexOf(n) === i)
     .sort((a, b) => a - b)
+  // TRACE: saídas que o Admin configurou (estrutura) vs. saídas com valor —
+  // estruturais (vazias) aparecem na tabela mesmo sem leitura digitada.
+  if (isAdminConfig) {
+    console.log(
+      `[trace-infil] saídas estruturais=${exitNumbers.length} com-valor=${exitNumbers.filter((n) => String(value.infiltration_data?.[`out${n}Morning`] ?? '').trim() !== '' || String(value.infiltration_data?.[`out${n}Afternoon`] ?? '').trim() !== '').length} (build v${APP_VERSION})`,
+    )
+  }
   const addInfiltrationExit = () => {
     // Dentro do updater: numera a saída a partir do estado MAIS RECENTE (dois
     // cliques rápidos no mesmo lote nunca geram a mesma numeração nem perdem a

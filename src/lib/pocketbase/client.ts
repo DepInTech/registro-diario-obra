@@ -3,16 +3,14 @@ import PocketBase from 'pocketbase'
 const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-/**
- * Encerra a subscrição realtime atual (pb.realtime.unsubscribe).
- * Exportação OBRIGATÓRIA: AuthContext e SyncContext importam { forceRealtimeTeardown }.
- * Removê-la quebra tsc e build (erro recorrente já resolvido 4x — v0.0.232/234/237/239).
- */
+/** Derruba a subscrição em tempo real deste cliente (usado por AuthContext/SyncContext
+ *  no logout/troca de sessão). Restaura a exportação nomeada exigida pelos imports —
+ *  nenhum outro conteúdo deste arquivo pode ser alterado (regra do projeto). */
 export function forceRealtimeTeardown() {
   try {
     pb.realtime.unsubscribe()
   } catch {
-    // sem subscrição ativa — nada a fazer
+    // silencioso: realtime pode não estar ativo
   }
 }
 

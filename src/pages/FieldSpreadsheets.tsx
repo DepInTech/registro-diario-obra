@@ -129,9 +129,12 @@ function getCompressorIndices(compData: Record<string, any> | null | undefined):
   return Array.from(set).sort((a, b) => a - b)
 }
 
-/** Extrai lista ordenada de índices numéricos de saídas presentes em infiltration_data (mínimo 1, 2 e 3) */
+/** Extrai lista ordenada de índices numéricos de saídas presentes em infiltration_data.
+ *  SEM base fixa: a seção começa SEM saídas — as saídas vêm exclusivamente das
+ *  chaves out<N> realmente existentes nos dados (persistidos) e do preset da
+ *  área ativa (activeInfiltrationExitNumbers). Nada de saídas fixas 01–03. */
 function getInfiltrationExitNumbers(infData: Record<string, any> | null | undefined): number[] {
-  const set = new Set<number>([1, 2, 3])
+  const set = new Set<number>()
   if (infData && typeof infData === 'object') {
     for (const key of Object.keys(infData)) {
       const match = key.match(/^out(\d+)(Morning|Afternoon)?$/)
@@ -733,15 +736,12 @@ export function FieldSpreadsheets({ query }: { query: string }) {
       baseSheetField?.infiltration_morning_time || baseFilled.infiltration_morning_time || ''
     const inheritedInfAfternoonTime =
       baseSheetField?.infiltration_afternoon_time || baseFilled.infiltration_afternoon_time || ''
+    // SEM chaves out1..out3 predefinidas: a seção de Infiltração da planilha nova
+    // inicia SEM saídas — as saídas entram só via preset da área selecionada
+    // (infiltration_exits) ou quando o Técnico/Admin adiciona uma explicitamente.
     const inheritedInfiltrationData = {
       geralMorning: '',
       geralAfternoon: '',
-      out1Morning: '',
-      out1Afternoon: '',
-      out2Morning: '',
-      out2Afternoon: '',
-      out3Morning: '',
-      out3Afternoon: '',
       bombaInfiltracao: '',
       bombaGeral: '',
       ...(baseSheetField?.infiltration_data || {}),
@@ -1935,23 +1935,42 @@ function FieldFullEditor({
     pbClient: pb,
   })
 
-  // Saídas de infiltração dinâmicas: números ativos = preset da Configuração de Áreas
-  // (saídas definidas pelo Admin entram na tabela do Técnico) + extras já adicionados.
+  // Saídas de infiltração dinâmicas — a seção SEGUE exclusivamente a configuração
+  // da área ativa (infiltration_exits do preset), sem saídas fixas nem herdadas:
+  // - Sem área selecionada (ou área sem configuração): NENHUMA saída pré-renderizada;
+  //   só aparecem saídas realmente presentes nos dados persistidos da planilha
+  //   (reabertura) ou adicionadas nesta sessão pelo botão "Adicionar Saída".
+  // - Com área configurada: renderiza EXATAMENTE os números de infiltration_exits
+  //   dela (+ extras adicionados nesta sessão) — trocar de área substitui a lista,
+  //   nunca mistura saídas de configurações diferentes.
   const activeInfiltrationExitNumbers = useMemo(() => {
     const list = getInfiltrationExitNumbers(formData.infiltration_data)
-    const maxInMap = list.length > 0 ? Math.max(...list) : 3
     const presetExitNums = Array.isArray(areaConfigSnapshot?.presetFields?.infiltration_exits)
       ? (areaConfigSnapshot!.presetFields.infiltration_exits as Array<Record<string, unknown>>)
           .map((e) => Number(e?.exit))
           .filter((n) => Number.isInteger(n) && n >= 1)
       : []
-    const totalMax = Math.max(3, maxInMap, extraInfExitCount, ...presetExitNums)
-    const result: number[] = []
-    for (let i = 1; i <= totalMax; i++) {
-      result.push(i)
+    if (presetExitNums.length > 0) {
+      const set = new Set<number>(presetExitNums)
+      if (extraInfExitCount > 0) set.add(extraInfExitCount)
+      return Array.from(set).sort((a, b) => a - b)
     }
-    return result
+    const set = new Set<number>(list)
+    if (extraInfExitCount > 0) set.add(extraInfExitCount)
+    return Array.from(set).sort((a, b) => a - b)
   }, [formData.infiltration_data, extraInfExitCount, areaConfigSnapshot])
+
+  // Troca de área (configId do snapshot muda): zera as saídas EXTRAS adicionadas
+  // nesta sessão — a lista da nova área substitui completamente a anterior,
+  // nunca misturando saídas de configurações diferentes.
+  const lastAreaConfigIdRef = useRef<string | null>(areaConfigSnapshot?.configId || null)
+  useEffect(() => {
+    const currentId = areaConfigSnapshot?.configId || null
+    if (lastAreaConfigIdRef.current !== currentId) {
+      lastAreaConfigIdRef.current = currentId
+      setExtraInfExitCount(0)
+    }
+  }, [areaConfigSnapshot?.configId])
 
   // Saídas de infiltração pré-configuradas pelo Admin na Configuração de Áreas:
   // se o preset define saídas, o Técnico não pode adicionar além delas.
