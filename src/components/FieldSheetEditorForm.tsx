@@ -274,20 +274,29 @@ function inferCompressorCount(data: Record<string, unknown> | undefined, current
   return Math.min(4, Math.max(current, hasAny ? maxIndex : 0, hasAny ? 1 : 0))
 }
 
-/** Converte o estado atual do formulário de volta para preset_fields (chaves vazias são descartadas) */
+/**
+ * Serialização COMPLETA para o preset da área (Configuração de Áreas):
+ * inclui TODOS os campos simples do formulário — inclusive os VAZIOS — além
+ * das estruturas (wells, infiltration_exits, compressor_count/data), que
+ * continuam sendo serializadas exatamente como antes. Campos vazios fazem
+ * parte da configuração: sair do preset não pode apagar o que o Admin não
+ * limpou, e o bloqueio do Técnico continua condicional ao CONTEÚDO
+ * (isPresetValueFilled ignora string vazia — vazio nunca trava campo).
+ */
 export function formStateToPresetFields(state: FieldSheetFormState): PresetFields {
   const preset: PresetFields = {}
+  // Campos simples de texto: SEMPRE incluídos (vazio = string vazia)
   for (const [pk, target] of Object.entries(SIMPLE_PRESET_MAP)) {
-    const v = String((state as any)[target] ?? '').trim()
-    if (v !== '') preset[pk] = v
+    preset[pk] = String((state as any)[target] ?? '').trim()
   }
+  // Booleanos: SEMPRE incluídos (true/false explícitos da configuração)
   for (const [pk, target] of Object.entries(BOOLEAN_PRESET_MAP)) {
-    if ((state as any)[target] === true) preset[pk] = true
+    preset[pk] = (state as any)[target] === true
   }
+  // Sub-chaves de objetos JSON (infiltração fixa, remoção de óleo): SEMPRE incluídas
   for (const [pk, [objName, subKey]] of Object.entries(JSON_SUB_PRESET_MAP)) {
     const obj = (state as any)[objName]
-    const v = obj && typeof obj === 'object' ? String((obj as any)[subKey] ?? '').trim() : ''
-    if (v !== '') preset[pk] = v
+    preset[pk] = obj && typeof obj === 'object' ? String((obj as any)[subKey] ?? '').trim() : ''
   }
   const obj = state.compressor_data || {}
   const count = inferCompressorCount(obj, state.compressor_count)
@@ -327,8 +336,7 @@ export function formStateToPresetFields(state: FieldSheetFormState): PresetField
       autopump: String(row.autopump ?? '').trim(),
     }))
   }
-  // Saídas dinâmicas de infiltração: out<N>Morning/out<N>Afternoon agrupados
-  // por saída [{ exit, morning, afternoon }, ...] (par fixo Geral fica fora).
+
   const exitNums = new Set<number>()
   for (const key of Object.keys(state.infiltration_data || {})) {
     const m = /^out(\d+)(Morning|Afternoon)$/.exec(key)

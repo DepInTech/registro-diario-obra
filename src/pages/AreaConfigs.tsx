@@ -175,10 +175,11 @@ export default function AreaConfigs() {
       })
       return
     }
-    // Chaves de data — mesma regra DD/MM/AAAA da Planilha de Campo. Acesso
-    // direto a oil_removal_data.<chave> (o serializador aninhou a data ali).
+    // Chaves de data — mesma regra DD/MM/AAAA da Planilha de Campo. O serializador
+    // grava as datas de remoção de óleo como chaves PLANAS (oil_removal.sao1DataLimpeza
+    // etc. — mesmas chaves consumidas pelo hook de preset da planilha).
     for (const dk of PRESET_DATE_KEYS) {
-      const v = (presetOut.oil_removal_data as Record<string, unknown> | undefined)?.[dk]
+      const v = presetOut[`oil_removal.${dk}`]
       if (typeof v === 'string' && v.trim() !== '') {
         const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v.trim())
         if (!m) {

@@ -278,7 +278,9 @@ export function countConfiguredFields(preset: PresetFields | null | undefined): 
     }
     if (value === undefined || value === null) continue
     if (typeof value === 'boolean') {
-      count++
+      // false também é persistido no preset (configuração explícita), mas NÃO
+      // é "campo pré-preenchido" — só true conta para o badge.
+      if (value) count++
       continue
     }
     if (String(value).trim() !== '') count++
