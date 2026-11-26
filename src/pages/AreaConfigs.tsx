@@ -53,6 +53,54 @@ const emptyForm = (): ConfigForm => ({
   preset_fields: {},
 })
 
+// ---------------------------------------------------------------------------
+// RASCUNHO DE EDIÇÃO EM ANDAMENTO (por área, na sessão do navegador).
+//
+// Causa raiz do bug do badge "N campo(s) pré-preenchido(s)" parado em 2: o
+// sheetForm vivia APENAS no estado deste componente — qualquer desmontagem
+// entre a digitação e o Salvar (navegação interna para outra página, volta
+// para o Dashboard, remontagem da árvore) DESCARTAVA o que o Admin tinha
+// digitado. Ao reabrir, startEdit recarregava o preset salvo (só os poços),
+// o badge voltava a 2 e a Infiltração digitada nunca chegava ao save.
+//
+// O rascunho guarda a edição NÃO SALVA por chave de área (id do registro ou
+// 'new') enquanto o componente estiver montado e a restaura na reabertura —
+// e é apagado no Salvar (persistiu) e no Cancelar/Voltar (descarte explícito).
+// Chave POR ÁREA garante que trocar de área nunca misture dados.
+// ---------------------------------------------------------------------------
+const DRAFT_STORAGE_KEY = 'epa_area_config_unsaved_drafts'
+
+type AreaConfigDraft = {
+  editing: ConfigForm
+  isEditingExisting: boolean
+  sheetForm: FieldSheetFormState
+  savedAt: number
+}
+
+function readDrafts(): Record<string, AreaConfigDraft> {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, AreaConfigDraft>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeDraft(key: string, draft: AreaConfigDraft | null) {
+  try {
+    const drafts = readDrafts()
+    if (draft) drafts[key] = draft
+    else delete drafts[key]
+    sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(drafts))
+  } catch {
+    // sessionStorage indisponível (modo privado etc.): segue sem rascunho.
+  }
+}
+
+const draftKeyOf = (editing: ConfigForm | null): string => editing?.id || 'new'
+
 export default function AreaConfigs() {
   const { user } = useAuth()
   const { toast } = useToast()
@@ -64,6 +112,29 @@ export default function AreaConfigs() {
   const [confirmToggle, setConfirmToggle] = useState<AreaConfigRecord | null>(null)
   // Estado do formulário ÚNICO da Planilha de Campo (modo admin-config)
   const [sheetForm, setSheetForm] = useState<FieldSheetFormState>(() => emptyFieldSheetFormState())
+  // true quando a edição atual veio de um rascunho não salvo restaurado
+  const [restoredDraft, setRestoredDraft] = useState(false)
+
+  // Persiste a edição em andamento a cada mudança (digitação incluída), para
+  // que uma desmontagem inesperada NUNCA descarte o que já foi digitado.
+  useEffect(() => {
+    if (!editing) return
+    writeDraft(draftKeyOf(editing), { editing, isEditingExisting, sheetForm, savedAt: Date.now() })
+  }, [editing, isEditingExisting, sheetForm])
+
+  // Na montagem, restaura o rascunho não salvo mais recente (se houver) — cobre
+  // o retorno de uma navegação/remontagem no meio do preenchimento.
+  useEffect(() => {
+    const drafts = readDrafts()
+    const latest = Object.values(drafts)
+      .filter((d) => d && d.editing && d.sheetForm)
+      .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0))[0]
+    if (!latest) return
+    setIsEditingExisting(latest.isEditingExisting)
+    setEditing(latest.editing)
+    setSheetForm({ ...emptyFieldSheetFormState(), ...latest.sheetForm })
+    setRestoredDraft(true)
+  }, [])
 
   const isAdmin = user?.role === 'admin'
 
@@ -94,13 +165,22 @@ export default function AreaConfigs() {
 
   const startNew = () => {
     setIsEditingExisting(false)
+    const draft = readDrafts()['new']
+    if (draft?.editing && draft.sheetForm) {
+      // Retoma o cadastro "nova área" que estava em andamento (não salvo).
+      setEditing(draft.editing)
+      setSheetForm({ ...emptyFieldSheetFormState(), ...draft.sheetForm })
+      setRestoredDraft(true)
+      return
+    }
     setEditing(emptyForm())
     setSheetForm(emptyFieldSheetFormState())
+    setRestoredDraft(false)
   }
 
   const startEdit = (rec: AreaConfigRecord) => {
     setIsEditingExisting(true)
-    setEditing({
+    const base: ConfigForm = {
       id: rec.id,
       area_name: rec.area_name || '',
       contract_number: rec.contract_number || '',
@@ -109,8 +189,26 @@ export default function AreaConfigs() {
       config_version: rec.config_version || 0,
       preset_fields:
         rec.preset_fields && typeof rec.preset_fields === 'object' ? { ...rec.preset_fields } : {},
-    })
+    }
+    const draft = readDrafts()[rec.id]
+    if (draft?.editing && draft.sheetForm) {
+      // Retoma SOMENTE o rascunho DESTA área (chave = id do registro): nunca
+      // mistura dados de Infiltração entre áreas diferentes.
+      setEditing({ ...base, ...draft.editing, id: rec.id, area_name: base.area_name })
+      setSheetForm({ ...emptyFieldSheetFormState(), ...draft.sheetForm })
+      setRestoredDraft(true)
+      return
+    }
+    setEditing(base)
     setSheetForm(presetFieldsToFormState(rec.preset_fields))
+    setRestoredDraft(false)
+  }
+
+  // Cancelar/Voltar: descarte EXPLÍCITO do rascunho desta área.
+  const handleCancel = () => {
+    if (editing) writeDraft(draftKeyOf(editing), null)
+    setEditing(null)
+    setRestoredDraft(false)
   }
 
   const setField = (key: keyof ConfigForm, value: unknown) => {
@@ -240,7 +338,10 @@ export default function AreaConfigs() {
       } else {
         toast({ title: 'Área configurada', description: `Área "${name}" cadastrada com sucesso.` })
       }
+      // Persistiu: o rascunho desta área não é mais necessário.
+      writeDraft(draftKeyOf(editing), null)
       setEditing(null)
+      setRestoredDraft(false)
       await loadRecords()
     } catch (err: unknown) {
       const anyErr = err as { message?: string; status?: number }
@@ -446,7 +547,7 @@ export default function AreaConfigs() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" onClick={() => setEditing(null)} className="shrink-0">
+        <Button variant="outline" size="sm" onClick={handleCancel} className="shrink-0">
           <ArrowLeft className="mr-1.5 h-4 w-4" />
           Voltar
         </Button>
@@ -468,6 +569,13 @@ export default function AreaConfigs() {
           build v{APP_VERSION}
         </span>
       </div>
+
+      {restoredDraft && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          <b>Rascunho não salvo restaurado.</b> Os valores digitados antes de sair desta tela
+          voltaram — salve a configuração para gravá-los ou cancele para descartá-los.
+        </div>
+      )}
 
       <Card>
         <CardContent className="pt-5">
@@ -547,7 +655,7 @@ export default function AreaConfigs() {
       </div>
 
       <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-slate-200 bg-white/95 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
-        <Button variant="outline" onClick={() => setEditing(null)} disabled={saving}>
+        <Button variant="outline" onClick={handleCancel} disabled={saving}>
           Cancelar
         </Button>
         <Button
