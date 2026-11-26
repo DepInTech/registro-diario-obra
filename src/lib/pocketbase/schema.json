@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-26T14:07:50.001Z",
+  "generatedAt": "2026-11-26T19:58:24.788Z",
   "collections": [
     {
       "name": "users",
@@ -486,13 +486,6 @@
           "system": false
         },
         {
-          "name": "weather",
-          "type": "select",
-          "required": true,
-          "system": false,
-          "selectValues": ["Sol", "Chuva", "Nublado", "Instável"]
-        },
-        {
           "name": "performed_by",
           "type": "relation",
           "required": true,
@@ -664,6 +657,12 @@
           "name": "admin_snapshot",
           "type": "json",
           "required": false,
+          "system": false
+        },
+        {
+          "name": "weather",
+          "type": "text",
+          "required": true,
           "system": false
         }
       ],
