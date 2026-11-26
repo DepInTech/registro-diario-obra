@@ -447,6 +447,95 @@ export default function FieldSheetEditorForm({
       }
     }
   }, [])
+  // ---------------------------------------------------------------------------
+  // 2ª VIA NATIVA (independente do sistema de eventos sintéticos do React):
+  // evidência v0.0.239 — o valor aparece na tela, o editor é único, mas NENHUM
+  // onChange sintético dispara (rascunho=0). Ou seja: o evento chega ao DOM,
+  // mas não ao React. Este listener NATIVO (capture=true) no contêiner raiz
+  // captura a digitação direto no DOM via data-preset-key e grava no mesmo
+  // write-through (onFlatPresetWrite) que alimenta o rascunho lido pelo Salvar.
+  // ---------------------------------------------------------------------------
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const onFlatPresetWriteRef = useRef(onFlatPresetWrite)
+  useEffect(() => {
+    onFlatPresetWriteRef.current = onFlatPresetWrite
+  })
+  // Chaves que o handler SINTÉTICO (onChange) já entregou — o listener nativo
+  // compara tecla a tecla: se o nativo dispara e o sintético não, a causa raiz
+  // (evento nativo ≠ entrega sintética do React) fica provada no console.
+  const syntheticFiredKeysRef = useRef<Set<string>>(new Set())
+  const firstNativeLoggedRef = useRef(false)
+  const markSyntheticFlat = (flat: FlatPresetPatch) => {
+    for (const k of Object.keys(flat)) syntheticFiredKeysRef.current.add(k)
+  }
+  useEffect(() => {
+    if (!isAdminConfig) return
+    const el = containerRef.current
+    if (!el) return
+    const handler = (ev: Event) => {
+      const t = ev.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null
+      if (!t || typeof (t as HTMLElement).getAttribute !== 'function') return
+      const key = (t as HTMLElement).getAttribute('data-preset-key')
+      if (!key) return
+      const raw =
+        (t as HTMLInputElement).type === 'checkbox'
+          ? (t as HTMLInputElement).checked
+            ? 'true'
+            : 'false'
+          : t.value
+      // Datas de remoção de óleo recebem a MESMA máscara do onChange sintético
+      const val =
+        key.startsWith('oil_removal.') && key.endsWith('DataLimpeza') ? applyDateMask(raw) : raw
+      if (!firstNativeLoggedRef.current) {
+        firstNativeLoggedRef.current = true
+        console.log(
+          `[native-input] 1º evento nativo capturado — inputs no container: ` +
+            `${el.querySelectorAll('input,select,textarea').length} (build v${APP_VERSION})`,
+        )
+      }
+      console.log(
+        `[native-input] ${key} = "${val}" (isTrusted=${ev.isTrusted}) (build v${APP_VERSION})`,
+      )
+      // Comparação com o sintético após o React ter tido a chance de processar
+      window.setTimeout(() => {
+        const gotSynthetic = syntheticFiredKeysRef.current.has(key)
+        syntheticFiredKeysRef.current.delete(key)
+        if (!gotSynthetic) {
+          console.log(
+            `[native-input] comparação ${key}: evento NATIVO capturado e SINTÉTICO (onChange React) NÃO recebido — ` +
+              `evento nativo ≠ entrega sintética do React (build v${APP_VERSION})`,
+          )
+        }
+      }, 0)
+      onFlatPresetWriteRef.current?.({ [key]: val })
+    }
+    // Switches Radix não emitem 'input'/'change' nativos — capturamos o clique
+    // e lemos o aria-checked DEPOIS da alternância.
+    const switchClick = (ev: MouseEvent) => {
+      const t = ev.target as HTMLElement | null
+      if (!t || typeof t.closest !== 'function') return
+      const sw = t.closest('[role="switch"]') as HTMLElement | null
+      if (!sw) return
+      const key = sw.getAttribute('data-preset-key')
+      if (!key) return
+      window.setTimeout(() => {
+        const on = sw.getAttribute('aria-checked') === 'true' || sw.dataset.state === 'checked'
+        console.log(
+          `[native-input] ${key} = ${on ? 'true' : 'false'} (isTrusted=${ev.isTrusted}; switch) (build v${APP_VERSION})`,
+        )
+        onFlatPresetWriteRef.current?.({ [key]: on })
+      }, 0)
+    }
+    el.addEventListener('input', handler, true)
+    el.addEventListener('change', handler, true)
+    el.addEventListener('click', switchClick, true)
+    return () => {
+      el.removeEventListener('input', handler, true)
+      el.removeEventListener('change', handler, true)
+      el.removeEventListener('click', switchClick, true)
+    }
+  }, [isAdminConfig])
+
   // TODAS as mutações usam update FUNCIONAL (prev => next): a base do merge é o
   // estado mais recente do pai (sheetForm), NUNCA o `value` do render corrente.
   // É o mesmo padrão dos poços (que sempre chegaram ao estado) aplicado a TODAS
@@ -468,7 +557,10 @@ export default function FieldSheetEditorForm({
     // real; quem lê é o handleSave do chamador.
     if (isAdminConfig && onFlatPresetWrite) {
       const flat = formPatchToFlatPreset(partial)
-      if (Object.keys(flat).length > 0) onFlatPresetWrite(flat)
+      if (Object.keys(flat).length > 0) {
+        markSyntheticFlat(flat)
+        onFlatPresetWrite(flat)
+      }
     }
     onChange((prev) => ({ ...prev, ...partial }))
   }
@@ -519,7 +611,10 @@ export default function FieldSheetEditorForm({
       const flat = formPatchToFlatPreset({
         infiltration_data: { [key]: val },
       })
-      if (Object.keys(flat).length > 0) onFlatPresetWrite(flat)
+      if (Object.keys(flat).length > 0) {
+        markSyntheticFlat(flat)
+        onFlatPresetWrite(flat)
+      }
     }
     onChange((prev) => ({
       ...prev,
@@ -565,7 +660,10 @@ export default function FieldSheetEditorForm({
   const setCompressor = (key: string, val: string) => {
     if (isAdminConfig && onFlatPresetWrite) {
       const flat = formPatchToFlatPreset({ compressor_data: { [key]: val } })
-      if (Object.keys(flat).length > 0) onFlatPresetWrite(flat)
+      if (Object.keys(flat).length > 0) {
+        markSyntheticFlat(flat)
+        onFlatPresetWrite(flat)
+      }
     }
     onChange((prev) => ({
       ...prev,
@@ -576,7 +674,10 @@ export default function FieldSheetEditorForm({
   const setOil = (key: keyof FieldSheetFormState['oil_removal_data'], val: string) => {
     if (isAdminConfig && onFlatPresetWrite) {
       const flat = formPatchToFlatPreset({ oil_removal_data: { [key]: val } })
-      if (Object.keys(flat).length > 0) onFlatPresetWrite(flat)
+      if (Object.keys(flat).length > 0) {
+        markSyntheticFlat(flat)
+        onFlatPresetWrite(flat)
+      }
     }
     onChange((prev) => ({
       ...prev,
@@ -594,7 +695,7 @@ export default function FieldSheetEditorForm({
   ]
 
   return (
-    <div className="space-y-5">
+    <div ref={containerRef} className="space-y-5">
       {isAdminConfig && (
         <div className="rounded-xl border border-emerald-300 bg-emerald-50/70 p-3.5 text-xs text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
           <b>Mesma estrutura da Planilha de Campo.</b> O que você preencher aqui vira o
@@ -626,6 +727,7 @@ export default function FieldSheetEditorForm({
                   <div className="mt-1 flex items-center gap-1.5">
                     <Input
                       type="text"
+                      data-preset-key="header.weather"
                       value={rawWeather}
                       onChange={(e) => set({ weather: e.target.value })}
                       disabled={disabled}
@@ -646,6 +748,7 @@ export default function FieldSheetEditorForm({
               }
               return (
                 <select
+                  data-preset-key="header.weather"
                   value={rawWeather}
                   onChange={(e) => set({ weather: e.target.value })}
                   disabled={disabled}
@@ -666,6 +769,7 @@ export default function FieldSheetEditorForm({
             <label className="epa-label">PLUVIÔMETRO (mm)</label>
             <Input
               type="text"
+              data-preset-key="header.pluviometer"
               value={value.pluviometer ?? ''}
               onChange={(e) => set({ pluviometer: e.target.value })}
               disabled={disabled}
@@ -730,6 +834,7 @@ export default function FieldSheetEditorForm({
                     <span>Hora:</span>
                     <Input
                       type="time"
+                      data-preset-key="extraction.morning_time"
                       value={value.morning_time || ''}
                       onChange={(e) => set({ morning_time: e.target.value })}
                       disabled={disabled}
@@ -743,6 +848,7 @@ export default function FieldSheetEditorForm({
                     <span>Hora:</span>
                     <Input
                       type="time"
+                      data-preset-key="extraction.afternoon_time"
                       value={value.afternoon_time || ''}
                       onChange={(e) => set({ afternoon_time: e.target.value })}
                       disabled={disabled}
@@ -913,6 +1019,7 @@ export default function FieldSheetEditorForm({
                     <span>Hora:</span>
                     <Input
                       type="time"
+                      data-preset-key="infiltration.infiltration_morning_time"
                       value={value.infiltration_morning_time || ''}
                       onChange={(e) => set({ infiltration_morning_time: e.target.value })}
                       disabled={disabled}
@@ -926,6 +1033,7 @@ export default function FieldSheetEditorForm({
                     <span>Hora:</span>
                     <Input
                       type="time"
+                      data-preset-key="infiltration.infiltration_afternoon_time"
                       value={value.infiltration_afternoon_time || ''}
                       onChange={(e) => set({ infiltration_afternoon_time: e.target.value })}
                       disabled={disabled}
@@ -944,6 +1052,7 @@ export default function FieldSheetEditorForm({
                   <td className="p-2 border border-slate-300 dark:border-slate-800">
                     <Input
                       inputMode="decimal"
+                      data-preset-key={`infiltration.${row.mKey}`}
                       value={value.infiltration_data?.[row.mKey] || ''}
                       onChange={(e) => setInfiltration(row.mKey, e.target.value)}
                       disabled={disabled}
@@ -954,6 +1063,7 @@ export default function FieldSheetEditorForm({
                   <td className="p-2 border border-slate-300 dark:border-slate-800">
                     <Input
                       inputMode="decimal"
+                      data-preset-key={`infiltration.${row.aKey}`}
                       value={value.infiltration_data?.[row.aKey] || ''}
                       onChange={(e) => setInfiltration(row.aKey, e.target.value)}
                       disabled={disabled}
@@ -971,6 +1081,7 @@ export default function FieldSheetEditorForm({
           <div>
             <label className="epa-label">Pressão da Bomba (Infiltração)</label>
             <Input
+              data-preset-key="infiltration.bombaInfiltracao"
               value={value.infiltration_data?.bombaInfiltracao || ''}
               onChange={(e) => setInfiltration('bombaInfiltracao', e.target.value)}
               disabled={disabled}
@@ -981,6 +1092,7 @@ export default function FieldSheetEditorForm({
           <div>
             <label className="epa-label">Pressão da Bomba - Geral</label>
             <Input
+              data-preset-key="infiltration.bombaGeral"
               value={value.infiltration_data?.bombaGeral || ''}
               onChange={(e) => setInfiltration('bombaGeral', e.target.value)}
               disabled={disabled}
@@ -1010,6 +1122,7 @@ export default function FieldSheetEditorForm({
               </p>
             </div>
             <Switch
+              data-preset-key="nutrients.nutrient_done"
               checked={value.nutrient_done || false}
               onCheckedChange={(c) => set({ nutrient_done: c })}
               disabled={disabled}
@@ -1019,6 +1132,7 @@ export default function FieldSheetEditorForm({
             <label className="epa-label">Quantidade MAP (Kg)</label>
             <Input
               type="text"
+              data-preset-key="nutrients.nutrient_map_kg"
               value={value.nutrient_map_kg ?? ''}
               onChange={(e) => set({ nutrient_map_kg: e.target.value })}
               disabled={disabled}
@@ -1030,6 +1144,7 @@ export default function FieldSheetEditorForm({
             <label className="epa-label">Quantidade Ureia (Kg)</label>
             <Input
               type="text"
+              data-preset-key="nutrients.nutrient_ureia_kg"
               value={value.nutrient_ureia_kg ?? ''}
               onChange={(e) => set({ nutrient_ureia_kg: e.target.value })}
               disabled={disabled}
@@ -1106,6 +1221,7 @@ export default function FieldSheetEditorForm({
                       >
                         <Input
                           inputMode="decimal"
+                          data-preset-key={`compressors.compressor_data.${key}`}
                           value={currentVal}
                           onChange={(e) => setCompressor(key, e.target.value)}
                           disabled={disabled}
@@ -1156,6 +1272,7 @@ export default function FieldSheetEditorForm({
                     >
                       <Input
                         inputMode="decimal"
+                        data-preset-key={`compressors.compressor_data.${arKey}`}
                         value={value.compressor_data?.[arKey] || ''}
                         onChange={(e) => setCompressor(arKey, e.target.value)}
                         disabled={disabled}
@@ -1194,6 +1311,7 @@ export default function FieldSheetEditorForm({
                 <div>
                   <label className="epa-label">Volume de óleo removido (mL)</label>
                   <Input
+                    data-preset-key={`oil_removal.${sao}Volume`}
                     value={value.oil_removal_data?.[`${sao}Volume`] || ''}
                     onChange={(e) => setOil(`${sao}Volume`, e.target.value)}
                     disabled={disabled}
@@ -1204,6 +1322,7 @@ export default function FieldSheetEditorForm({
                 <div>
                   <label className="epa-label">Data da última limpeza</label>
                   <Input
+                    data-preset-key={`oil_removal.${sao}DataLimpeza`}
                     value={value.oil_removal_data?.[`${sao}DataLimpeza`] || ''}
                     onChange={(e) => setOil(`${sao}DataLimpeza`, applyDateMask(e.target.value))}
                     disabled={disabled}
@@ -1232,6 +1351,7 @@ export default function FieldSheetEditorForm({
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Líquido</label>
             <Input
               type="text"
+              data-preset-key="waste.waste_liquid_qty"
               value={value.waste_liquid_qty ?? ''}
               onChange={(e) => set({ waste_liquid_qty: e.target.value })}
               disabled={disabled}
@@ -1243,6 +1363,7 @@ export default function FieldSheetEditorForm({
             <label className="epa-label">TAMBORES PARA RETIRADA (QNTD) - Sólido</label>
             <Input
               type="text"
+              data-preset-key="waste.waste_solid_qty"
               value={value.waste_solid_qty ?? ''}
               onChange={(e) => set({ waste_solid_qty: e.target.value })}
               disabled={disabled}
@@ -1272,6 +1393,7 @@ export default function FieldSheetEditorForm({
               </p>
             </div>
             <Switch
+              data-preset-key="env.env_5s_check"
               checked={value.env_5s_check || false}
               onCheckedChange={(c) => set({ env_5s_check: c })}
               disabled={disabled}
@@ -1285,6 +1407,7 @@ export default function FieldSheetEditorForm({
               </p>
             </div>
             <Switch
+              data-preset-key="env.env_checklist_monthly"
               checked={value.env_checklist_monthly || false}
               onCheckedChange={(c) => set({ env_checklist_monthly: c })}
               disabled={disabled}
@@ -1304,6 +1427,7 @@ export default function FieldSheetEditorForm({
           </p>
         </div>
         <Textarea
+          data-preset-key="observations.observations"
           value={value.observations || ''}
           onChange={(e) => set({ observations: e.target.value })}
           disabled={disabled}
