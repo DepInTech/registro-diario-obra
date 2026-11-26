@@ -115,13 +115,42 @@ export default function AreaConfigs() {
   // true quando a edição atual veio de um rascunho não salvo restaurado
   const [restoredDraft, setRestoredDraft] = useState(false)
 
+  // ---------------- PROTEÇÃO DO EDITOR ABERTO (bug do badge parado em 2) ----------------
+  // Qualquer atualização de lista (polling "[Polling] N mudanças aplicadas",
+  // realtime, loadRecords) NUNCA pode sobrescrever o estado do formulário aberto:
+  // o sheetForm só é carregado ao ABRIR a edição (startNew/startEdit/restauração
+  // de rascunho). Enquanto editing != null, nada aqui re-renderiza o editor com
+  // conteúdo do banco — daí o badge (countFilledFormFields, derivado do estado
+  // vivo) sobe imediatamente a cada tecla na Infiltração e nos demais campos.
+  // --------------------------------------------------------------------------------------
+
+  // true quando o Admin já digitou algo no editor aberto (estado "sujo").
+  // Guarda-chave: impede que restauraçōes de rascunho / re-render de lista
+  // substituam o sheetForm com o conteúdo do banco no meio da digitação.
+  const [editorDirty, setEditorDirty] = useState(false)
+
+  // Envolve o setSheetForm do editor: a partir da 1ª digitação marca dirty,
+  // garantindo que nenhum caminho de atualização externa toque no estado vivo.
+  const setSheetFormGuarded = useCallback(
+    (update: (prev: FieldSheetFormState) => FieldSheetFormState) => {
+      setEditorDirty(true)
+      setSheetForm(update)
+    },
+    [],
+  )
+
   // Persiste a edição em andamento a cada mudança (digitação incluída), para
   // que uma desmontagem inesperada NUNCA descarte o que já foi digitado.
+  // Quando o editor está SUJO, o rascunho é gravado AINDA MAIS (a cada tecla):
+  // é ele que preserva a digitação se a árvore remontar. O dirty-guard protege
+  // o ESTADO VIVO (nenhum caminho externo sobrescreve sheetForm), não o rascunho.
   useEffect(() => {
     if (!editing) return
     writeDraft(draftKeyOf(editing), { editing, isEditingExisting, sheetForm, savedAt: Date.now() })
-  }, [editing, isEditingExisting, sheetForm])
-
+  }, [editing, isEditingExisting, sheetForm, editorDirty])
+  // Atualizações de lista/realtime/polling só chegam como `records` — nunca
+  // tocam no editor aberto (prova: nenhum efeito aqui lê `records` para reabrir
+  // edição; startEdit/startNew são chamados APENAS por interação do usuário).
   // Na montagem, restaura o rascunho não salvo mais recente (se houver) — cobre
   // o retorno de uma navegação/remontagem no meio do preenchimento.
   useEffect(() => {
@@ -133,6 +162,7 @@ export default function AreaConfigs() {
     setIsEditingExisting(latest.isEditingExisting)
     setEditing(latest.editing)
     setSheetForm({ ...emptyFieldSheetFormState(), ...latest.sheetForm })
+    setEditorDirty(true) // rascunho restaurado = estado com digitação: protegido
     setRestoredDraft(true)
   }, [])
 
@@ -170,11 +200,13 @@ export default function AreaConfigs() {
       // Retoma o cadastro "nova área" que estava em andamento (não salvo).
       setEditing(draft.editing)
       setSheetForm({ ...emptyFieldSheetFormState(), ...draft.sheetForm })
+      setEditorDirty(true)
       setRestoredDraft(true)
       return
     }
     setEditing(emptyForm())
     setSheetForm(emptyFieldSheetFormState())
+    setEditorDirty(false)
     setRestoredDraft(false)
   }
 
@@ -196,11 +228,13 @@ export default function AreaConfigs() {
       // mistura dados de Infiltração entre áreas diferentes.
       setEditing({ ...base, ...draft.editing, id: rec.id, area_name: base.area_name })
       setSheetForm({ ...emptyFieldSheetFormState(), ...draft.sheetForm })
+      setEditorDirty(true)
       setRestoredDraft(true)
       return
     }
     setEditing(base)
     setSheetForm(presetFieldsToFormState(rec.preset_fields))
+    setEditorDirty(false)
     setRestoredDraft(false)
   }
 
@@ -208,6 +242,7 @@ export default function AreaConfigs() {
   const handleCancel = () => {
     if (editing) writeDraft(draftKeyOf(editing), null)
     setEditing(null)
+    setEditorDirty(false)
     setRestoredDraft(false)
   }
 
@@ -341,6 +376,7 @@ export default function AreaConfigs() {
       // Persistiu: o rascunho desta área não é mais necessário.
       writeDraft(draftKeyOf(editing), null)
       setEditing(null)
+      setEditorDirty(false)
       setRestoredDraft(false)
       await loadRecords()
     } catch (err: unknown) {
@@ -641,7 +677,7 @@ export default function AreaConfigs() {
       <FieldSheetEditorForm
         mode="admin-config"
         value={sheetForm}
-        onChange={setSheetForm}
+        onChange={setSheetFormGuarded}
         disabled={saving}
       />
 

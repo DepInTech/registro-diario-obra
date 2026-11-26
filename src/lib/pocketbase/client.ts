@@ -4,17 +4,21 @@ const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
 /**
- * Encerra toda inscrição realtime ativa deste cliente. Usado por
- * AuthContext/SyncContext ao desmontar/trocar sessão para que listeners
- * remanescentes de uma sessão anterior nunca sobrevivam ao logout.
- * Somente pb.realtime.unsubscribe() existe no SDK — pb.realtime.destroy()
- * NÃO existe e derruba o build se chamado.
+ * Derruba o canal de realtime (SSE) da instância atual do cliente.
+ *
+ * Obrigatório para AuthContext/SyncContext (import nomeado): garante que um
+ * clientId antigo não seja reenviado com credenciais novas ao religar o canal
+ * após login/logout/troca de usuário.
+ *
+ * NOTA DE PLATAFORMA: pb.realtime.destroy() NÃO existe nesta versão do SDK —
+ * somente unsubscribe(). A limpeza é feita removendo TODOS os listeners de
+ * realtime registrados, sem recriar o cliente (o cliente é singleton do app).
  */
-export function forceRealtimeTeardown(): void {
+export async function forceRealtimeTeardown(): Promise<void> {
   try {
-    pb.realtime.unsubscribe()
+    await pb.realtime.unsubscribe()
   } catch {
-    // Cliente já encerrado ou sem conexão ativa: nada a fazer.
+    /* canal já inexistente: teardown idempotente */
   }
 }
 
