@@ -333,6 +333,37 @@ export function stripProtectedFieldsForUpdate(
 }
 
 /**
+ * Campos PROTEGIDOS pela API rule de UPDATE da coleção reports_rdo.
+ * A rule exige @request.body.X:isset = false para number/project/archived/deleted
+ * (e também deleted_reason/by/at, para o Técnico) — enviá-los num PATCH faz o
+ * servidor recusar a operação com 400, mesmo com sessão válida. Esta função
+ * remove-os do corpo de update APENAS (o registro no servidor mantém o número,
+ * o projeto e o snapshot do Admin; o CREATE é cuidada pelo hook de numeração).
+ */
+const RDO_UPDATE_PROTECTED_FIELDS = [
+  'id',
+  'number',
+  'project',
+  'archived',
+  'deleted',
+  'deleted_reason',
+  'deleted_by',
+  'deleted_at',
+] as const
+
+export function stripProtectedFieldsForRdoUpdate(
+  payload: Record<string, any>,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(payload)) {
+    if (!(RDO_UPDATE_PROTECTED_FIELDS as readonly string[]).includes(key)) {
+      body[key] = value
+    }
+  }
+  return body
+}
+
+/**
  * Sanitiza payload completo antes de enviar para `field_spreadsheets` (POST ou PATCH)
  */
 export function sanitizeFieldSpreadsheetPayload(raw: Record<string, any>): Record<string, unknown> {

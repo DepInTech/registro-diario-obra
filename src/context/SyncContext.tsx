@@ -19,6 +19,7 @@ import {
   sanitizeFieldSpreadsheetPayload,
   sanitizeWellCompletionDate,
   stripProtectedFieldsForUpdate,
+  stripProtectedFieldsForRdoUpdate,
 } from '@/lib/payloadSanitizer'
 
 export const SYNC_BROADCAST_EVENT = 'epa_sync_complete'
@@ -992,7 +993,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
               payload.project = rdo.projectId
             }
 
-            const sanitizedUpdatePayload = sanitizeRdoPayload(payload)
+            // CORREÇÃO 400: a API rule de UPDATE de reports_rdo exige que o corpo
+            // NÃO contenha number/project/archived/deleted* — strip antes de enviar
+            // (espelha o strip já validado de field_spreadsheets).
+            const sanitizedUpdatePayload = stripProtectedFieldsForRdoUpdate(
+              sanitizeRdoPayload(payload),
+            )
             const updated = await pb
               .collection('reports_rdo')
               .update(rdo.id, sanitizedUpdatePayload)
